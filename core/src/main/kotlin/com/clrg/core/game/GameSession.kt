@@ -1,0 +1,187 @@
+package com.clrg.core.game
+
+import com.clrg.core.audio.MusicTrack
+import com.clrg.core.audio.Sfx
+import com.clrg.core.gesture.GestureEvent
+import com.clrg.core.gesture.PlayerControls
+import com.clrg.core.math.clamp01
+import com.clrg.core.math.easeOutBack
+import com.clrg.core.render.Colors
+import com.clrg.core.render.Gfx
+import com.clrg.core.tracking.PlayerSlot
+
+enum class Phase { INSTRUCTIONS, COUNTDOWN, PLAYING, TRACKING_PAUSED, RESUMING, PAUSED, FINISHED, DONE }
+
+/**
+ * Shared match flow for every minigame: instructions -> countdown -> play -> finish. Whenever a player's tracking
+ * is lost the match pauses (scoring and simulation frozen for both), the overlay names who must reposition, and play
+ * resumes with a short countdown once the right person has been reacquired.
+ */
+class GameSession(val game: MiniGame, val env: GameEnv) {
+    companion object {
+        const val STEP = 1.0 / 120.0
+        const val COUNTDOWN_SEC = 3.0
+        const val RESUME_SEC = 3.0
+        const val FINISH_SEC = 3.2
+        const val REACQUIRE_SETTLE_SEC = 0.5
+    }
+
+    var phase = Phase.INSTRUCTIONS
+        private set
+    var phaseTime = 0.0
+        private set
+    val inputs = Array(2) { PlayerInput(it) }
+    /** Players currently missing (indices) while [Phase.TRACKING_PAUSED]. */
+    val missing = ArrayList<Int>()
+    val ready = BooleanArray(2)
+    var trackingPauses = 0
+        private set
+    private var accumulator = 0.0
+    private var settle = 0.0
+    private var lastCount = 4
+    private val pendingEvents = Array(2) { ArrayList<GestureEvent>() }
+    var allowWithoutTracking = false
+
+    fun startNow() {
+        if (phase == Phase.INSTRUCTIONS) enter(Phase.COUNTDOWN)
+    }
+
+    fun userPause() {
+        if (phase == Phase.PLAYING || phase == Phase.COUNTDOWN || phase == Phase.RESUMING) enter(Phase.PAUSED)
+    }
+
+    fun userResume() {
+        if (phase == Phase.PAUSED) enter(Phase.RESUMING)
+    }
+
+    private fun enter(p: Phase) {
+        val wasLive = phase == Phase.PLAYING
+        phase = p
+        if (wasLive && p != Phase.PLAYING) game.onLiveChanged(false)
+        if (!wasLive && p == Phase.PLAYING) game.onLiveChanged(true)
+        phaseTime = 0.0
+        lastCount = 4
+        when (p) {
+            Phase.COUNTDOWN -> { game.start(); env.audio?.playMusic(game.info.music) }
+            Phase.FINISHED -> {
+                env.sfx(Sfx.WIN)
+                env.audio?.playMusic(MusicTrack.VICTORY, restart = true)
+                env.particles.confetti(0f, 1920f * 1.3f, -20f, 120)
+            }
+            Phase.TRACKING_PAUSED -> trackingPauses++
+            else -> Unit
+        }
+    }
+
+    /**
+     * Advances the match by [dt] seconds of wall time. [controls]/[slots] are the shared tracking state for the two
+     * players.
+     */
+    fun update(dt: Double, controls: Array<PlayerControls>, slots: Array<PlayerSlot>) {
+        phaseTime += dt
+        val anyLost = !allowWithoutTracking && slots.any { it.needsAttention }
+        for (k in 0..1) {
+            inputs[k].fill(controls[k], slots[k].isPlaying)
+            controls[k].drainEvents(pendingEvents[k])
+        }
+        when (phase) {
+            Phase.INSTRUCTIONS -> {
+                for (k in 0..1) {
+                    if (pendingEvents[k].any { it is GestureEvent.RaiseHold }) {
+                        if (!ready[k]) env.sfx(Sfx.SELECT)
+                        ready[k] = true
+                    }
+                }
+                discardEvents()
+                if (ready[0] && ready[1] && !anyLost) enter(Phase.COUNTDOWN)
+            }
+            Phase.COUNTDOWN, Phase.RESUMING -> {
+                discardEvents()
+                if (anyLost) { markMissing(slots); enter(Phase.TRACKING_PAUSED); return }
+                val total = if (phase == Phase.COUNTDOWN) COUNTDOWN_SEC else RESUME_SEC
+                val count = (total - phaseTime).toInt() + 1
+                if (count in 1..3 && count != lastCount) { env.sfx(Sfx.BEEP); lastCount = count }
+                if (phaseTime >= total) { env.sfx(Sfx.GO); enter(Phase.PLAYING) }
+            }
+            Phase.PLAYING -> {
+                if (anyLost) { markMissing(slots); discardEvents(); enter(Phase.TRACKING_PAUSED); return }
+                for (k in 0..1) { inputs[k].events.addAll(pendingEvents[k]); pendingEvents[k].clear() } // kept until a step consumes them
+                accumulator += dt.coerceAtMost(0.25)
+                var steps = 0
+                while (accumulator >= STEP && steps < 30) {
+                    game.update(STEP.toFloat(), inputs)
+                    game.playTime += STEP
+                    accumulator -= STEP
+                    steps++
+                    // events are delivered on the first step of the frame only
+                    if (steps == 1) for (k in 0..1) inputs[k].events.clear()
+                    if (game.isOver) break
+                }
+                if (game.isOver) enter(Phase.FINISHED)
+            }
+            Phase.TRACKING_PAUSED -> {
+                discardEvents()
+                markMissing(slots)
+                settle = if (!anyLost) settle + dt else 0.0
+                if (settle >= REACQUIRE_SETTLE_SEC) { settle = 0.0; enter(Phase.RESUMING) }
+            }
+            Phase.PAUSED -> discardEvents()
+            Phase.FINISHED -> {
+                discardEvents()
+                if (phaseTime >= FINISH_SEC) enter(Phase.DONE)
+            }
+            Phase.DONE -> discardEvents()
+        }
+        env.update(dt.toFloat())
+        game.animate(dt.toFloat())
+    }
+
+    private fun discardEvents() {
+        for (k in 0..1) { pendingEvents[k].clear(); inputs[k].events.clear() }
+    }
+
+    private fun markMissing(slots: Array<PlayerSlot>) {
+        missing.clear()
+        slots.forEachIndexed { i, s -> if (s.needsAttention) missing.add(i) }
+    }
+
+    val isLive: Boolean get() = phase == Phase.PLAYING
+
+    /** Draws the game plus countdown / finish overlays (pause and tracking overlays are drawn by the screen). */
+    fun render(g: Gfx, time: Double) {
+        g.save()
+        g.translate(env.shake.dx, env.shake.dy)
+        game.render(g, inputs, time)
+        env.particles.render(g)
+        env.popups.render(g)
+        g.restore()
+        when (phase) {
+            Phase.COUNTDOWN, Phase.RESUMING -> {
+                val total = if (phase == Phase.COUNTDOWN) COUNTDOWN_SEC else RESUME_SEC
+                val left = total - phaseTime
+                val n = left.toInt() + 1
+                val k = clamp01((1.0 - (left - left.toInt())).toFloat() * 3f)
+                val s = 220f * easeOutBack(k)
+                g.fillRect(0f, 0f, g.width, g.height, 0x33000000)
+                if (phase == Phase.RESUMING) g.text("Get ready!", g.width / 2, g.height / 2 - 230f, 64f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 8f)
+                g.text(n.coerceIn(1, 3).toString(), g.width / 2, g.height / 2, s.coerceAtLeast(10f), Colors.GOLD, outline = 0xFF7A3B00.toInt(), outlineWidth = 16f)
+            }
+            Phase.PLAYING -> if (game.playTime < 0.7) {
+                val k = (game.playTime / 0.7).toFloat()
+                g.save(); g.setAlpha(1f - k)
+                g.text("GO!", g.width / 2, g.height / 2, 200f + 80f * k, Colors.GOOD, outline = 0xFF0B4D2C.toInt(), outlineWidth = 16f)
+                g.restore()
+            }
+            Phase.FINISHED -> {
+                val r = game.result()
+                val text = if (r.winner < 0) "It's a tie!" else "${env.name(r.winner)} wins!"
+                val color = if (r.winner < 0) Colors.GOLD else env.color(r.winner)
+                val k = easeOutBack(clamp01((phaseTime / 0.6).toFloat()))
+                g.fillRect(0f, g.height / 2 - 130f * k, g.width, g.height / 2 + 130f * k, 0xAA000000.toInt())
+                g.text(text, g.width / 2, g.height / 2, 120f * k + 1f, color, outline = Colors.BLACK, outlineWidth = 12f)
+            }
+            else -> Unit
+        }
+        Hud.captions(g, env)
+    }
+}

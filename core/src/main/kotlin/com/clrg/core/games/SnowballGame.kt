@@ -1,0 +1,238 @@
+package com.clrg.core.games
+
+import com.clrg.core.audio.MusicTrack
+import com.clrg.core.audio.Sfx
+import com.clrg.core.game.GameEnv
+import com.clrg.core.game.GameInfo
+import com.clrg.core.game.Hud
+import com.clrg.core.game.MatchResult
+import com.clrg.core.game.MiniGame
+import com.clrg.core.game.PlayerInput
+import com.clrg.core.gesture.AvatarPose
+import com.clrg.core.gesture.GestureEvent
+import com.clrg.core.math.PI_F
+import com.clrg.core.math.Rect
+import com.clrg.core.math.clamp
+import com.clrg.core.math.lerp
+import com.clrg.core.render.Colors
+import com.clrg.core.render.Draw
+import com.clrg.core.render.Expression
+import com.clrg.core.render.Gfx
+import com.clrg.core.render.Particles
+import com.clrg.core.render.Prop
+import kotlin.math.abs
+import kotlin.math.sin
+
+/**
+ * 2. Snowball Showdown - two snow forts, 60 seconds. Lean to move inside your area, throw overhand to launch a
+ * snowball at where your opponent is standing, raise both hands for a short shield (3 per match).
+ */
+class SnowballGame(env: GameEnv) : MiniGame(env) {
+    override val info = INFO
+
+    companion object {
+        const val MATCH_SEC = 60.0
+        const val THROW_COOLDOWN = 0.9f
+        const val SHIELD_SEC = 1.6f
+        const val SHIELDS = 3
+        const val HIT_RADIUS = 0.05f
+        const val ZONE_HALF = 0.13f
+        val ZONE_CENTER = floatArrayOf(0.22f, 0.78f)
+
+        val INFO = GameInfo(
+            id = "snowball", title = "Snowball Showdown", tagline = "Throw, dodge and shield!",
+            howTo = listOf(
+                "THROW: bring your hand up by your shoulder and throw forward.",
+                "Your snowball flies at the spot where your opponent is standing.",
+                "DODGE: lean left or right to move inside your fort area.",
+                "SHIELD: raise both hands high (3 shields each). Most hits in 60 seconds wins!",
+            ),
+            controls = listOf("Overhand throw" to "Launch a snowball", "Lean left / right" to "Dodge", "Both hands up" to "Shield"),
+            gentleNotes = "Reduced movement and seated: a short forward push from chest height throws; small leans move you.",
+            music = MusicTrack.GAME, scoreUnit = "hits", goal = "Most hits in 60 seconds",
+        )
+    }
+
+    class Ball(val owner: Int, val x0: Float, val x1: Float, val flight: Float, var t: Float = 0f, var done: Boolean = false)
+
+    val scores = IntArray(2)
+    /** Arena x (0..1) of each player. */
+    val px = floatArrayOf(ZONE_CENTER[0], ZONE_CENTER[1])
+    val cooldown = FloatArray(2)
+    val shieldLeft = intArrayOf(SHIELDS, SHIELDS)
+    val shieldTime = FloatArray(2)
+    val stun = FloatArray(2)
+    val dodges = IntArray(2)
+    val throws = IntArray(2)
+    val balls = ArrayList<Ball>()
+    private val throwAnim = floatArrayOf(9f, 9f)
+    private var screenW = 1920f
+    private val groundY = 930f
+
+    val timeLeft: Double get() = (MATCH_SEC - playTime).coerceAtLeast(0.0)
+
+    override fun update(dt: Float, inputs: Array<PlayerInput>) {
+        val timeUp = playTime >= MATCH_SEC
+        for (k in 0..1) {
+            val inp = inputs[k]
+            if (timeUp) { inp.events.clear() } // buzzer: only snowballs already in the air still count
+            cooldown[k] = (cooldown[k] - dt).coerceAtLeast(0f)
+            shieldTime[k] = (shieldTime[k] - dt).coerceAtLeast(0f)
+            stun[k] = (stun[k] - dt).coerceAtLeast(0f)
+            throwAnim[k] += dt
+            // movement: absolute position inside the fort area from the lean
+            val target = ZONE_CENTER[k] + clamp(inp.lean, -1f, 1f) * ZONE_HALF
+            px[k] += clamp(target - px[k], -0.75f * dt, 0.75f * dt)
+            if (inp.take<GestureEvent.HandsUp>() != null && shieldLeft[k] > 0 && shieldTime[k] <= 0f) {
+                shieldLeft[k]--
+                shieldTime[k] = SHIELD_SEC
+                env.sfx(Sfx.SHIELD, 0.8f, pan(k))
+            }
+            val th = inp.take<GestureEvent.Throw>()
+            if (th != null) {
+                if (cooldown[k] <= 0f && stun[k] <= 0f) {
+                    val flight = lerp(1.15f, 0.85f, th.power)
+                    balls.add(Ball(k, px[k] + if (k == 0) 0.03f else -0.03f, px[1 - k], flight))
+                    cooldown[k] = THROW_COOLDOWN
+                    throws[k]++
+                    throwAnim[k] = 0f
+                    env.sfx(Sfx.THROW, 0.8f, pan(k))
+                } else if (cooldown[k] > 0f) {
+                    env.popups.add("Reloading...", sx(px[k]), 380f, Colors.TEXT_DIM, 34f, 0.6f)
+                }
+            }
+        }
+        val it = balls.iterator()
+        while (it.hasNext()) {
+            val b = it.next()
+            b.t += dt
+            if (b.t >= b.flight && !b.done) {
+                b.done = true
+                val target = 1 - b.owner
+                val hitX = b.x1
+                if (abs(px[target] - hitX) < HIT_RADIUS) {
+                    if (shieldTime[target] > 0f) {
+                        env.popups.add("BLOCKED!", sx(px[target]), 380f, Colors.ICE, 56f)
+                        env.particles.burst(sx(px[target]), 560f, Colors.ICE, 18, kind = Particles.Kind.PUFF)
+                        env.sfx(Sfx.SHIELD, 0.6f, pan(target))
+                    } else {
+                        scores[b.owner]++
+                        stun[target] = 0.6f
+                        env.popups.add("SPLAT! +1", sx(px[target]), 380f, env.color(b.owner), 60f)
+                        env.particles.burst(sx(px[target]), 640f, Colors.SNOW, 30, kind = Particles.Kind.PUFF, size = 14f)
+                        env.sfx(Sfx.SPLAT, 1f, pan(target))
+                        env.shake.kick(8f)
+                    }
+                } else {
+                    dodges[target]++
+                    env.popups.add("Dodged!", sx(px[target]), 390f, env.color(target), 44f)
+                    env.particles.burst(sx(hitX), groundY, Colors.SNOW, 14, kind = Particles.Kind.PUFF)
+                    env.sfx(Sfx.SPLAT, 0.4f, pan(target), 1.3f)
+                }
+            }
+            if (b.t > b.flight + 0.3f) it.remove()
+        }
+    }
+
+    private fun pan(k: Int) = if (k == 0) -0.6f else 0.6f
+    private fun sx(x: Float) = x * screenW
+
+    private val botLean = FloatArray(2)
+    override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
+        if (cooldown[k] <= 0f && stun[k] <= 0f && rng.chance(0.02f + 0.03f * skill)) inp.events.add(GestureEvent.Throw(playTime, 1, 0f, skill))
+        val incoming = balls.firstOrNull { !it.done && it.owner != k && it.flight - it.t < 0.7f && kotlin.math.abs(it.x1 - px[k]) < HIT_RADIUS * 1.5f }
+        if (incoming != null && rng.chance(skill)) botLean[k] = if (px[k] > ZONE_CENTER[k]) -1f else 1f
+        else if (incoming != null && shieldLeft[k] > 0 && shieldTime[k] <= 0f && rng.chance(0.02f * skill)) inp.events.add(GestureEvent.HandsUp(playTime))
+        else if (rng.chance(0.01f)) botLean[k] = 0f
+        inp.lean = botLean[k]
+    }
+
+    override val isOver: Boolean get() = playTime >= MATCH_SEC && balls.none { !it.done }
+
+    override fun result() = MatchResult(info.id, scores.copyOf(), winnerOf(scores[0], scores[1]), info.scoreUnit,
+        listOf("Throws: ${throws[0]} vs ${throws[1]}", "Dodges: ${dodges[0]} vs ${dodges[1]}"))
+
+    override fun render(g: Gfx, inputs: Array<PlayerInput>, time: Double) {
+        screenW = g.width
+        val w = g.width
+        Draw.nightSky(g, Rect(0f, 0f, w, g.height), time)
+        // house in the background
+        g.fillRect(w * 0.38f, 360f, w * 0.62f, 640f, 0xFF4E342E.toInt())
+        Draw.tri(g, w * 0.35f, 370f, w * 0.65f, 370f, w * 0.5f, 230f, 0xFF3E2723.toInt())
+        Draw.tri(g, w * 0.36f, 372f, w * 0.64f, 372f, w * 0.5f, 245f, Colors.SNOW)
+        for (i in 0..2) {
+            val wx = w * (0.42f + i * 0.08f)
+            g.glow(wx, 470f, 70f, 0x55FFB74D)
+            g.fillRoundRect(wx - 35f, 430f, wx + 35f, 510f, 6f, 0xFFFFCC80.toInt())
+            g.line(wx, 430f, wx, 510f, 4f, 0xFF4E342E.toInt()); g.line(wx - 35f, 470f, wx + 35f, 470f, 4f, 0xFF4E342E.toInt())
+        }
+        Draw.stringLights(g, w * 0.36f, w * 0.64f, 378f, time, sag = 18f, spacing = 50f)
+        Draw.pineRow(g, 0f, w * 0.33f, 640f, 0xFF173F33.toInt(), 160f, 7)
+        Draw.pineRow(g, w * 0.67f, w, 640f, 0xFF173F33.toInt(), 160f, 9)
+        Draw.snowHills(g, Rect(0f, 0f, w, g.height), 690f)
+        Draw.snowfall(g, Rect(0f, 0f, w, g.height), time, 50)
+        // fort areas
+        for (k in 0..1) {
+            val c = env.color(k)
+            val x0 = sx(ZONE_CENTER[k] - ZONE_HALF - 0.04f); val x1 = sx(ZONE_CENTER[k] + ZONE_HALF + 0.04f)
+            g.fillOval(x0, groundY - 30f, x1, groundY + 40f, Colors.withAlpha(c, 0.18f))
+        }
+        // players
+        for (k in 0..1) {
+            val inp = inputs[k]
+            val x = sx(px[k])
+            val pose = if (inp.avatar.valid) inp.avatar else idle
+            val expr = when { stun[k] > 0f -> Expression.OOPS; throwAnim[k] < 0.4f -> Expression.EXCITED; else -> Expression.FOCUSED }
+            Draw.buddy(g, x, groundY, 400f, env.color(k), pose, expr, if (cooldown[k] <= 0f) Prop.SNOWBALL else Prop.NONE, inp.dominant, time, shielded = shieldTime[k] > 0f)
+            if (stun[k] > 0f) g.fillCircle(x - 12f, groundY - 330f, 34f, 0xEEFFFFFF.toInt())
+            // reload ring and shields
+            Draw.progressRing(g, x, groundY - 470f, 28f, 1f - cooldown[k] / THROW_COOLDOWN, if (cooldown[k] <= 0f) Colors.GOOD else Colors.TEXT_DIM, 7f)
+            if (cooldown[k] <= 0f) g.fillCircle(x, groundY - 470f, 13f, Colors.SNOW)
+            for (s in 0 until SHIELDS) {
+                val sxp = x - 50f + s * 50f
+                val on = s < shieldLeft[k]
+                g.fillRoundRect(sxp - 16f, groundY + 60f, sxp + 16f, groundY + 100f, 10f, if (on) Colors.ICE else 0x44FFFFFF)
+            }
+        }
+        // fort walls in front of the players
+        for (k in 0..1) {
+            val cx = sx(ZONE_CENTER[k])
+            val ww = screenW * (ZONE_HALF + 0.07f)
+            g.fillRoundRect(cx - ww, groundY - 110f, cx + ww, groundY + 40f, 30f, 0xFFDDE9F7.toInt())
+            for (i in 0 until 6) g.fillCircle(cx - ww + 30f + i * (ww * 2 - 60f) / 5f, groundY - 110f, 30f, Colors.SNOW)
+        }
+        // snowballs in flight
+        for (b in balls) {
+            if (b.done) continue
+            val u = (b.t / b.flight).coerceIn(0f, 1f)
+            val x = sx(lerp(b.x0, b.x1, u))
+            val y = groundY - 330f - 380f * 4f * u * (1f - u) + 150f * u
+            g.fillOval(x - 14f, groundY + 6f, x + 14f, groundY + 16f, Colors.SHADOW)
+            g.fillCircle(x, y, 18f, Colors.SNOW)
+            g.fillCircle(x - 5f, y - 5f, 6f, Colors.WHITE)
+            // landing marker so the target can see where to dodge from
+            g.strokeCircle(sx(b.x1), groundY + 10f, 40f * (1f - u * 0.5f), 4f, Colors.withAlpha(env.color(b.owner), 0.5f + 0.5f * u))
+        }
+        Hud.topBar(g, env, scores, Hud.formatTime(timeLeft), "Most hits wins", inputs)
+    }
+
+    private val idle = AvatarPose().apply { upper[0] = -2.3f; fore[0] = -2.0f; upper[1] = 0.4f; fore[1] = 1.6f; valid = true }
+
+    override fun demo(g: Gfx, r: Rect, t: Double) {
+        val phase = ((t % 2.0) / 2.0).toFloat()
+        val p = AvatarPose()
+        p.upper[0] = -2.3f; p.fore[0] = -2.0f
+        if (phase < 0.45f) { p.upper[1] = 0.6f; p.fore[1] = 1.9f } else {
+            val k = ((phase - 0.45f) / 0.2f).coerceIn(0f, 1f)
+            p.upper[1] = 0.6f - 1.2f * k; p.fore[1] = 1.9f - 2.2f * k
+        }
+        p.valid = true
+        val lean = sin(t * 1.5).toFloat() * 0.3f
+        p.tilt = lean
+        Draw.buddy(g, r.cx - r.width * 0.15f, r.bottom - 10f, r.height * 0.8f, env.color(0), p, Expression.EXCITED, if (phase < 0.6f) Prop.SNOWBALL else Prop.NONE, 1, t)
+        if (phase > 0.6f) {
+            val k = (phase - 0.6f) / 0.4f
+            g.fillCircle(r.cx - r.width * 0.05f + r.width * 0.45f * k, r.top + r.height * (0.4f - 0.3f * sin(k * PI_F)), 14f, Colors.SNOW)
+        }
+    }
+}

@@ -71,29 +71,32 @@ class SwingDetector {
 
     fun reset() { armed.fill(true); cooldownUntil = -1.0 }
 
-    fun update(h: BodyHistory, tune: GestureTuning, out: MutableList<GestureEvent>) {
+    /** @param scale < 1 for games that use compact strokes (table tennis). */
+    fun update(h: BodyHistory, tune: GestureTuning, out: MutableList<GestureEvent>, scale: Float = 1f) {
         val now = h.latest ?: return
         val past = h.atAge(0.15) ?: return
         val prev = h.get(1)
         val dtWin = (now.t - past.t).toFloat()
         val dtStep = (now.t - prev.t).toFloat()
         if (dtWin <= 0f || dtStep <= 0f) return
+        val minDist = tune.swingDistance * scale
+        val minSpeed = tune.swingSpeed * scale
         var bestHand = -1
         var bestDist = 0f
         for (hand in 0..1) {
             val stepSpeed = hypot(now.wx[hand] - prev.wx[hand], now.wy[hand] - prev.wy[hand]) / dtStep
-            if (!armed[hand] && stepSpeed < tune.swingSpeed * 0.35f) armed[hand] = true // hysteresis re-arm
+            if (!armed[hand] && stepSpeed < minSpeed * 0.35f) armed[hand] = true // hysteresis re-arm
             if (!armed[hand] || now.wv[hand] < 0.2f || past.wv[hand] < 0.2f) continue
             val d = hypot(now.wx[hand] - past.wx[hand], now.wy[hand] - past.wy[hand])
             val speed = d / dtWin
-            if (d >= tune.swingDistance && speed >= tune.swingSpeed && d > bestDist) { bestDist = d; bestHand = hand }
+            if (d >= minDist && speed >= minSpeed && d > bestDist) { bestDist = d; bestHand = hand }
         }
         if (bestHand < 0 || now.t < cooldownUntil) return
         val dx = now.wx[bestHand] - past.wx[bestHand]
         val dy = now.wy[bestHand] - past.wy[bestHand]
         val len = max(1e-4f, hypot(dx, dy))
         val speed = len / dtWin
-        val power = clamp((speed - tune.swingSpeed) / (tune.swingSpeed * 1.5f), 0f, 1f)
+        val power = clamp((speed - minSpeed) / (minSpeed * 1.5f), 0f, 1f)
         // Forehand: the playing hand moves from its own side across the body (right hand: toward screen left).
         val playing = if (tune.hand == Hand.RIGHT) RIGHT else LEFT
         val acrossDir = if (bestHand == RIGHT) -1f else 1f

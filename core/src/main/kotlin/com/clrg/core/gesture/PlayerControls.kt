@@ -96,6 +96,8 @@ class PlayerControls(val playerIndex: Int) {
         set(value) { field = value; calibration = calibration }
     var tuning = GestureTuning(MovementMode.STANDARD, Hand.RIGHT)
         private set
+    /** Set by games that use small, quick strokes (table tennis): swing thresholds are scaled down. */
+    var compactSwings = false
 
     val history = BodyHistory()
     private val frame = BodyFrame()
@@ -143,7 +145,7 @@ class PlayerControls(val playerIndex: Int) {
         history.push(frame)
         hasPose = true
         val t = tuning
-        swing.update(history, t, pending)
+        swing.update(history, t, pending, if (compactSwings) 0.7f else 1f)
         throwD.update(history, t, pending)
         bowl.update(history, t, pending)
         leanT.update(frame, t, dt)
