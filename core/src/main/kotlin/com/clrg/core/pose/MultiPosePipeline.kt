@@ -206,12 +206,15 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         results.removeAll { it.trackId in remove }
     }
 
-    /** Same person if the ROI centres are close relative to their size and sizes are similar. */
+    /**
+     * Same person if the ROI centres (hip centres) are close and the sizes similar. The ROI side is ~5x a person's
+     * shoulder width, so two different people - even shoulder to shoulder - have hip centres > ~0.18 * side apart.
+     */
     private fun overlaps(a: RotatedRect, b: RotatedRect, strict: Boolean = false): Boolean {
         val d = hypot(a.cx - b.cx, a.cy - b.cy)
         val s = min(a.side, b.side)
         val ratio = max(a.side, b.side) / max(1e-3f, s)
-        return if (strict) d < 0.18f * s && ratio < 1.5f else d < 0.35f * s && ratio < 2.2f
+        return if (strict) d < 0.08f * s && ratio < 1.4f else d < 0.12f * s && ratio < 1.6f
     }
 
     private fun roiPlausible(r: RotatedRect, uw: Float, uh: Float): Boolean =

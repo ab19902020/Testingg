@@ -20,12 +20,14 @@ val sdkDir: String? = setting("sdk.dir") ?: System.getenv("ANDROID_HOME") ?: Sys
 val compileSdk = setting("clrg.compileSdk") ?: "35"
 val buildToolsVersion = setting("clrg.buildToolsVersion") ?: "35.0.0"
 val buildToolsDir = sdkDir?.let { "$it/build-tools/$buildToolsVersion" }
+val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+fun exe(name: String) = if (isWindows) (if (name == "apksigner") "$name.bat" else "$name.exe") else name
 
 extra["clrg.androidJar"] = setting("clrg.androidJar") ?: sdkDir?.let { "$it/platforms/android-$compileSdk/android.jar" }
 // aapt2 links against this jar's resource table. Normally the same as clrg.androidJar; an older platform
 // jar can be used when the available aapt2 predates the compileSdk resource-table format.
 extra["clrg.resourceLinkJar"] = setting("clrg.resourceLinkJar") ?: extra["clrg.androidJar"]
-extra["clrg.aapt2"] = setting("clrg.aapt2") ?: buildToolsDir?.let { "$it/aapt2" }
+extra["clrg.aapt2"] = setting("clrg.aapt2") ?: buildToolsDir?.let { "$it/${exe("aapt2")}" }
 extra["clrg.d8Jar"] = setting("clrg.d8Jar") ?: buildToolsDir?.let { "$it/lib/d8.jar" }
-extra["clrg.zipalign"] = setting("clrg.zipalign") ?: buildToolsDir?.let { "$it/zipalign" }
-extra["clrg.apksigner"] = setting("clrg.apksigner") ?: buildToolsDir?.let { "$it/apksigner" }
+extra["clrg.zipalign"] = setting("clrg.zipalign") ?: buildToolsDir?.let { "$it/${exe("zipalign")}" }
+extra["clrg.apksigner"] = setting("clrg.apksigner") ?: buildToolsDir?.let { "$it/${exe("apksigner")}" }

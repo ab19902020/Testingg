@@ -27,3 +27,12 @@ cv2.imwrite('sceneD_empty.png', frame())
 # scene E: real two-person photo
 cv2.imwrite('sceneE_real_pair.png', cv2.imread(I+'man-woman-okay.jpg'))
 print('ok')
+# scene F: two players further back (~45% of frame height) - typical living-room distance in landscape
+f=frame()
+def paste_bottom(dst, src, cx, bottom, h):
+    s=h/src.shape[0]; src=cv2.resize(src,(int(src.shape[1]*s),h)); x=int(cx-src.shape[1]/2); y=int(bottom-h)
+    dst[y:y+h, x:x+src.shape[1]]=src
+    return dst
+paste_bottom(f, manc, 1280*0.3, 650, 330); paste_bottom(f, cv2.flip(manc,1), 1280*0.7, 650, 330)
+cv2.imwrite('sceneF_far_players.png', f)
+print('ok F')
