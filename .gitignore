@@ -1,0 +1,16 @@
+.gradle/
+build/
+*/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+# signing material must never be committed
+*.jks
+*.keystore
+keystore.properties
+# downloaded/derived model cache
+/.model-cache/
+/tools/venv/
+__pycache__/
+*.pyc
