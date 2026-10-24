@@ -41,6 +41,8 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
     private var lastCount = 4
     private val pendingEvents = Array(2) { ArrayList<GestureEvent>() }
     var allowWithoutTracking = false
+    /** Called before every fixed simulation step (developer autoplay writes scripted inputs here). */
+    var beforeStep: (() -> Unit)? = null
 
     fun startNow() {
         if (phase == Phase.INSTRUCTIONS) enter(Phase.COUNTDOWN)
@@ -109,6 +111,7 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
                 accumulator += dt.coerceAtMost(0.25)
                 var steps = 0
                 while (accumulator >= STEP && steps < 30) {
+                    beforeStep?.invoke()
                     game.update(STEP.toFloat(), inputs)
                     game.playTime += STEP
                     accumulator -= STEP

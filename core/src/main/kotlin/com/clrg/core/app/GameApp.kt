@@ -1,0 +1,306 @@
+package com.clrg.core.app
+
+import com.clrg.core.audio.AudioEngine
+import com.clrg.core.audio.Sfx
+import com.clrg.core.gesture.PlayerControls
+import com.clrg.core.party.PlayerProfile
+import com.clrg.core.party.Roster
+import com.clrg.core.party.Settings
+import com.clrg.core.party.Tournament
+import com.clrg.core.pose.PoseFrame
+import com.clrg.core.render.Colors
+import com.clrg.core.render.Gfx
+import com.clrg.core.render.PlayerColors
+import com.clrg.core.sim.SimulatedInput
+import com.clrg.core.tracking.PlayerTracker
+import com.clrg.core.tracking.SlotState
+import com.clrg.core.ui.InputEvent
+import com.clrg.core.ui.Key
+import com.clrg.core.ui.Screen
+import com.clrg.core.ui.Theme
+import com.clrg.core.ui.Ui
+import com.clrg.core.ui.screens.DevOverlay
+import com.clrg.core.ui.screens.MainMenuScreen
+import com.clrg.core.ui.screens.PermissionScreen
+import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.math.max
+
+/**
+ * The whole game, platform-independent. The Android layer calls [frame] once per display frame on the render
+ * thread, and posts pose frames / input / lifecycle events from other threads through the thread-safe submit
+ * methods.
+ */
+class GameApp(val platform: Platform, val audio: AudioEngine) {
+    val store = platform.store
+    val settings: Settings = Settings.load(store)
+    val roster: Roster = Roster.load(store)
+    var tournament: Tournament? = Tournament.load(store)
+    val tracker = PlayerTracker(2)
+    val controls = arrayOf(PlayerControls(0), PlayerControls(1))
+    val theme = Theme(settings.highContrast, settings.largeText)
+    val ui = Ui(theme) { audio.play(it, 0.5f) }
+    val sim = SimulatedInput()
+    val devOverlay = DevOverlay(this)
+
+    /** Who is playing as P1 (left) and P2 (right) right now. */
+    val activePlayers = arrayOf(roster.players[0], roster.players[1])
+
+    private val poseQueue = ConcurrentLinkedQueue<PoseFrame>()
+    private val inputQueue = ConcurrentLinkedQueue<InputEvent>()
+    private val lifecycleQueue = ConcurrentLinkedQueue<String>()
+    private val stack = ArrayList<Screen>()
+    private var lastNanos = 0L
+    private var fade = 0f
+    var time = 0.0
+        private set
+    var renderFps = 0f
+        private set
+    var frameMs = 0f
+        private set
+    var poseFramesReceived = 0L
+        private set
+    var lastPoseLatencyMs = Float.NaN
+        private set
+    var droppedPoseFrames = 0L
+        private set
+    /** Set while the TV (external display) that was in use has been disconnected. */
+    var displayLost = false
+        private set
+    private var hadExternalDisplay = false
+
+    val current: Screen? get() = stack.lastOrNull()
+
+    init {
+        applySettings()
+        stack.add(MainMenuScreen(this))
+        if (platform.cameraStatus().state == CameraState.NEEDS_PERMISSION) stack.add(PermissionScreen(this))
+        hadExternalDisplay = platform.displayStatus().externalConnected
+    }
+
+    // ------------------------------------------------------------------ thread-safe submission
+
+    /** Called from the inference thread. Keeps only a short backlog (never a growing queue). */
+    fun submitPoseFrame(f: PoseFrame) {
+        poseQueue.add(f)
+        while (poseQueue.size > 6) { poseQueue.poll(); droppedPoseFrames++ }
+    }
+
+    fun submitInput(e: InputEvent) { inputQueue.add(e) }
+
+    /** "pause", "resume", "display" (display configuration changed), "camera" (camera status changed). */
+    fun submitLifecycle(event: String) { lifecycleQueue.add(event) }
+
+    // ------------------------------------------------------------------ navigation
+
+    fun push(s: Screen) {
+        current?.onExit()
+        stack.add(s)
+        s.onEnter()
+        fade = 1f
+        ui.focusId = null
+        s.music?.let { audio.playMusic(it) }
+    }
+
+    fun pop() {
+        if (stack.size <= 1) return
+        stack.removeAt(stack.size - 1).onExit()
+        current?.let { it.onEnter(); it.music?.let { m -> audio.playMusic(m) } }
+        fade = 1f
+        ui.focusId = null
+    }
+
+    fun replace(s: Screen) {
+        if (stack.isNotEmpty()) stack.removeAt(stack.size - 1).onExit()
+        stack.add(s)
+        s.onEnter()
+        fade = 1f
+        ui.focusId = null
+        s.music?.let { audio.playMusic(it) }
+    }
+
+    fun popToRoot() {
+        while (stack.size > 1) stack.removeAt(stack.size - 1).onExit()
+        current?.let { it.onEnter(); it.music?.let { m -> audio.playMusic(m) } }
+        fade = 1f
+    }
+
+    fun <T : Screen> findScreen(cls: Class<T>): T? = stack.lastOrNull { cls.isInstance(it) }?.let { cls.cast(it) }
+
+    // ------------------------------------------------------------------ settings & players
+
+    fun applySettings() {
+        audio.musicVolume = settings.musicVolume
+        audio.sfxVolume = settings.sfxVolume
+        theme.highContrast = settings.highContrast
+        theme.largeText = settings.largeText
+        ui.dwellSeconds = settings.dwellSeconds
+        controls.forEach { it.sensitivity = settings.gestureSensitivity }
+        platform.applySettings(settings)
+        platform.setSimulatedInput(settings.simulatedInput)
+    }
+
+    fun saveSettings() {
+        settings.save(store)
+        applySettings()
+    }
+
+    fun saveRoster() = roster.save(store)
+
+    fun saveTournament() {
+        val t = tournament
+        if (t == null) Tournament.clear(store) else t.save(store)
+    }
+
+    fun playerColor(i: Int) = PlayerColors.get(activePlayers[i].colorIndex)
+
+    /** New people at the controls: forget identities and calibrations. */
+    fun setActivePlayers(p1: PlayerProfile, p2: PlayerProfile) {
+        val changed = activePlayers[0].id != p1.id || activePlayers[1].id != p2.id
+        activePlayers[0] = p1
+        activePlayers[1] = p2
+        if (changed) resetTracking()
+    }
+
+    fun resetTracking() {
+        tracker.resetAll()
+        controls.forEach { it.calibration = null; it.reset() }
+    }
+
+    /** Both players calibrated, locked and currently tracked. */
+    val playersReady: Boolean get() = tracker.locked && tracker.slots.all { it.calibration != null } && tracker.allPlaying
+
+    val calibrated: Boolean get() = tracker.locked && tracker.slots.all { it.calibration != null }
+
+    // ------------------------------------------------------------------ frame
+
+    fun frame(g: Gfx, nowNanos: Long = platform.nowNanos()) {
+        val dt = if (lastNanos == 0L) 1f / 60f else ((nowNanos - lastNanos) / 1e9f).coerceIn(0f, 0.1f)
+        if (lastNanos != 0L) {
+            val inst = (nowNanos - lastNanos) / 1e6f
+            frameMs += 0.1f * (inst - frameMs)
+            renderFps = if (frameMs > 0f) 1000f / frameMs else 0f
+        }
+        lastNanos = nowNanos
+        time += dt
+
+        handleLifecycle()
+
+        // 1) tracking: every pending pose frame goes through the tracker and the gesture detectors
+        if (settings.simulatedInput) {
+            poseQueue.clear()
+            for (f in sim.update(dt)) feedPose(f)
+        } else {
+            while (true) {
+                val f = poseQueue.poll() ?: break
+                feedPose(f)
+                lastPoseLatencyMs = (nowNanos - f.processedNanos) / 1e6f + (f.processedNanos - f.timestampNanos) / 1e6f
+            }
+        }
+
+        // 2) hands-free cursors from calibrated, tracked players
+        updateCursors(g)
+
+        // 3) input + screens
+        val events = ArrayList<InputEvent>()
+        while (true) events.add(inputQueue.poll() ?: break)
+        val scr = current ?: return
+        val cursorsOn = scr.allowCursors && calibrated
+        ui.begin(dt, events, cursorsOn)
+        if (ui.backPressed && scr.onBack()) { /* handled */ }
+        g.fillRect(0f, 0f, g.width, g.height, Colors.NIGHT_TOP)
+        scr.frame(g, ui, dt)
+        drawGlobalOverlays(g, scr)
+        if (settings.simulatedInput) { sim.drawControls(g, ui); sim.banner(g) }
+        if (settings.devOverlay) devOverlay.draw(g)
+        ui.drawCursors(g)
+        ui.end()
+        if (fade > 0f) {
+            g.fillRect(0f, 0f, g.width, g.height, Colors.withAlpha(Colors.NIGHT_TOP, fade))
+            fade = max(0f, fade - dt * 4f)
+        }
+    }
+
+    private fun feedPose(f: PoseFrame) {
+        poseFramesReceived++
+        tracker.update(f)
+        val t = f.timestampNanos / 1e9
+        for (k in 0..1) {
+            val slot = tracker.slots[k]
+            if (slot.calibration != null && controls[k].calibration !== slot.calibration) controls[k].calibration = slot.calibration
+            if (slot.state == SlotState.LOST || slot.state == SlotState.EMPTY) controls[k].reset()
+            controls[k].update(slot, t)
+        }
+    }
+
+    private fun updateCursors(g: Gfx) {
+        for (k in 0..1) {
+            val c = ui.cursors[k]
+            val slot = tracker.slots[k]
+            val ctl = controls[k]
+            c.color = playerColor(k)
+            if (!calibrated || !slot.isPlaying || !ctl.hasPose) { c.active = false; c.visible = false; continue }
+            // the higher of the two hands steers the cursor; it only acts when raised above the waist
+            val h = if (!ctl.handVisible[0]) 1 else if (!ctl.handVisible[1]) 0 else if (ctl.handY[0] > ctl.handY[1]) 0 else 1
+            val rx = ctl.handX[h]
+            val ry = ctl.handY[h]
+            val tx = g.width / 2f + rx / 0.9f * g.width / 2f
+            val ty = g.height * (1.1f - ry) / 1.45f
+            c.x += (tx.coerceIn(0f, g.width) - c.x) * 0.5f
+            c.y += (ty.coerceIn(0f, g.height) - c.y) * 0.5f
+            c.visible = ctl.handVisible[h]
+            c.active = c.visible && ry > -0.3f
+        }
+    }
+
+    private fun handleLifecycle() {
+        while (true) {
+            when (lifecycleQueue.poll() ?: break) {
+                "pause" -> {
+                    findScreen(com.clrg.core.ui.screens.GameScreen::class.java)?.session?.userPause()
+                    audio.playMusic(null)
+                }
+                "resume" -> current?.music?.let { audio.playMusic(it, restart = true) }
+                "display" -> {
+                    val d = platform.displayStatus()
+                    if (hadExternalDisplay && !d.externalConnected) {
+                        displayLost = true
+                        findScreen(com.clrg.core.ui.screens.GameScreen::class.java)?.session?.userPause()
+                        audio.play(Sfx.BAD)
+                    }
+                    if (d.externalConnected) displayLost = false
+                    hadExternalDisplay = d.externalConnected
+                }
+                "camera" -> Unit
+            }
+        }
+    }
+
+    fun dismissDisplayLost() { displayLost = false }
+
+    private fun drawGlobalOverlays(g: Gfx, scr: Screen) {
+        val cam = platform.cameraStatus()
+        if (!settings.simulatedInput && cam.state != CameraState.RUNNING && scr.needsCamera) {
+            val msg = when (cam.state) {
+                CameraState.NEEDS_PERMISSION, CameraState.DENIED -> "Camera permission is needed to play"
+                CameraState.OPENING -> "Starting the camera..."
+                CameraState.INTERRUPTED -> "Camera in use by another app - reconnecting..."
+                CameraState.ERROR -> "Camera problem: ${cam.message} - retrying"
+                CameraState.NO_CAMERA -> "No usable camera found"
+                else -> "Camera stopped"
+            }
+            val w = g.measureText(msg, 40f) + 80f
+            g.fillRoundRect(g.width / 2 - w / 2, g.height - 140f, g.width / 2 + w / 2, g.height - 60f, 30f, 0xEE7A1F1F.toInt())
+            g.text(msg, g.width / 2, g.height - 100f, 40f, Colors.WHITE)
+        }
+        if (displayLost) {
+            g.fillRect(0f, 0f, g.width, g.height, 0xCC000000.toInt())
+            ui.title(g, "TV disconnected", g.height / 2 - 140f)
+            ui.paragraph(g, listOf("The game is paused. Reconnect the HDMI / USB-C cable,", "or carry on playing on the phone screen."), g.width / 2, g.height / 2 - 40f, 42f, align = com.clrg.core.render.Align.CENTER)
+            if (ui.button(g, "displayOk", com.clrg.core.math.Rect.ofCenter(g.width / 2, g.height / 2 + 160f, 560f, 110f), "Continue")) dismissDisplayLost()
+        }
+    }
+
+    // ------------------------------------------------------------------ input helpers for the platform
+
+    fun key(k: Key) = submitInput(InputEvent.KeyPress(k))
+}

@@ -1,0 +1,24 @@
+package com.clrg.core.ui
+
+import com.clrg.core.app.GameApp
+import com.clrg.core.audio.MusicTrack
+import com.clrg.core.render.Gfx
+
+/** A full-screen page of the TV interface. */
+abstract class Screen(val app: GameApp) {
+    /** Music for this screen (null = keep whatever is playing). */
+    open val music: MusicTrack? = MusicTrack.MENU
+    /** Whether hands-free dwell cursors may operate this screen. */
+    open val allowCursors: Boolean = true
+    /** Whether this screen needs the camera (shows camera problems prominently). */
+    open val needsCamera: Boolean = false
+
+    open fun onEnter() {}
+    open fun onExit() {}
+
+    /** Update + draw in one pass (immediate-mode UI). */
+    abstract fun frame(g: Gfx, ui: Ui, dt: Float)
+
+    /** Back / Escape. Return true when handled. */
+    open fun onBack(): Boolean { app.pop(); return true }
+}
