@@ -19,7 +19,9 @@ Nothing in any game asks you to run, jump, cross over to the other player, crouc
 | Touch / remote | Every menu also works by touch on the phone, a TV remote / game controller D-pad (if connected) or a keyboard. When the game is on the TV as a second screen, the phone shows large arrow / OK / Back buttons. |
 | Pause | Back (phone gesture/button, remote), the **II** button, or the phone's **Back / Pause** button. Hands-free: one player steps out of view - the game pauses automatically. |
 | Someone steps out of view | The game pauses and names the missing player. When they are back in their own area and standing still, a 3-second countdown resumes play. Scores and timers are frozen while paused. |
-| Pause menu | Resume, Restart match, Recalibrate players, Quit. |
+| Pause menu | Resume, Restart match, Recalibrate players, Switch to front/back camera, Quit. |
+| Front or back camera | Tap the camera button at the top left of the main menu, the **Use back/front camera** button on the "Stand in your areas" screen, or **Switch to ... camera** in the pause menu. After switching mid-game everyone checks their position again, then the match carries on. The choice is remembered. |
+| Tracking meter | On the "Stand in your areas" screen, each player's bars (Excellent, Good, Fair, Weak) show how well the camera sees them, with a tip when something would help (come closer, step back, more light, keep both hands in the picture). |
 | After a match | Rematch, Choose another game, Main menu (or Continue tournament). |
 
 **Left-handed players:** during calibration, raise the hand you want to play with. Games that use one "playing

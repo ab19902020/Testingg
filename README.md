@@ -6,8 +6,10 @@ minigames, a party tournament with pair rotation and a persistent scoreboard - a
 against a computer opponent (Easy, Medium or Hard) in any of the ten games.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
-> reports that version 1.0.1 works on their phone; the detailed on-device checklist (tracking quality, frame
-> rates, latency, TV modes) has not been run yet, and solo mode (1.1.0) has only been tested with simulated input.
+> reports that versions 1.0.1 and 1.1.0 work on their phone; the detailed on-device checklist (tracking quality,
+> frame rates, latency, TV modes) has not been run yet. The 1.2.0 changes (camera switching, motion smoothing and
+> prediction, 60 fps camera, new graphics) are tested with recorded poses, simulated input and test renders only -
+> how they look and feel on your phone and TV has not been checked yet.
 > See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the exact status of every check.
 
 ## What's in the box
@@ -22,6 +24,31 @@ against a computer opponent (Easy, Medium or Hard) in any of the ten games.
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.2.0
+
+* **Front or back camera, one tap away:** a camera button on the main menu, on the "Stand in your areas" screen
+  and in the pause menu switches between the front camera and the back camera. The back camera is usually sharper
+  and wider; with it the phone's screen faces away from the players, which is fine because the game is on the TV. Switching re-checks everyone's
+  position, and the choice is remembered.
+* **Smoother, steadier body tracking:**
+  * Smoothing now adapts to each player's size in the picture, so a child far from the camera gets the same quick,
+    steady response as an adult close to it. Low-confidence joints are smoothed harder; confident fast moves stay
+    sharp.
+  * One-frame glitches (a wrist that jumps across the body for a single frame) are ignored.
+  * The on-screen avatar and hands are predicted a few hundredths of a second ahead to hide camera and processing
+    delay (capped, so it never overshoots far).
+  * Crouching, ducking and head tilt now show on your character.
+  * The camera asks for 60 frames per second when the phone keeps up and drops back to 30 when it doesn't
+    (Settings: "Smoother tracking").
+  * A tracking meter on the "Stand in your areas" screen rates each player (Excellent to Weak) and says what would
+    help: come closer, step back, more light, keep both hands in the picture.
+* **New graphics everywhere:** lit, shaded snowmen with knitted hats and mittens; skies with aurora and moon;
+  floodlit courts and pitches; a log cabin and brick snow forts; ski tracks and snow spray on the slalom; a
+  mountain road with lanterns; a polished bowling lane; a lamp-lit table tennis hall; a dance stage with moving
+  spotlights and a light-up floor; a living room with frosty windows for the tree. Buttons, panels and the
+  scoreboard are glossier, and hits, catches and saves now flash with impact rings and glowing sparks.
+  "Reduced effects" in Settings still tones all of this down.
 
 ## Changes in 1.1.0
 

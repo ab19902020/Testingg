@@ -63,6 +63,17 @@ mirrored if selected) which everything downstream uses.
 * **Reacquisition** only for someone in that player's area, of the calibrated size (0.7-1.45x), with matching
   colours, stable for 0.6 s. Other people are tracked as "others" and never fill a slot that is still visible.
 
+**Smoothing** (`SmoothedPose`): a One Euro filter per joint whose speed term is measured in body lengths per
+second, so it behaves the same for near and far players. Low-visibility joints get a lower cutoff (steadier);
+a joint that moves faster than any body can (30 body lengths per second) is held for up to two frames, which
+removes single-frame landmark glitches. `TrackingQuality` turns a slot's visibility, size, light and the
+inference rate into the Excellent-Weak meter and a tip shown on the framing screen.
+
+**Latency compensation** (`PlayerControls.predict`): gesture detection (swings, throws, pumps, poses) uses the
+measured (smoothed) frames only. The drawn avatar and the hand positions (used by the reach games and the menu
+cursors) are moved ahead along each joint's velocity by 75% of the time since the camera frame, capped at 0.09 s
+and 0.35 body lengths, so what players see and touch lines up better with what they are doing.
+
 `Calibration` measures neutral pose, body scale (torso length S), side and upward reach and the playing hand.
 Every gesture threshold is expressed in S or in reach units, so the same relative movement works for a child and
 an adult.
@@ -116,16 +127,17 @@ live play.
 | Class | Role |
 |---|---|
 | `MainActivity` | Single landscape activity; lifecycle -> camera/pose/audio/render start/stop; permission result; keys |
-| `CameraSource` | Camera2, front/back selection, 1280x720 YUV, 30 fps range, zoom-out for wide angle, error/retry, "in use" handling |
-| `PoseEngine` | Inference thread, TFLite runner (GPU delegate or XNNPACK CPU), preview image for setup screens, performance snapshot, AUTO quality and thermal adaptation |
+| `CameraSource` | Camera2, front/back selection and switching, 1280x720 YUV, 30 or 60 fps range (switched on the running session), zoom-out for wide angle, error/retry, "in use" handling |
+| `PoseEngine` | Inference thread, TFLite runner (GPU delegate or XNNPACK CPU), preview image for setup screens, performance snapshot, AUTO quality, thermal adaptation and 30/60 fps camera adaptation (60 only while inference keeps up); resets the pipeline when the camera changes |
 | `GameRenderer` | Render thread; draws to the TV `Presentation` surface or the phone surface; companion touch D-pad on the phone in second-screen mode |
 | `DisplayRouter` | `DisplayManager` listener; shows/dismisses the `Presentation`; reports TV name/size/refresh |
 | `AndroidAudio` | Low-latency `AudioTrack` (float PCM) fed by the core mixer |
-| `AndroidGfx` | `Gfx` on `android.graphics.Canvas` |
+| `AndroidGfx` | `Gfx` on `android.graphics.Canvas`; linear and radial gradients use cached unit shaders moved into place with a local matrix, so no shader objects are created per frame |
 | `PrefsStore` | `SharedPreferences` for settings, roster and tournament |
 | `DeviceCheck` | Chipset vs the performance target (informational) |
 
 ## Assets
 
-All artwork is drawn procedurally in code (`core/render/Draw.kt`, game render functions); all music and sound
+All artwork is drawn procedurally in code (`core/render/Draw.kt`, game render functions), using flat fills plus
+linear and radial gradients and glows for lighting; all music and sound
 effects are synthesised at runtime (`core/audio`). The only binary assets are the four BlazePose `.tflite` files.

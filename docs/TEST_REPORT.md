@@ -1,19 +1,20 @@
 # Test report
 
-Date: 2026-10-25 (version 1.1.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
-(no KVM) or TV was available here.** The only real-device evidence is the owner's report that version 1.0.1 works
-on their phone (section 4). Everything else that needs a device is marked **UNVERIFIED**.
+Date: 2026-10-25 (version 1.2.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+(no KVM) or TV was available here.** The only real-device evidence is the owner's reports that versions 1.0.1 and
+1.1.0 work on their phone (section 4). Everything else that needs a device is marked **UNVERIFIED**.
 
 ## Summary
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **81 passed, 0 failed, 1 skipped** (the skipped one is a developer diagnostic) (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **87 passed, 0 failed, 1 skipped** (the skipped one is a developer diagnostic) (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
 | App launches and runs on Android | **Reported working by the owner** (1.0.1 on their phone, after the camera crash fix); not tested here |
 | Live camera tracking of real people | Owner reports the game working; tracking quality not measured - **UNVERIFIED** in detail |
-| Solo mode against the computer (1.1.0) | Passed with simulated input and CPU-vs-CPU matches; **not yet tried on a phone** |
+| Solo mode against the computer (1.1.0) | Passed with simulated input and CPU-vs-CPU matches; owner reports it working |
+| Camera switching, motion smoothing/prediction, 60 fps camera, new graphics (1.2.0) | Passed in JVM tests (simulated input, synthetic motion, test renders); **not yet tried on a phone** |
 | On-device performance (fps, latency, thermal) | **UNVERIFIED** - no numbers measured; none are claimed |
 | TV output over USB-C/HDMI, Presentation mode, cable unplug | **UNVERIFIED** |
 | Audio output and latency | **UNVERIFIED** |
@@ -22,9 +23,9 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (81)
+## 1. Automated tests (88: 87 passed, 1 skipped)
 
-Run: `./gradlew :core:test` (75 tests) plus 6 real-model tests that need the validation environment
+Run: `./gradlew :core:test` (82 tests, one of them the skipped developer diagnostic) plus 6 real-model tests that need the validation environment
 (`tools/pose-validation/run_real_model_tests.sh`).
 
 ### Pose pipeline - fixtures from the real models (`BlazePoseFixtureTest`, 5 passed)
@@ -56,6 +57,16 @@ areas in mirrored view, and the detector ran 6 times (40 landmark runs) instead 
 
 Limits of this evidence: still images, desktop TFLite (not the Android TFLite/GPU delegate), no motion blur, no
 real living-room lighting, no camera noise.
+
+### Motion quality (`MotionQualityTest`, 5 passed - synthetic motion, new in 1.2.0)
+Smoothing lag (in body lengths) is the same for a player close to the camera and a player far back; a one-frame
+wrist "teleport" is ignored while a lasting change is followed; render-time prediction moves a moving hand ahead
+along its motion and adds no drift when the player is still; a crouch shows on the character and standing up
+returns it to normal; the tracking meter rates a clear, well-sized player highly with no tip, and gives the right
+tip when a hand is out of the picture and when tracking is slow.
+
+The 6 real-model tests above were re-run after the smoothing changes with the same results (they test the
+landmark pipeline, which smoothing does not change).
 
 ### Identity tracking (`PlayerTrackerTest`, 13 passed - synthetic poses)
 Players assigned from their starting areas; identities stable when detection order changes every frame; players
@@ -112,6 +123,11 @@ Main menu -> Play Solo -> choose Hard -> game -> one-person framing, calibration
 gesture -> match with the CPU (both sides score) -> results -> another solo game keeps the calibration -> Quick
 Match switches back to two people. Quick Match's "Just me" button switches to solo with one person.
 
+### Camera switching (`CameraSwitchTest`, 2 passed - simulated input, new in 1.2.0)
+The main-menu camera button switches front <-> back and the choice is saved; the pause-menu switch during a match
+changes camera, resets calibration and returns to the "Stand in your areas" screen, then the match carries on.
+(The Android camera itself is not exercised: the test checks which camera the game asks for.)
+
 ### Crash report (`CrashReportFlowTest`, 2 passed)
 A report about a previous crash is shown first at startup, long reports page through, nothing is shared until
 Share is tapped, Continue returns to the main menu; a "body tracking could not start" message appears on camera
@@ -130,13 +146,13 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,189,763 bytes, SHA-256 `26be12664d60ff98a6df9c8d2407339c006af9472e71e0e22f87c53b4ae6a236` |
-| Package / version | `com.clrg.christmasgames`, versionCode 3, versionName 1.1.0 |
+| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,214,339 bytes, SHA-256 `4fffa5736ae3a67b7fe18a3f561778c00fb2c4ba1aabfa575a0efc6edc32c88a` |
+| Package / version | `com.clrg.christmasgames`, versionCode 4, versionName 1.2.0 |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
-| Signature | `apksigner verify`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
+| Signature | `apksigner verify --min-sdk-version 24`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
 | Reproducibility | A clean rebuild (`./gradlew clean :app:assembleDebugApk`) produced a byte-identical APK with the same debug key |
 | Alignment | `zipalign -p 4` |
-| Code | single `classes.dex`, 1,493 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
+| Code | single `classes.dex`, 1,527 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
 | Models | 4 `.tflite` files, stored uncompressed (memory-mappable) |
 | Native libs | TFLite + GPU delegate for `arm64-v8a` and `x86_64` |
 | Permissions | `CAMERA` only. No `INTERNET` (enforced by the build) |
@@ -152,7 +168,8 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 | Spectators can't take over | Passed (synthetic) | PlayerTrackerTest |
 | Tracking loss: fair pause, names the player, reacquire, 3-s countdown | Passed (simulated) | AppFlowTest, PlayerTrackerTest |
 | Mirroring, landscape, rotation, coordinates | Passed (unit + real model) / UNVERIFIED on device sensors | Orientation tests |
-| Front/rear camera selection | Implemented / UNVERIFIED | CameraSource |
+| Front/rear camera selection and in-game switching | Game side passed (simulated) / Android camera switching UNVERIFIED | CameraSwitchTest, CameraSource |
+| 60 fps camera when the phone keeps up | Implemented / UNVERIFIED | CameraSource, PoseEngine |
 | Body-normalised thresholds, smoothing, cooldown, hysteresis | Passed (synthetic) | GestureTest |
 | Left-handed, reduced-movement, seated | Passed (synthetic) | GestureTest, AllGamesTest |
 | Ten complete games with instructions, countdown, scoring, results, rematch | Passed (scripted) | AllGamesTest, AppFlowTest |
@@ -172,6 +189,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Report | Version | Status |
 |---|---|---|
+| "Okay, it's all working" - owner, after installing 1.1.0 (solo mode) | 1.1.0 | App and solo mode run on the owner's phone. |
 | "This is all working now" - owner, after installing 1.0.1 | 1.0.1 | App starts, camera permission works, game runs on the owner's phone (model not reported). |
 | Crash right after allowing the camera (first real-device report) | 1.0.0 | Most likely cause found by code review (camera opened twice after the permission dialog; an error on the camera thread was not caught). Fixed in 1.0.1. **The fix itself is not yet confirmed on the phone.** 1.0.1 also shows a crash report on the next launch if anything still goes wrong. |
 
@@ -188,10 +206,11 @@ overlay**. Record PASS/FAIL and the overlay numbers. Repeat key items on a secon
 
 **Camera and tracking**
 3. [ ] Front camera and rear camera both show an upright, correctly mirrored picture (raise your right hand: it
-   appears on the right of the screen for a mirrored view).
+   appears on the right of the screen for a mirrored view). Switch cameras from the main menu, the framing
+   screen and the pause menu: each switch works without a crash and the match carries on after re-framing.
 4. [ ] Two adults side by side at 2-3 m: both skeletons drawn, shoulders/elbows/wrists/hips on the right joints.
 5. [ ] Framing: Player 1 found only in the left outline, Player 2 only in the right.
-6. [ ] Overlay: camera ~30 fps; pose time per frame (target <= 25 ms on full model); capture->game latency
+6. [ ] Overlay: camera 30 or 60 fps (the level shows "/60fps" when the faster mode is on); pose time per frame (target <= 25 ms on full model); capture->game latency
    (target <= 100 ms); render ~60 fps. Write down the real numbers.
 7. [ ] Players stand close (shoulders ~30 cm apart) and wave: no identity swap for 2 minutes.
 8. [ ] One player walks out: game pauses within ~0.5 s and names that player; returns: 3-s countdown, same
@@ -199,7 +218,8 @@ overlay**. Record PASS/FAIL and the overlay numbers. Repeat key items on a secon
 9. [ ] A third person walks behind and beside the players: never becomes a player.
 10. [ ] Third person steps into a lost player's area: is not accepted if clearly different in size/clothing.
 11. [ ] Child + adult pair; seated player (hips hidden by a table); left-handed player: each can calibrate and play.
-12. [ ] Dim room and a bright window behind the players: note tracking quality.
+12. [ ] Dim room and a bright window behind the players: note tracking quality and whether the tracking meter
+    says "More light please".
 13. [ ] Wide-angle option (if the camera supports zooming out).
 
 **Games** (both players, each game to the end; note anything that triggers by accident or fails to trigger)
