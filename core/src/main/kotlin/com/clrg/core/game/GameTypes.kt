@@ -49,6 +49,16 @@ class PlayerInput(val index: Int) {
      * swing detector is made more sensitive accordingly.
      */
     var expectSwing = 0f
+    /** Shooting games: where each hand aims (reach units, measured), finger gun / toy gun per hand, the gun hand. */
+    val aimX = FloatArray(2)
+    val aimY = FloatArray(2)
+    val aimSeen = BooleanArray(2)
+    val gun = BooleanArray(2)
+    val cocked = BooleanArray(2)
+    val fingersSeen = BooleanArray(2)
+    var gunHand = RIGHT
+    /** Boxing: both fists up in front of the face. */
+    var guard = false
 
     /** Copies continuous state from the player's controls (events are delivered separately). */
     fun fill(c: PlayerControls, isTracked: Boolean) {
@@ -62,11 +72,16 @@ class PlayerInput(val index: Int) {
         avatar.copyFrom(c.avatar)
         dominant = if (c.calibration?.dominantHand == Hand.LEFT) LEFT else RIGHT
         mode = c.calibration?.mode ?: MovementMode.STANDARD
+        val g = c.gunCtl
+        g.aimX.copyInto(aimX); g.aimY.copyInto(aimY); g.aimSeen.copyInto(aimSeen); g.gun.copyInto(gun); g.fingersSeen.copyInto(fingersSeen)
+        for (h in 0..1) cocked[h] = g.trigger[h].cocked
+        gunHand = g.gunHand
+        guard = c.punch.guard
     }
 
     fun clearState() {
         tracked = false; lean = 0f; pump = 0f; tuck = false; handsUp = false; raiseProgress = 0f
-        handVisible.fill(false); events.clear()
+        handVisible.fill(false); events.clear(); aimSeen.fill(false); gun.fill(false); cocked.fill(false); fingersSeen.fill(false); guard = false
     }
 
     inline fun <reified T : GestureEvent> take(): T? {
@@ -193,6 +208,9 @@ abstract class MiniGame(val env: GameEnv) {
 
     /** Games that use small, quick arm strokes (table tennis) lower the swing thresholds. */
     open val compactSwings: Boolean = false
+
+    /** Games played with finger guns: the camera then also follows the players' fingers (costs extra tracking time). */
+    open val usesFingers: Boolean = false
 
     /** Text for the current status line under the HUD, e.g. "Holly to serve". */
     open fun status(): String? = null

@@ -139,6 +139,41 @@ class TfliteRunner(assets: AssetManager, val variant: String, wantGpu: Boolean) 
 }
 
 /**
+ * The MediaPipe hand landmark model (lite) on the CPU, for finger tracking. Created only when a game asks for
+ * fingers. Must be used from one thread.
+ */
+class HandTfliteRunner(assets: AssetManager) : com.clrg.core.pose.HandModelRunner, AutoCloseable {
+    private val interp: Interpreter
+    private val input = ByteBuffer.allocateDirect(224 * 224 * 3 * 4).order(ByteOrder.nativeOrder())
+    private val inF = input.asFloatBuffer()
+    private val lm = ByteBuffer.allocateDirect(63 * 4).order(ByteOrder.nativeOrder())
+    private val pres = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder())
+    private val hand = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder())
+    private val world = ByteBuffer.allocateDirect(63 * 4).order(ByteOrder.nativeOrder())
+    private val outs = HashMap<Int, Any>(4)
+    private val ins = arrayOfNulls<Any>(1)
+
+    init {
+        interp = Interpreter(TfliteRunner.map(assets, "models/hand_landmark_lite.tflite"), Interpreter.Options().setNumThreads(2).setUseXNNPACK(true))
+        outs[interp.getOutputIndex("Identity")] = lm
+        outs[interp.getOutputIndex("Identity_1")] = pres
+        outs[interp.getOutputIndex("Identity_2")] = hand
+        outs[interp.getOutputIndex("Identity_3")] = world
+    }
+
+    override fun runHand(input: FloatArray, landmarks: FloatArray, presence: FloatArray) {
+        inF.rewind(); inF.put(input); this.input.rewind()
+        lm.rewind(); pres.rewind(); hand.rewind(); world.rewind()
+        ins[0] = this.input
+        interp.runForMultipleInputsOutputs(ins, outs)
+        lm.rewind(); lm.asFloatBuffer().get(landmarks)
+        pres.rewind(); presence[0] = pres.asFloatBuffer().get(0)
+    }
+
+    override fun close() = interp.close()
+}
+
+/**
  * Inference thread. Wakes when the camera has a new image, always takes the *latest* one (older ones are dropped),
  * copies the YUV planes, runs the multi-person pipeline and publishes a PoseFrame plus a small preview bitmap.
  * Inference runs off the render/UI thread and at its own rate (decoupled from rendering).
@@ -161,6 +196,14 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     @Volatile var expectedPeople = 2
     /** Held objects (sticks, toy rackets) found next to the players' hands; configured from the game. */
     val held = com.clrg.core.pose.HeldObjectTracker()
+
+    /** Finger tracking requests from the game (track ids and hand masks per player); all-zero = off. */
+    @Volatile var handTracks = intArrayOf(-1, -1)
+    @Volatile var handMasks = intArrayOf(0, 0)
+    private var handRunner: HandTfliteRunner? = null
+    private var handTracker: com.clrg.core.pose.HandLandmarkTracker? = null
+    private var handFailed = false
+    private var handMs = 0f
 
     private val lock = Object()
     private var pending = false
@@ -249,7 +292,12 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         releaseOnExit = true
         stop()
         val t = thread
-        if (t == null || !t.isAlive) { runner?.close(); runner = null; pipeline = null }
+        if (t == null || !t.isAlive) { runner?.close(); runner = null; pipeline = null; closeHands() }
+    }
+
+    private fun closeHands() {
+        try { handRunner?.close() } catch (_: Throwable) {}
+        handRunner = null; handTracker = null
     }
 
     /** Called whenever a screen draws the camera picture: keeps preview images coming for the next half second. */
@@ -282,6 +330,7 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
             try { runner?.close() } catch (_: Throwable) {}
             runner = null
             pipeline = null
+            closeHands()
         }
     }
 
@@ -350,6 +399,7 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         if (pipe.config != cfg) pipe.config = cfg // keeps the people already being followed
         val rot = (FrameOrientation.rotationFor(info.sensorOrientation, displayRotationDeg, info.front) + if (upsideDown) 180 else 0) % 360
         val orient = FrameOrientation(w, h, rot)
+        configureHands(pipe)
         val t0 = System.nanoTime()
         val onGpu = runner?.delegateName == "GPU"
         // the first GPU inferences are where buggy GPU drivers crash: mark them so a crash disables the GPU next time
@@ -374,6 +424,27 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         publishDebug(pipe, geo)
         updateStats(pipe, t0, t1, captureNs, info.realtimeTimestamps, orient)
         adapt(t1)
+    }
+
+    /** Finger tracking on when the game asks for it (the model is loaded the first time it is needed). */
+    private fun configureHands(pipe: MultiPosePipeline) {
+        val masks = handMasks
+        if (masks.all { it == 0 } || handFailed) { pipe.handLandmarks = null; return }
+        if (handTracker == null) {
+            try {
+                handRunner = HandTfliteRunner(context.assets)
+                handTracker = com.clrg.core.pose.HandLandmarkTracker(handRunner!!)
+            } catch (t: Throwable) {
+                // finger tracking is an extra: without it, games fall back to arm movements
+                Log.e("PoseEngine", "hand model unavailable", t)
+                handFailed = true
+                return
+            }
+        }
+        val ht = handTracker!!
+        ht.tracks = handTracks
+        ht.masks = masks
+        pipe.handLandmarks = ht
     }
 
     /** Mean brightness of a frame from a sparse grid of luma samples (for the sharp-motion exposure). */
@@ -497,6 +568,10 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
             inputSize = "${o.bufferWidth}x${o.bufferHeight} rot ${o.rotationCw}", thermal = thermal,
             adaptiveLevel = "${quality.label}/$variant/${if (camera.highFps) 60 else 30}fps",
             exposure = camera.exposureInfo,
+            fingers = handTracker?.takeIf { pipe.handLandmarks != null }?.let { h ->
+                handMs = if (handMs == 0f) h.lastMs else handMs + 0.1f * (h.lastMs - handMs)
+                "%.1f ms, %d hand%s".format(handMs, h.lastRuns, if (h.lastRuns == 1) "" else "s")
+            } ?: if (handFailed) "unavailable" else "off",
         )
     }
 

@@ -31,9 +31,21 @@ sealed class GestureEvent(val t: Double, val hand: Int) {
     class HandsUp(t: Double) : GestureEvent(t, -1)
     /** A hand was raised and held long enough (ready / confirm). */
     class RaiseHold(t: Double, hand: Int) : GestureEvent(t, hand)
+    /**
+     * A shot from a finger gun (thumb dropped) or a held toy gun (a quick upward flick, the recoil). [aimX]/[aimY]: where
+     * the hand was pointing just before (reach units, like the hand positions); [byThumb]: fired with the thumb.
+     */
+    class Shot(t: Double, hand: Int, val aimX: Float, val aimY: Float, val byThumb: Boolean) : GestureEvent(t, hand)
+    /**
+     * A punch. [kind]: straight (towards the camera), hook (round from the side) or uppercut (upwards). [power] 0..1.
+     * [x]/[y]: where the fist ended up (reach units), i.e. what it was aimed at.
+     */
+    class Punch(t: Double, hand: Int, val kind: PunchKind, val power: Float, val x: Float, val y: Float) : GestureEvent(t, hand)
 
     override fun toString(): String = "${this::class.simpleName}(t=%.3f, hand=$hand)".format(t)
 }
+
+enum class PunchKind { STRAIGHT, HOOK, UPPERCUT }
 
 /**
  * Gesture thresholds in body units (S = torso length), per movement mode. Reduced-movement and seated modes

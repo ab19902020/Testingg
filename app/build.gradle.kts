@@ -97,6 +97,9 @@ val modelSpecs = listOf(
     ModelSpec("lite", "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a"),
     ModelSpec("full", "5134a3aad27a58b93da0088d431f366da362b44e3ccfbe3462b3827a839011b1"),
 )
+/** Finger tracking: MediaPipe hand landmark model (lite, Apache-2.0), a single .tflite file. */
+val handModelUrl = "https://storage.googleapis.com/mediapipe-assets/hand_landmark_lite.tflite"
+val handModelSha256 = "d7fde8ac11f8ce03f8663775bfc323f4fc9f2a38062b4f4efa142874ef5b2a48"
 val modelCache = rootProject.layout.projectDirectory.dir(".model-cache")
 val generatedAssets = layout.buildDirectory.dir("generated/assets")
 
@@ -106,7 +109,7 @@ val fetchPoseModels by tasks.registering {
     description = "Downloads and verifies the MediaPipe pose landmarker models, then unpacks the .tflite files."
     val outDir = generatedAssets.map { it.dir("models") }
     outputs.dir(outDir)
-    inputs.property("models", modelSpecs.map { it.variant + ":" + it.sha256 })
+    inputs.property("models", modelSpecs.map { it.variant + ":" + it.sha256 } + handModelSha256)
     doLast {
         val cache = modelCache.asFile.apply { mkdirs() }
         val out = outDir.get().asFile.apply { deleteRecursively(); mkdirs() }
@@ -126,6 +129,14 @@ val fetchPoseModels by tasks.registering {
                 }
             }
         }
+        val hand = File(cache, "hand_landmark_lite.tflite")
+        if (!hand.exists() || sha256(hand) != handModelSha256) {
+            logger.lifecycle("Downloading $handModelUrl")
+            uri(handModelUrl).toURL().openStream().use { input -> hand.outputStream().use { input.copyTo(it) } }
+        }
+        val handSum = sha256(hand)
+        if (handSum != handModelSha256) throw GradleException("Checksum mismatch for ${hand.name}: $handSum")
+        hand.copyTo(File(out, "hand_landmark_lite.tflite"), overwrite = true)
     }
 }
 
@@ -321,6 +332,7 @@ val verifyApkContents by tasks.registering {
         val names = ZipFile(apk).use { z -> z.entries().toList().map { it.name } }
         val required = listOf("classes.dex", "AndroidManifest.xml", "resources.arsc") +
             modelSpecs.flatMap { listOf("assets/models/${it.variant}_pose_detector.tflite", "assets/models/${it.variant}_pose_landmarks_detector.tflite") } +
+            listOf("assets/models/hand_landmark_lite.tflite") +
             listOf("lib/arm64-v8a/libtensorflowlite_jni.so", "lib/arm64-v8a/libtensorflowlite_gpu_jni.so")
         val missing = required.filter { it !in names }
         if (missing.isNotEmpty()) throw GradleException("APK is missing: $missing")

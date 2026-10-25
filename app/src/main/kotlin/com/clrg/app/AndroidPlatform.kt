@@ -75,6 +75,7 @@ class AndroidPlatform(
     override fun learnHeldObject(trackId: Int, player: Int) = pose.held.requestLearn(trackId, player)
     override fun cancelHeldLearning() = pose.held.cancelLearn()
     override fun heldLearnStatus(): com.clrg.core.pose.HeldLearnStatus? = pose.held.status
+    override fun setHandTracking(tracks: IntArray, masks: IntArray) { pose.handTracks = tracks.copyOf(); pose.handMasks = masks.copyOf() }
 
     override fun shareText(subject: String, text: String) {
         activity.runOnUiThread {

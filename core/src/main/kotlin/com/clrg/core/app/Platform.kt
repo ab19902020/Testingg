@@ -52,6 +52,8 @@ class PerfSnapshot(
     val adaptiveLevel: String = "-",
     /** How the camera exposes: e.g. "auto exposure 33 ms" or "sharp-motion exposure 8 ms, ISO 1600". */
     val exposure: String = "-",
+    /** Finger tracking: time per picture (ms) and hands followed, or "off". */
+    val fingers: String = "off",
 )
 
 /** Upright (non-mirrored) camera preview image plus whether it should be mirrored when shown. */
@@ -97,6 +99,12 @@ interface Platform {
     fun cancelHeldLearning() {}
     /** Progress of learning an object, or null when not learning (and no result waiting). */
     fun heldLearnStatus(): com.clrg.core.pose.HeldLearnStatus? = null
+
+    /**
+     * Finger tracking: each player's camera track id and which hands to follow (bits 0/1 = left/right every frame,
+     * 2/3 = every other frame); all-zero masks switch it off.
+     */
+    fun setHandTracking(tracks: IntArray, masks: IntArray) {}
 }
 
 /** Platform stub for tests and headless tools. */
@@ -133,4 +141,8 @@ open class NullPlatform(override val store: KeyValueStore) : Platform {
     override fun learnHeldObject(trackId: Int, player: Int) { heldLearnRequests++; heldStatus = com.clrg.core.pose.HeldLearnStatus(player, 0f, false, false, "learning", null) }
     override fun cancelHeldLearning() { heldStatus = null }
     override fun heldLearnStatus() = heldStatus
+
+    var handTracks = intArrayOf(-1, -1)
+    var handMasks = intArrayOf(0, 0)
+    override fun setHandTracking(tracks: IntArray, masks: IntArray) { handTracks = tracks; handMasks = masks }
 }

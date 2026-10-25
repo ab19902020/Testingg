@@ -17,6 +17,8 @@ class PersonPose(
     val appearance: FloatArray?,
     /** An object held in one hand (when held-object tracking is on and one was seen), else null. */
     val held: HeldObservation? = null,
+    /** Finger landmarks per hand (0 = left, 1 = right) when finger tracking ran for this person, else null. */
+    val hands: Array<HandObservation?>? = null,
 ) {
     fun vis(i: Int): Float = visibility[i] * presence[i]
     fun visible(i: Int, threshold: Float = 0.5f): Boolean = vis(i) >= threshold
@@ -33,6 +35,7 @@ class PersonPose(
                 FloatArray(n) { lm.presence[it] },
                 raw.presence, raw.trackId, raw.appearance,
                 raw.held?.mapped({ geo.toFrameX(it) }, { geo.toFrameY(it) }),
+                raw.hands?.let { hs -> Array(2) { h -> hs[h]?.mapped({ geo.toFrameX(it) }, { geo.toFrameY(it) }, 1f / geo.uprightHeight) } },
             )
         }
     }

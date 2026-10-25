@@ -40,6 +40,12 @@ class Puppet(var cx: Float, var shoulderY: Float, var scale: Float) {
     var heldLength = 0.9f
     var heldBend = 0f
     var heldConfidence = 0.8f
+    /**
+     * Finger shape per hand, as the finger tracker would report it (NONE = no finger data for that hand). [thumb]
+     * 0 = thumb down against the fingers, 1 = raised. [handPitch]: the hand's direction relative to the forearm.
+     */
+    val fingers = arrayOf(FingerShape.NONE, FingerShape.NONE)
+    val thumb = floatArrayOf(1f, 1f)
     var score = 0.99f
     var trackHint = 1
     var appearance: FloatArray? = null
@@ -122,6 +128,16 @@ class Puppet(var cx: Float, var shoulderY: Float, var scale: Float) {
             val bx = x[w] + cos(fa) * 0.06f * s; val by = y[w] + sin(fa) * 0.06f * s
             held = com.clrg.core.pose.HeldObservation(heldHand, bx, by, bx + cos(fa) * heldLength * s, by + sin(fa) * heldLength * s, heldConfidence)
         }
+        // fingers: a simple jointed hand placed along the forearm, palm towards the camera
+        var hands: Array<com.clrg.core.pose.HandObservation?>? = null
+        for (h in 0..1) {
+            val shape = fingers[h]
+            if (shape == FingerShape.NONE) continue
+            val w = if (h == 0) Lm.LEFT_WRIST else Lm.RIGHT_WRIST
+            val e = if (h == 0) Lm.LEFT_ELBOW else Lm.RIGHT_ELBOW
+            val arr = hands ?: arrayOfNulls<com.clrg.core.pose.HandObservation>(2).also { hands = it }
+            arr[h] = FakeHand.make(h, x[w], y[w], atan2(y[w] - y[e], x[w] - x[e]), 0.19f * s, shape, thumb[h])
+        }
         // hips and legs
         val hipV = if (hipsVisible) visibility else 0.05f
         set(Lm.LEFT_HIP, hipCx - sw * 0.4f, hipCy, hipV); set(Lm.RIGHT_HIP, hipCx + sw * 0.4f, hipCy, hipV)
@@ -136,7 +152,63 @@ class Puppet(var cx: Float, var shoulderY: Float, var scale: Float) {
             x[i] += (rng.nextFloat() - 0.5f) * 2f * noise * s
             y[i] += (rng.nextFloat() - 0.5f) * 2f * noise * s
         }
-        return PersonPose(x, y, z, vis, pres, score, trackHint, appearance?.copyOf(), held)
+        val fingerNoise = if (noise > 0f && rng != null) noise else 0f
+        hands?.forEach { o -> if (o != null && fingerNoise > 0f) for (i in 0 until 21) { o.x[i] += (rng!!.nextFloat() - 0.5f) * fingerNoise * s; o.y[i] += (rng.nextFloat() - 0.5f) * fingerNoise * s } }
+        return PersonPose(x, y, z, vis, pres, score, trackHint, appearance?.copyOf(), held, hands)
+    }
+}
+
+enum class FingerShape { NONE, OPEN, FIST, GUN }
+
+/** Synthetic 21-point hands for the puppet (scripted test input, not camera tracking). */
+object FakeHand {
+    // hand-local coordinates in palm lengths: wrist at 0, fingers along -v, palm facing the camera (curl = -w)
+    private val MCP_U = floatArrayOf(-0.32f, -0.06f, 0.17f, 0.37f)
+    private val MCP_V = floatArrayOf(-0.93f, -1.0f, -0.93f, -0.82f)
+    private val SEG = arrayOf(floatArrayOf(0.45f, 0.27f, 0.22f), floatArrayOf(0.5f, 0.3f, 0.24f), floatArrayOf(0.46f, 0.28f, 0.22f), floatArrayOf(0.36f, 0.22f, 0.2f))
+
+    /**
+     * A hand at wrist ([wx], [wy]) whose fingers point along [dir] (image radians), palm length [palm] (same units).
+     * [thumb]: 0 = against the fingers, 1 = raised.
+     */
+    fun make(hand: Int, wx: Float, wy: Float, dir: Float, palm: Float, shape: FingerShape, thumb: Float): com.clrg.core.pose.HandObservation {
+        val u = FloatArray(21); val v = FloatArray(21); val w = FloatArray(21)
+        for (f in 0 until 4) {
+            val straight = when (shape) { FingerShape.OPEN -> true; FingerShape.FIST -> false; FingerShape.GUN -> f == 0; FingerShape.NONE -> true }
+            val base = 5 + f * 4
+            u[base] = MCP_U[f]; v[base] = MCP_V[f]; w[base] = 0f
+            // direction of the proximal bone: straight on from the wrist, or curled towards the camera
+            var a = 0f
+            val flex = if (straight) floatArrayOf(0f, 0.05f, 0.05f) else floatArrayOf(1.35f, 1.75f, 0.9f)
+            var pu = u[base]; var pv = v[base]; var pw = 0f
+            val spread = MCP_U[f] * 0.25f
+            for (j in 0 until 3) {
+                a += flex[j]
+                val len = SEG[f][j]
+                // in the v-w plane: v = -cos(a) (along the finger), w = -sin(a) (towards the camera)
+                pu += spread * len; pv += -kotlin.math.cos(a) * len; pw += -kotlin.math.sin(a) * len
+                u[base + j + 1] = pu; v[base + j + 1] = pv; w[base + j + 1] = pw
+            }
+        }
+        // thumb: from the base of the palm, either raised (pointing up and out) or laid across the fingers
+        u[1] = -0.28f; v[1] = -0.22f; w[1] = -0.05f
+        u[2] = -0.5f; v[2] = -0.42f; w[2] = -0.1f
+        val upU = floatArrayOf(-0.76f, -0.98f); val upV = floatArrayOf(-0.7f, -0.95f)
+        val dnU = floatArrayOf(-0.42f, -0.25f); val dnV = floatArrayOf(-0.68f, -0.9f)
+        for (j in 0..1) {
+            u[3 + j] = dnU[j] + (upU[j] - dnU[j]) * thumb; v[3 + j] = dnV[j] + (upV[j] - dnV[j]) * thumb; w[3 + j] = -0.15f - 0.05f * thumb
+        }
+        // place in the image: -v along dir, u across it (mirrored for the left hand)
+        val c = kotlin.math.cos(dir); val sn = kotlin.math.sin(dir)
+        val side = if (hand == 1) 1f else -1f
+        val xs = FloatArray(21); val ys = FloatArray(21); val zs = FloatArray(21)
+        for (i in 0 until 21) {
+            val along = -v[i] * palm; val across = u[i] * palm * side
+            xs[i] = wx + c * along - sn * across
+            ys[i] = wy + sn * along + c * across
+            zs[i] = w[i] * palm
+        }
+        return com.clrg.core.pose.HandObservation(hand, xs, ys, zs, 0.97f)
     }
 }
 

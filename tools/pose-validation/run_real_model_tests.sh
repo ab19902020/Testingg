@@ -10,7 +10,7 @@ WORK="${WORK:-$ROOT/build/pose-validation}"
 mkdir -p "$WORK/imgs" "$WORK/models"
 python3 -m venv "$WORK/venv"
 "$WORK/venv/bin/pip" install -q mediapipe ai-edge-litert numpy opencv-python-headless pillow
-for f in pose.jpg male_full_height_hands.jpg man-woman-okay.jpg living_room.jpg; do
+for f in pose.jpg male_full_height_hands.jpg man-woman-okay.jpg living_room.jpg pointing_up.jpg thumb_up.jpg fist.jpg victory.jpg pointing_up_rotated.jpg cats_and_dogs.jpg; do
   [ -f "$WORK/imgs/$f" ] || curl -sSf -o "$WORK/imgs/$f" "https://storage.googleapis.com/mediapipe-assets/$f"
 done
 for m in lite full; do
@@ -18,10 +18,13 @@ for m in lite full; do
   [ -f "$t" ] || curl -sSf -o "$t" "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_$m/float16/1/pose_landmarker_$m.task"
   mkdir -p "$WORK/models/$m" && (cd "$WORK/models/$m" && unzip -o -q "../pose_landmarker_$m.task")
 done
+mkdir -p "$WORK/models/hand"
+[ -f "$WORK/models/hand/hand_landmark_lite.tflite" ] || curl -sSf -o "$WORK/models/hand/hand_landmark_lite.tflite" "https://storage.googleapis.com/mediapipe-assets/hand_landmark_lite.tflite"
+cp "$WORK"/imgs/{pointing_up,thumb_up,fist,victory,pointing_up_rotated,cats_and_dogs}.jpg "$WORK/"
 cd "$WORK"
 export CLRG_IMGS="$WORK/imgs" CLRG_MODELS="$WORK/models"
 "$WORK/venv/bin/python" "$HERE/make_scenes.py"
 "$WORK/venv/bin/python" "$HERE/mp_reference.py"
 cd "$ROOT"
-./gradlew :core:test --tests '*RealModelPipelineTest*' \
+./gradlew :core:test --tests '*RealModel*' \
   -Pclrg.validation.python="$WORK/venv/bin/python" -Pclrg.validation.models="$WORK/models" -Pclrg.validation.scenes="$WORK"

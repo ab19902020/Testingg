@@ -339,6 +339,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         }
 
         updateHeldObjects()
+        updateHandTracking()
         // 2) latency compensation for what players see, then hands-free cursors from calibrated, tracked players
         if (!settings.simulatedInput) for (c in controls) c.predict(nowNanos / 1e9)
         updateCursors(g, dt)
@@ -407,6 +408,19 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         if (!models.contentEquals(heldSentModels) || !tracks.contentEquals(heldSentTracks)) {
             heldSentModels = models; heldSentTracks = tracks
             platform.setHeldObjects(models, tracks)
+        }
+    }
+
+    private var handSentTracks = intArrayOf(-2, -2)
+    private var handSentMasks = intArrayOf(-1, -1)
+
+    /** Finger tracking for the players whose game asks for it (finger guns), on the hands in use. */
+    private fun updateHandTracking() {
+        val masks = IntArray(2) { k -> if (tracker.slots[k].enabled && tracker.slots[k].isPlaying) controls[k].fingerMask else 0 }
+        val tracks = IntArray(2) { k -> if (masks[k] != 0) tracker.slots[k].trackHint else -1 }
+        if (!masks.contentEquals(handSentMasks) || !tracks.contentEquals(handSentTracks)) {
+            handSentMasks = masks; handSentTracks = tracks
+            platform.setHandTracking(tracks, masks)
         }
     }
 

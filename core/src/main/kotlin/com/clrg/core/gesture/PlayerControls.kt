@@ -122,6 +122,15 @@ class PlayerControls(val playerIndex: Int) {
     /** Which part of the arm saw the last swing: 0 wrist, 1 elbow, 2 held object. */
     val lastSwingSource: Int get() = swing.lastKind
     /** Golf: which stroke to look for (NONE outside golf). */
+    /** Set while a game needs finger tracking (finger guns): the camera thread then follows this player's hands. */
+    var wantFingers = false
+    /** Aim, finger gun and shots (shooting games). */
+    val gunCtl = GunControls()
+    /** Punches (boxing). */
+    val punch = PunchDetector()
+    /** Hands the finger tracker should follow now (see [GunControls.fingerMask]); 0 when no game asks for fingers. */
+    val fingerMask: Int get() = if (wantFingers && hasPose) gunCtl.fingerMask(history.latest) else 0
+
     var golfStroke = GolfStroke.NONE
     val golf = GolfSwingDetector()
     private val golfShots = ArrayList<GolfSwingDetector.Shot>()
@@ -167,6 +176,7 @@ class PlayerControls(val playerIndex: Int) {
         history.clear()
         swing.reset(); throwD.reset(); bowl.reset(); leanT.reset(); pump.reset(); raise.reset()
         golf.reset(); golfShots.clear()
+        gunCtl.reset(); punch.reset()
         pending.clear()
         lastT = -1.0
         hasPose = false
@@ -205,6 +215,9 @@ class PlayerControls(val playerIndex: Int) {
         avatar.update(frame, leanT.value)
         updateProp(dt)
         val reach = calibration?.reach ?: 1.5f
+        val dominant = if (calibration?.dominantHand == Hand.LEFT) LEFT else RIGHT
+        gunCtl.update(frame, reach, dominant, if (frame.objConf >= 0.25f) frame.objHand else -1, sensitivity, pending)
+        punch.update(history, reach, calibration?.mode ?: MovementMode.STANDARD, sensitivity, pending)
         for (h in 0..1) {
             handX[h] = frame.wx[h] / reach
             handY[h] = frame.wy[h] / reach

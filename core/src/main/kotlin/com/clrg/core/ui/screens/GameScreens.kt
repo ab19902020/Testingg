@@ -53,12 +53,12 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
         session.beforeStep = {
             if (app.settings.simulatedInput && app.sim.autoplay) for (k in 0..1) if (!session.cpu[k]) game.autoplay(k, session.inputs[k], 0.85f - 0.25f * k, autoRng[k])
         }
-        app.controls.forEach { it.compactSwings = game.compactSwings }
+        app.controls.forEach { it.compactSwings = game.compactSwings; it.wantFingers = game.usesFingers }
         app.audio.playMusic(MusicTrack.CALM)
     }
 
     override fun onExit() {
-        app.controls.forEach { it.compactSwings = false; it.swingBoost = 0f }
+        app.controls.forEach { it.compactSwings = false; it.swingBoost = 0f; it.wantFingers = false }
     }
 
     override fun onBack(): Boolean {

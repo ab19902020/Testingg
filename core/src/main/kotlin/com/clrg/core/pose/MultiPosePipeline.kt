@@ -49,6 +49,8 @@ class RawPose(
     val framesTracked: Int,
     /** Object held in one hand, in upright pixels (set by the held-object tracker), else null. */
     var held: HeldObservation? = null,
+    /** Finger landmarks per hand (0 = left, 1 = right) when finger tracking ran for this person, else null. */
+    var hands: Array<HandObservation?>? = null,
 )
 
 class PipelineStats {
@@ -87,6 +89,9 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
 
     /** Finds held objects (sticks, toy rackets) next to the players' hands when set. */
     var heldObjects: HeldObjectTracker? = null
+
+    /** Follows the fingers of the players' hands when set (finger-gun games). */
+    var handLandmarks: HandLandmarkTracker? = null
 
     /** Optional observer told which detector region / landmark ROI is about to be processed (debug overlay, tests). */
     var observer: ((region: CropRegion?, roi: RotatedRect?) -> Unit)? = null
@@ -162,6 +167,7 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
             }
         }
         heldObjects?.let { h -> if (results.isNotEmpty()) h.process(src, toBuffer, results) }
+        handLandmarks?.let { h -> if (results.isNotEmpty()) h.process(src, toBuffer, results, clock) }
         frameIndex++
         stats.tracks = tracks.size
         stats.totalMs = (clock() - t0) / 1e6f

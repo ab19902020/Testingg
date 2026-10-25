@@ -3,10 +3,13 @@ Tiny stdin/stdout model server used by core's RealModelPipelineTest: lets the Ko
 real BlazePose .tflite models on the JVM (inference itself is done here with ai-edge-litert).
 
 Protocol (little-endian float32):
-  request : 1 byte op ('D' detector, 'L' landmarks, 'Q' quit) + 1 byte variant ('l' lite, 'f' full) + input floats
+  request : 1 byte op ('D' detector, 'L' landmarks, 'H' hand landmarks, 'Q' quit) + 1 byte variant ('l' lite,
+            'f' full) + input floats
   response: detector  -> 2254*12 regressors + 2254 scores
             landmarks -> 195 landmarks + 1 flag + 64*64*39 heatmap
-Usage: python tflite_server.py <models_dir>   (models_dir contains lite/ and full/ with the two .tflite files)
+            hand      -> 63 hand landmarks + 1 presence
+Usage: python tflite_server.py <models_dir>   (models_dir contains lite/ and full/ with the two pose .tflite files,
+       and hand/hand_landmark_lite.tflite)
 """
 import sys
 import numpy as np
@@ -51,4 +54,12 @@ while True:
         out.write(it.get_tensor(o["Identity"]).astype("<f4").tobytes())
         out.write(it.get_tensor(o["Identity_1"]).astype("<f4").tobytes())
         out.write(it.get_tensor(o["Identity_3"]).astype("<f4").tobytes())
+    elif op == b"H":
+        n = 224 * 224 * 3
+        x = np.frombuffer(inp.read(n * 4), dtype="<f4").reshape(1, 224, 224, 3)
+        it, i, o = interp("hand", "hand_landmark_lite")
+        it.set_tensor(i, x)
+        it.invoke()
+        out.write(it.get_tensor(o["Identity"]).astype("<f4").tobytes())
+        out.write(it.get_tensor(o["Identity_1"]).astype("<f4").tobytes())
     out.flush()

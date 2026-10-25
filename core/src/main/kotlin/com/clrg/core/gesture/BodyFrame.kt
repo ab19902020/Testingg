@@ -59,6 +59,13 @@ class BodyFrame {
     var objY = 0f
     var objConf = 0f
 
+    /**
+     * Finger landmarks per hand (21 points, x y z interleaved, same body units, y up) when finger tracking saw the
+     * hand this frame ([fingSeen]).
+     */
+    val fing = Array(2) { FloatArray(63) }
+    val fingSeen = BooleanArray(2)
+
     fun copyFrom(o: BodyFrame) {
         t = o.t; scale = o.scale; originX = o.originX; originY = o.originY
         o.wx.copyInto(wx); o.wy.copyInto(wy); o.ex.copyInto(ex); o.ey.copyInto(ey)
@@ -68,6 +75,7 @@ class BodyFrame {
         o.rwx.copyInto(rwx); o.rwy.copyInto(rwy); o.rwz.copyInto(rwz); o.rwv.copyInto(rwv)
         o.rex.copyInto(rex); o.rey.copyInto(rey); o.rev.copyInto(rev)
         objHand = o.objHand; objBaseX = o.objBaseX; objBaseY = o.objBaseY; objX = o.objX; objY = o.objY; objConf = o.objConf
+        for (h in 0..1) { fingSeen[h] = o.fingSeen[h]; if (o.fingSeen[h]) o.fing[h].copyInto(fing[h]) }
     }
 
     companion object {
@@ -120,6 +128,16 @@ class BodyFrame {
                 out.objConf = held.confidence
             } else {
                 out.objHand = -1; out.objConf = 0f
+            }
+            val hands = raw?.hands
+            for (h in 0..1) {
+                val o = hands?.getOrNull(h)
+                out.fingSeen[h] = o != null
+                if (o != null) for (i in 0 until 21) {
+                    out.fing[h][i * 3] = (o.x[i] - ox) / s
+                    out.fing[h][i * 3 + 1] = (oy - o.y[i]) / s
+                    out.fing[h][i * 3 + 2] = o.z[i] / s
+                }
             }
             out.noseX = (p.x[Lm.NOSE] - ox) / s
             out.noseY = (oy - p.y[Lm.NOSE]) / s
