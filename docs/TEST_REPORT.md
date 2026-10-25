@@ -98,10 +98,11 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `ChristmasLivingRoomGames-debug.apk`, 21,156,995 bytes, SHA-256 in `dist/SHA256SUMS` |
+| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,156,995 bytes, SHA-256 `5bacbf2f700bb37b5e100ad15d1f49bd2c432897b1ab5939b8291e2032fad995` |
 | Package / version | `com.clrg.christmasgames`, versionCode 1, versionName 1.0.0 |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
-| Signature | `apksigner verify`: APK Signature Scheme v2 and v3 verified, 1 signer (debug certificate) |
+| Signature | `apksigner verify`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
+| Reproducibility | A clean rebuild (`./gradlew clean :app:assembleDebugApk`) produced a byte-identical APK with the same debug key |
 | Alignment | `zipalign -p 4` |
 | Code | single `classes.dex`, 1,493 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
 | Models | 4 `.tflite` files, stored uncompressed (memory-mappable) |
