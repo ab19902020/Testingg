@@ -34,7 +34,10 @@ object SetupFlow {
     }
 
     /** The full guided set-up from the main menu: TV, phone placement, framing, calibration, ready. */
-    fun startFull(app: GameApp) = app.push(TvSetupScreen(app) { app.popToRoot() })
+    fun startFull(app: GameApp) {
+        app.leaveSolo() // the full guided set-up is for two people; solo matches set up their single player themselves
+        app.push(TvSetupScreen(app) { app.popToRoot() })
+    }
 
     fun stepLabel(g: Gfx, step: Int, of: Int = 7) {
         g.text("Step $step of $of", g.width - 160f, 70f, 32f, Colors.TEXT_DIM)
@@ -98,8 +101,7 @@ class CameraSetupScreen(app: GameApp, private val then: () -> Unit, private val 
             "near the TV - secure, not handheld.",
             "Camera facing the players,",
             "about chest height.",
-            "Stand 2 - 3 m away, side by side,",
-            "with an arm's length between you.",
+        ) + (if (app.solo) listOf("Stand 2 - 3 m away, in the middle", "of the picture.") else listOf("Stand 2 - 3 m away, side by side,", "with an arm's length between you.")) + listOf(
             "Light the room well; avoid a bright",
             "window behind you.",
         ), 32f)
@@ -148,10 +150,17 @@ class FramingScreen(app: GameApp, private val then: () -> Unit, private val full
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
-        Common.header(g, ui, "3. Stand in your areas", app = app)
+        Common.header(g, ui, if (app.solo) "3. Stand in the picture" else "3. Stand in your areas", app = app)
         if (full) SetupFlow.stepLabel(g, 3)
         PreviewView.draw(g, app, Rect(260f, 150f, g.width - 260f, 860f))
+        if (app.solo) {
+            val (msg, ok) = hint(0)
+            val text = "${app.activePlayers[0].name}: $msg"
+            g.fillRoundRect(g.width / 2f - 520f, 880f, g.width / 2f + 520f, 960f, 30f, if (ok) 0xCC0B4D2C.toInt() else 0xCC000000.toInt())
+            g.text(text, g.width / 2f, 920f, ui.fit(g, text, 34f, 1000f), if (ok) Colors.GOOD else app.playerColor(0))
+        }
         for (k in 0..1) {
+            if (app.solo) break
             val (msg, ok) = hint(k)
             val x = if (k == 0) g.width * 0.27f else g.width * 0.73f
             val c = app.playerColor(k)
@@ -161,7 +170,7 @@ class FramingScreen(app: GameApp, private val then: () -> Unit, private val full
         val both = app.tracker.allPlaying
         stable = if (both) stable + dt else 0f
         if (both) Draw.progressRing(g, g.width / 2f, 1010f, 34f, stable / 1.5f, Colors.GOOD, 9f)
-        if (ui.button(g, "swap", Rect(40f, 980f, 420f, 1060f), "Swap sides", size = 34f)) {
+        if (!app.solo && ui.button(g, "swap", Rect(40f, 980f, 420f, 1060f), "Swap sides", size = 34f)) {
             val a = app.activePlayers[0]; app.activePlayers[0] = app.activePlayers[1]; app.activePlayers[1] = a
         }
         val go = stable >= 1.5f
@@ -175,8 +184,8 @@ class FramingScreen(app: GameApp, private val then: () -> Unit, private val full
     private fun hint(k: Int): Pair<String, Boolean> {
         val slot = app.tracker.slots[k]
         val inArea = app.tracker.lastCandidates.filter { slot.area.contains(it.shoulderX) }
-        val m: BodyMetrics = slot.metrics ?: inArea.maxByOrNull { it.scale } ?: return (if (k == 0) "step into the LEFT area" else "step into the RIGHT area") to false
-        if (inArea.size > 1 && inArea.count { it.scale > 0.6f * m.scale } > 1) return "only one player per side, please" to false
+        val m: BodyMetrics = slot.metrics ?: inArea.maxByOrNull { it.scale } ?: return (if (app.solo) "step into the middle of the picture" else if (k == 0) "step into the LEFT area" else "step into the RIGHT area") to false
+        if (inArea.size > 1 && inArea.count { it.scale > 0.6f * m.scale } > 1) return (if (app.solo) "solo play: only one person in front, please" else "only one player per side, please") to false
         val p = m.pose
         if (p.y[Lm.NOSE] < 0.06f || p.vis(Lm.NOSE) < 0.3f) return "step back - your head is cut off" to false
         if (p.vis(Lm.LEFT_WRIST) < 0.3f || p.vis(Lm.RIGHT_WRIST) < 0.3f) return "make sure both hands are visible" to false
@@ -200,14 +209,22 @@ class CalibrationScreen(app: GameApp, private val then: () -> Unit, private val 
         Common.backdrop(g, app)
         Common.header(g, ui, "4. Calibrate", app = app)
         if (full) SetupFlow.stepLabel(g, 4)
-        for (k in 0..1) {
-            val slot = app.tracker.slots[k]
-            if (slot.isPlaying) procs[k].update(slot, dt)
-            panel(g, ui, k, Rect(if (k == 0) 40f else g.width / 2f + 190f, 150f, if (k == 0) g.width / 2f - 190f else g.width - 40f, 1050f))
+        if (app.solo) {
+            val slot = app.tracker.slots[0]
+            if (slot.isPlaying) procs[0].update(slot, dt)
+            panel(g, ui, 0, Rect(g.width / 2f - 560f, 150f, g.width / 2f + 360f, 1050f))
+            PreviewView.draw(g, app, Rect(g.width / 2f + 390f, 160f, g.width - 40f, 520f), labels = false)
+            ui.paragraph(g, listOf("Only move as far", "as is comfortable -", "the games adapt", "to your reach."), g.width / 2f + 390f + (g.width / 2f - 430f) / 2f, 600f, 30f, app.theme.dim, align = Align.CENTER)
+        } else {
+            for (k in 0..1) {
+                val slot = app.tracker.slots[k]
+                if (slot.isPlaying) procs[k].update(slot, dt)
+                panel(g, ui, k, Rect(if (k == 0) 40f else g.width / 2f + 190f, 150f, if (k == 0) g.width / 2f - 190f else g.width - 40f, 1050f))
+            }
+            PreviewView.draw(g, app, Rect(g.width / 2f - 170f, 160f, g.width / 2f + 170f, 360f), labels = false)
+            ui.paragraph(g, listOf("Both players", "calibrate at", "the same time."), g.width / 2f, 420f, 30f, app.theme.dim, align = Align.CENTER)
         }
-        PreviewView.draw(g, app, Rect(g.width / 2f - 170f, 160f, g.width / 2f + 170f, 360f), labels = false)
-        ui.paragraph(g, listOf("Both players", "calibrate at", "the same time."), g.width / 2f, 420f, 30f, app.theme.dim, align = Align.CENTER)
-        if (procs.all { it.isDone }) {
+        if (procs[0].isDone && (app.solo || procs[1].isDone)) {
             doneTime += dt
             if (doneTime > 0.8f) finish()
         }
@@ -259,6 +276,7 @@ class CalibrationScreen(app: GameApp, private val then: () -> Unit, private val 
 
     private fun finish() {
         for (k in 0..1) {
+            if (app.solo && k > 0) continue
             val cal = procs[k].result ?: continue
             app.tracker.slots[k].calibration = cal
             app.controls[k].calibration = cal
@@ -284,11 +302,25 @@ class ReadyScreen(app: GameApp, private val then: () -> Unit, private val full: 
         Common.header(g, ui, if (full) "5. Ready!" else "Get ready", app = app)
         if (full) SetupFlow.stepLabel(g, 7)
         for (k in 0..1) {
+            val x = if (k == 0) g.width * 0.27f else g.width * 0.73f
+            val c = app.playerColor(k)
+            if (app.solo && k == 1) {
+                // the computer opponent is always ready
+                ready[1] = true
+                val p = AvatarPose().apply { valid = true; upper[0] = -1.9f; fore[0] = -1.8f; upper[1] = 1.2f + 0.2f * sin(app.time * 4).toFloat(); fore[1] = 1.8f }
+                Draw.buddy(g, x, 860f, 420f, c, p, Expression.EXCITED, t = app.time)
+                g.text("${app.activePlayers[1].name} (CPU)", x, 905f, 46f, c, outline = Colors.BLACK, outlineWidth = 5f)
+                Draw.progressRing(g, x, 320f, 66f, 1f, Colors.GOOD, 16f)
+                g.text("READY", x, 320f, 36f, Colors.GOOD)
+                val msg = "${app.cpuLevel?.label ?: ""} computer player"
+                val mw = g.measureText(msg, 32f, false) + 50f
+                g.fillRoundRect(x - mw / 2f, 930f, x + mw / 2f, 980f, 25f, 0xCC000000.toInt())
+                g.text(msg, x, 955f, 32f, Colors.WHITE, bold = false)
+                continue
+            }
             events.clear()
             app.controls[k].drainEvents(events)
             if (events.any { it is GestureEvent.RaiseHold } && app.tracker.slots[k].isPlaying) { if (!ready[k]) app.audio.play(Sfx.SELECT); ready[k] = true }
-            val x = if (k == 0) g.width * 0.27f else g.width * 0.73f
-            val c = app.playerColor(k)
             val slot = app.tracker.slots[k]
             Draw.buddy(g, x, 860f, 420f, c, if (slot.isPlaying) app.controls[k].avatar else null, if (ready[k]) Expression.EXCITED else Expression.HAPPY, t = app.time)
             val prog = if (ready[k]) 1f else app.controls[k].raiseProgress
@@ -301,7 +333,7 @@ class ReadyScreen(app: GameApp, private val then: () -> Unit, private val full: 
             g.text(msg, x, 955f, 32f, if (slot.isPlaying) Colors.WHITE else Colors.WARN, bold = false)
         }
         if (app.settings.simulatedInput && app.sim.autoplay) { ready[0] = true; ready[1] = true } // developer soak mode
-        g.text("Both players: raise a hand and hold", g.width / 2f, 190f, 50f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 6f)
+        g.text(if (app.solo) "Raise a hand and hold it to start" else "Both players: raise a hand and hold", g.width / 2f, 190f, 50f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 6f)
         if (ui.button(g, "recal", Rect(40f, 980f, 460f, 1060f), "Recalibrate", size = 32f)) app.replace(FramingScreen(app, then, full))
         val go = ready[0] && ready[1]
         if (ui.button(g, "start", Rect(g.width - 460f, 980f, g.width - 40f, 1060f), "Start now", accent = Colors.GOOD, size = 34f) || go) {

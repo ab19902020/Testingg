@@ -142,15 +142,45 @@ class DanceOffGame(env: GameEnv) : MiniGame(env) {
 
     override val isOver: Boolean get() = cues.isNotEmpty() && beat() >= endBeat
 
+    // ---- CPU dancer: reads the pose card like a player, starts moving into it a little before the beat (with
+    // timing error), moves its arms at a limited speed, and hits the shape with some angular error; now and
+    // then it misses a pose entirely.
+    override val cpuPosesAvatar = true
+    private val botCue = IntArray(2) { -1 }
+    private val botStart = FloatArray(2)
+    private val botSkip = BooleanArray(2)
+    private val botTarget = Array(2) { AvatarPose() }
+
     override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
-        val cue = cues.getOrNull(judgeIndex) ?: return
-        val b = beat()
-        if (b > cue.beat - 0.5f) {
-            cue.shape.toAvatar(inp.avatar)
-            val noise = (1f - skill) * 0.9f
-            for (h in 0..1) { inp.avatar.upper[h] += (rng.nextFloat() - 0.5f) * noise; inp.avatar.fore[h] += (rng.nextFloat() - 0.5f) * noise }
-        }
+        val dt = 1f / 120f
         inp.tracked = true
+        inp.avatar.valid = true
+        val cue = cues.getOrNull(judgeIndex) ?: return
+        if (botCue[k] != judgeIndex) {
+            botCue[k] = judgeIndex
+            botStart[k] = cue.beat - com.clrg.core.math.lerp(0.8f, 0.5f, skill) + rng.gaussian() * com.clrg.core.math.lerp(0.45f, 0.12f, skill)
+            botSkip[k] = rng.chance(com.clrg.core.math.lerp(0.1f, 0.01f, skill))
+            val t = botTarget[k]
+            cue.shape.toAvatar(t)
+            val sd = Math.toRadians(com.clrg.core.math.lerp(26f, 7f, skill).toDouble()).toFloat()
+            for (h in 0..1) { t.upper[h] += rng.gaussian() * sd; t.fore[h] += rng.gaussian() * sd }
+        }
+        if (botSkip[k] || beat() < botStart[k]) return
+        val maxStep = com.clrg.core.math.lerp(5f, 10f, skill) * dt
+        val t = botTarget[k]
+        for (h in 0..1) {
+            inp.avatar.upper[h] = approachAngle(inp.avatar.upper[h], t.upper[h], maxStep)
+            inp.avatar.fore[h] = approachAngle(inp.avatar.fore[h], t.fore[h], maxStep)
+        }
+    }
+
+    /** Moves angle [a] toward [b] along the shorter way by at most [step] radians. */
+    private fun approachAngle(a: Float, b: Float, step: Float): Float {
+        val twoPi = 2f * Math.PI.toFloat()
+        var d = (b - a) % twoPi
+        if (d > Math.PI) d -= twoPi
+        if (d < -Math.PI) d += twoPi
+        return if (abs(d) <= step) a + d else a + step * kotlin.math.sign(d)
     }
 
     override fun result() = MatchResult(info.id, scores.copyOf(), winnerOf(scores[0], scores[1]), info.scoreUnit,

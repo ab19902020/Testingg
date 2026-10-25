@@ -145,13 +145,41 @@ class ReindeerRaceGame(env: GameEnv) : MiniGame(env) {
 
     private fun pan(k: Int) = if (k == 0) -0.6f else 0.6f
 
+    // ---- CPU player: pumps at a rhythm that drifts (and is sometimes lost for a moment), only sees obstacles
+    // a limited time ahead minus its reaction time, sometimes misses one, and leans smoothly like a person.
+    private val botPump = floatArrayOf(0.7f, 0.7f)
+    private val botLost = FloatArray(2)
+    private val botLean = FloatArray(2)
+    private val botNotice = Array(2) { HashMap<Int, Boolean>() }
+    private val botCarrot = Array(2) { HashMap<Int, Boolean>() }
+
     override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
-        inp.pump = (0.55f + 0.45f * skill).coerceAtMost(1f)
-        val ahead = obstacles.filter { it.z > distance[k] && it.z < distance[k] + 18f }
-        val lanes = floatArrayOf(-1.05f, 0f, 1.05f)
-        val free = lanes.minByOrNull { l -> (if (ahead.any { kotlin.math.abs(it.x - l) < 0.7f }) 10f else 0f) + kotlin.math.abs(l - lateral[k]) } ?: 0f
-        val err = if (rng.nextFloat() > skill) 0.8f else 0f
-        inp.lean = clamp((free + err - lateral[k]) * 2f, -1f, 1f)
+        val dt = 1f / 120f
+        val base = lerp(0.66f, 0.95f, skill)
+        botPump[k] += (base + rng.gaussian() * lerp(0.35f, 0.12f, skill) - botPump[k]) * dt * 1.5f
+        botLost[k] -= dt
+        if (botLost[k] <= 0f && rng.chance(lerp(0.004f, 0.0005f, skill))) botLost[k] = rng.range(0.6f, 1.4f)
+        inp.pump = clamp(botPump[k], 0f, 1f) * if (botLost[k] > 0f) 0.4f else 1f
+        val look = (lerp(1.0f, 1.7f, skill) - com.clrg.core.game.CpuTraits.reaction(skill)) * maxOf(speed[k], 6f)
+        val near = distance[k]
+        var best = lateral[k]
+        var bestCost = Float.MAX_VALUE
+        for (l in floatArrayOf(-1.05f, 0f, 1.05f)) {
+            var cost = abs(l - lateral[k]) * 0.5f
+            for ((i, o) in obstacles.withIndex()) {
+                if (o.z <= near || o.z > near + look) continue
+                if (!botNotice[k].getOrPut(i) { rng.chance(lerp(0.75f, 0.97f, skill)) }) continue
+                if (abs(o.x - l) < 0.75f) cost += 10f
+            }
+            for ((i, c) in carrotList.withIndex()) {
+                if (c.z <= near || c.z > near + look) continue
+                if (botCarrot[k].getOrPut(i) { rng.chance(lerp(0.3f, 0.8f, skill)) } && abs(c.x - l) < 0.5f) cost -= 0.6f
+            }
+            if (cost < bestCost) { bestCost = cost; best = l }
+        }
+        val want = clamp((best - lateral[k]) * 2.5f, -1f, 1f)
+        botLean[k] += (want - botLean[k]) * minOf(1f, dt * 8f)
+        inp.lean = botLean[k]
     }
 
     private fun laneCx(k: Int) = if (k == 0) screenW * 0.25f else screenW * 0.75f

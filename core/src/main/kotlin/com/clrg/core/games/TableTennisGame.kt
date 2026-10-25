@@ -56,15 +56,16 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
 
     override fun onServe(player: Int, auto: Boolean) {
         smashChance = false
+        lastSmash = false
         chooseSide(1 - player)
     }
 
     override fun shotModifier(player: Int, s: GestureEvent.Swing, quality: Float): ShotModifier {
         val correct = s.forehand == needForehand[player]
         return when {
-            smashChance && correct && quality > 0.5f -> { smashes++; env.shake.kick(10f); ShotModifier(0.62f, 0.15f, "SMASH!") }
-            correct -> ShotModifier(1f, 0f, null)
-            else -> ShotModifier(1.3f, -0.2f, if (needForehand[player]) "Weak - that was FOREHAND" else "Weak - that was BACKHAND")
+            smashChance && correct && quality > 0.5f -> { smashes++; lastSmash = true; env.shake.kick(10f); ShotModifier(0.62f, 0.15f, "SMASH!") }
+            correct -> { lastSmash = false; ShotModifier(1f, 0f, null) }
+            else -> { lastSmash = false; ShotModifier(1.3f, -0.2f, if (needForehand[player]) "Weak - that was FOREHAND" else "Weak - that was BACKHAND") }
         }
     }
 
@@ -78,6 +79,9 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
     override fun onPoint(winner: Int, reason: PointReason) { smashChance = false }
 
     override fun botForehand(k: Int) = needForehand[k]
+    override fun botWrongStrokeChance(skill: Float) = com.clrg.core.math.lerp(0.22f, 0.03f, skill)
+    override fun incomingPressure() = if (lastSmash) 1.6f else 1f
+    private var lastSmash = false
 
     override fun status(): String? = when (state) {
         State.SERVE -> "${env.name(server)}: swing to serve"

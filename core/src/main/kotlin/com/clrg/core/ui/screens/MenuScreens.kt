@@ -43,21 +43,23 @@ class MainMenuScreen(app: GameApp) : Screen(app) {
             Draw.buddy(g, x, g.height - 170f, 330f, app.playerColor(k), p, Expression.HAPPY, t = t + k)
             g.text(app.activePlayers[k].name, x, g.height - 120f, 34f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 5f)
         }
-        val bw = 640f; val bh = 120f; val gap = 26f
+        val bw = 640f; val bh = 112f; val gap = 22f
         val left = g.width / 2f - bw - gap / 2f
         val right = g.width / 2f + gap / 2f
-        var y = 300f
+        var y = 280f
         fun row(): Pair<Rect, Rect> { val a = Rect(left, y, left + bw, y + bh); val b = Rect(right, y, right + bw, y + bh); y += bh + gap; return a to b }
-        val (qm, pt) = row()
-        if (ui.button(g, "quick", qm, "Quick Match", "Pick a game for two players", accent = Colors.GOLD)) app.push(GameSelectScreen(app))
+        val (qm, solo) = row()
+        if (ui.button(g, "quick", qm, "Quick Match", "Two players, pick a game", accent = Colors.GOLD)) app.push(GameSelectScreen(app))
+        if (ui.button(g, "solo", solo, "Play Solo", "You against the computer", accent = Colors.GOLD)) app.push(SoloSetupScreen(app))
+        val (pt, pl) = row()
         if (ui.button(g, "tournament", pt, "Party Tournament", app.tournament?.let { if (it.isComplete) "Last tournament finished" else "Continue: match ${it.currentIndex + 1} of ${it.matches.size}" } ?: "Whole-family scoreboard", accent = Colors.CANDY)) {
             if (app.tournament != null) app.push(TournamentHubScreen(app)) else app.push(TournamentSetupScreen(app))
         }
-        val (pl, st) = row()
         if (ui.button(g, "players", pl, "Players", "${app.roster.players.size} family members", accent = Colors.ICE)) app.push(PlayersScreen(app))
-        if (ui.button(g, "settings", st, "Settings", "Sound, accessibility, camera", accent = Colors.ICE)) app.push(SettingsScreen(app))
-        val (tv, help) = row()
+        val (tv, st) = row()
         if (ui.button(g, "setup", tv, "TV & Camera Setup", if (app.calibrated) "Players calibrated" else "Connect, place, calibrate", accent = Colors.GOOD)) SetupFlow.startFull(app)
+        if (ui.button(g, "settings", st, "Settings", "Sound, accessibility, camera", accent = Colors.ICE)) app.push(SettingsScreen(app))
+        val help = Rect(g.width / 2f - bw / 2f, y, g.width / 2f + bw / 2f, y + bh); y += bh + gap
         if (ui.button(g, "help", help, "How to Play", "Controls for every game", accent = Colors.GOOD)) app.push(HelpScreen(app))
         val dev = app.platform.deviceInfo()
         if (dev.meetsTarget == false) {
@@ -135,8 +137,9 @@ class GameSelectScreen(app: GameApp, private val onPick: ((String) -> Unit)? = n
 
 /** Choose who plays on the left (P1) and right (P2). */
 class PlayerPickScreen(app: GameApp, private val gameId: String) : Screen(app) {
-    private var p1 = app.activePlayers[0].id
-    private var p2 = app.activePlayers[1].id
+    // after solo play, Player 2 is the computer: start from family members only
+    private var p1 = app.activePlayers[0].id.takeIf { it >= 0 } ?: app.roster.players[0].id
+    private var p2 = app.activePlayers[1].id.takeIf { it >= 0 && it != p1 } ?: app.roster.players.first { it.id != p1 }.id
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
@@ -159,6 +162,13 @@ class PlayerPickScreen(app: GameApp, private val gameId: String) : Screen(app) {
             val a = app.roster.byId(p1) ?: return
             val b = app.roster.byId(p2) ?: return
             startQuickMatch(app, gameId, a, b)
+        }
+        // on your own: Player 1 against the computer (the level chosen last time in Play Solo)
+        val level = com.clrg.core.game.CpuLevel.fromName(app.settings.cpuLevel)
+        if (ui.button(g, "justme", Rect(g.width / 2f + 340f, 870f, g.width / 2f + 860f, 970f), "Just me", "vs computer (${level.label})", accent = Colors.ICE, size = 40f)) {
+            val a = app.roster.byId(p1) ?: return
+            app.startSolo(a, level)
+            SetupFlow.start(app) { app.replace(GameScreen(app, gameId, null)) }
         }
     }
 

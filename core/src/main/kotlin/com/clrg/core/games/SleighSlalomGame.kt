@@ -35,6 +35,8 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
         const val LENGTH = 430f
         const val MISS_PENALTY = 2.0
         const val PRESENT_BONUS = 0.5
+        /** Metres of slope a player can see ahead of the sleigh on screen. */
+        const val VISIBLE_AHEAD = 24f
         const val AFTER_FINISH_SEC = 15.0
         val INFO = GameInfo(
             id = "slalom", title = "Sleigh Slalom", tagline = "Lean to carve through the gates!",
@@ -134,13 +136,41 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
         }
     }
 
+    // ---- CPU player: sees as far down the slope as a player does on screen (minus what passes during its
+    // reaction time), aims at each gate with a human error (occasionally badly), dodges hazards it noticed, picks
+    // up presents on better levels, and tucks on the straights.
+    private val botAim = Array(2) { HashMap<Int, Float>() }
+    private val botNotice = Array(2) { HashMap<Int, Boolean>() }
+    private val botLean = FloatArray(2)
+    private val botTuckPref = FloatArray(2)
+    private val botTuckNext = DoubleArray(2)
+
     override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
-        val gate = things.firstOrNull { it.kind == Kind.GATE && it.y > y[k] }
-        val aim = (gate?.x ?: 0f) + if (rng.nextFloat() > skill) 0.45f else 0f
-        val hazard = things.firstOrNull { (it.kind == Kind.TREE || it.kind == Kind.ROCK) && it.y > y[k] && it.y < y[k] + 6f && kotlin.math.abs(it.x - x[k]) < 0.2f }
-        val target = if (hazard != null) hazard.x + (if (x[k] > hazard.x) 0.3f else -0.3f) else aim
-        inp.lean = clamp((target - x[k]) * 4f, -1f, 1f)
-        inp.tuck = skill > 0.5f
+        val dt = 1f / 120f
+        val look = VISIBLE_AHEAD - com.clrg.core.game.CpuTraits.reaction(skill) * maxOf(speed[k], 8f)
+        var target = x[k]
+        val gi = things.indexOfFirst { it.kind == Kind.GATE && it.y > y[k] }
+        if (gi >= 0 && things[gi].y < y[k] + look) {
+            val err = botAim[k].getOrPut(gi) {
+                if (rng.chance(lerp(0.88f, 0.985f, skill))) rng.gaussian() * lerp(0.16f, 0.05f, skill) else rng.range(0.35f, 0.55f) * if (rng.chance(0.5f)) 1f else -1f
+            }
+            target = things[gi].x + err
+        }
+        for ((i, t) in things.withIndex()) {
+            if (t.y <= y[k] || t.y > y[k] + look) continue
+            when (t.kind) {
+                Kind.TREE, Kind.ROCK -> if (abs(t.x - target) < 0.2f && botNotice[k].getOrPut(i) { rng.chance(lerp(0.8f, 0.98f, skill)) }) {
+                    target = t.x + if (target >= t.x) 0.25f else -0.25f
+                }
+                Kind.PRESENT -> if (abs(t.x - target) < 0.25f && botNotice[k].getOrPut(i) { rng.chance(lerp(0.2f, 0.7f, skill)) }) target = t.x
+                else -> Unit
+            }
+        }
+        val want = clamp((target - x[k]) * 4f, -1f, 1f)
+        botLean[k] += (want - botLean[k]) * minOf(1f, dt * 8f)
+        inp.lean = botLean[k]
+        if (playTime >= botTuckNext[k]) { botTuckPref[k] = if (rng.chance(lerp(0.35f, 0.9f, skill))) 1f else 0f; botTuckNext[k] = playTime + rng.range(0.8f, 1.6f) }
+        inp.tuck = botTuckPref[k] > 0f && abs(want) < 0.45f
     }
 
     private fun total(k: Int, time: Double) = time + missed[k] * MISS_PENALTY - presents[k] * PRESENT_BONUS

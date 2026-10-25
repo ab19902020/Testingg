@@ -2,6 +2,7 @@ package com.clrg.core.app
 
 import com.clrg.core.audio.AudioEngine
 import com.clrg.core.audio.Sfx
+import com.clrg.core.game.CpuLevel
 import com.clrg.core.gesture.PlayerControls
 import com.clrg.core.party.PlayerProfile
 import com.clrg.core.party.Roster
@@ -155,8 +156,46 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
 
     fun playerColor(i: Int) = PlayerColors.get(activePlayers[i].colorIndex)
 
+    /** Solo mode: Player 2 is a computer opponent at this level; null when two people play at the camera. */
+    var cpuLevel: CpuLevel? = null
+        private set
+    val solo: Boolean get() = cpuLevel != null
+
+    /**
+     * One person plays against the computer. The camera player may stand anywhere in the picture; switching from
+     * two-player mode needs a fresh framing/calibration (handled by the tracker).
+     */
+    fun startSolo(human: PlayerProfile, level: CpuLevel) {
+        val sameHuman = solo && activePlayers[0].id == human.id
+        cpuLevel = level
+        settings.cpuLevel = level.name
+        settings.save(store)
+        activePlayers[0] = human
+        activePlayers[1] = cpuProfile(level, human)
+        if (!tracker.solo) { tracker.solo = true; controls.forEach { it.calibration = null; it.reset() } }
+        else if (!sameHuman) resetTracking()
+        sim.solo = true
+    }
+
+    /** Back to two people at the camera (quick match, tournament, full set-up). */
+    fun leaveSolo() {
+        if (!solo && !tracker.solo) return
+        cpuLevel = null
+        tracker.solo = false
+        controls.forEach { it.calibration = null; it.reset() }
+        sim.solo = false
+        if (activePlayers[1].id < 0) activePlayers[1] = roster.players.firstOrNull { it.id != activePlayers[0].id } ?: roster.players[1]
+    }
+
+    /** The computer player's (unsaved) profile, in a colour different from the human's. */
+    private fun cpuProfile(level: CpuLevel, human: PlayerProfile): PlayerProfile {
+        val color = (listOf(level.colorIndex) + listOf(3, 4, 7, 5)).first { it != human.colorIndex }
+        return PlayerProfile(-1 - level.ordinal, level.botName, color)
+    }
+
     /** New people at the controls: forget identities and calibrations. */
     fun setActivePlayers(p1: PlayerProfile, p2: PlayerProfile) {
+        leaveSolo()
         val changed = activePlayers[0].id != p1.id || activePlayers[1].id != p2.id
         activePlayers[0] = p1
         activePlayers[1] = p2
@@ -168,10 +207,10 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         controls.forEach { it.calibration = null; it.reset() }
     }
 
-    /** Both players calibrated, locked and currently tracked. */
-    val playersReady: Boolean get() = tracker.locked && tracker.slots.all { it.calibration != null } && tracker.allPlaying
+    /** Every camera player calibrated, locked and currently tracked. */
+    val playersReady: Boolean get() = calibrated && tracker.allPlaying
 
-    val calibrated: Boolean get() = tracker.locked && tracker.slots.all { it.calibration != null }
+    val calibrated: Boolean get() = tracker.locked && tracker.slots.all { !it.enabled || it.calibration != null }
 
     // ------------------------------------------------------------------ frame
 

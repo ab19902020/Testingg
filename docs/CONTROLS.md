@@ -36,6 +36,28 @@ hand" (table tennis forehand/backhand) follow that choice; games that accept eit
 text, reduced effects (less shake/flashing/confetti), captions for sound effects (on by default), and
 "Sleigh Slalom: steering only".
 
+## Play Solo (one person against the computer)
+
+Main menu -> **Play Solo** -> pick who is playing and the opponent -> **Choose a game**. Or, after choosing a game in
+Quick Match, press **Just me** (uses the level you picked last time, Medium at first).
+
+| Opponent | Level | What to expect |
+|---|---|---|
+| Sprout | Easy | Slow to react and makes plenty of mistakes. |
+| Jingles | Medium | A fair match for most players. |
+| Blitz | Hard | Quick and accurate - a real challenge. |
+
+* You are Player 1 (left side of the TV); the computer is Player 2 (right side, marked **CPU**).
+* Stand in the **middle of the picture**. Setup, calibration and "raise a hand to start" are for you alone; the
+  computer is always ready.
+* Your controls are exactly the same as in a two-player game (below).
+* If you step out of view the game pauses for you; the computer never causes a pause.
+* The computer sees only what you see on screen, reacts after a human-like delay, moves at a human speed and
+  makes mistakes, so it can be beaten. The difficulty levels were checked by playing them against each other in
+  automated tests; how they feel against real players still needs trying out (see [TEST_REPORT.md](TEST_REPORT.md)).
+* After a solo match: Rematch, Choose another game (still against the computer) or Main menu. Quick Match and the
+  Party Tournament are for two people and switch solo mode off.
+
 ---
 
 ## 1. Christmas Tennis - first to 7 points

@@ -44,6 +44,7 @@ object Common {
         for (k in 0..1) {
             val s = app.tracker.slots[k]
             val name = app.activePlayers[k].name
+            if (!s.enabled) { chips.add("vs $name (CPU, ${app.cpuLevel?.label ?: ""})" to true); continue }
             val state = when {
                 s.calibration != null && s.isPlaying -> "ready"
                 s.isPlaying -> "seen"
@@ -91,6 +92,7 @@ object PreviewView {
         val map = { fx: Float, fy: Float -> (view.left + fx / aspect * w) to (view.top + fy * h) }
         if (showAreas) for (k in 0..1) {
             val s = app.tracker.slots[k]
+            if (!s.enabled) continue
             val c = app.playerColor(k)
             val (ax0, _) = map(s.area.x0, 0f)
             val (ax1, _) = map(s.area.x1, 0f)

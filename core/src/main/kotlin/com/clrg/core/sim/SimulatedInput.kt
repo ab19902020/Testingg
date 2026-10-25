@@ -25,6 +25,12 @@ class SimulatedInput(private val aspect: Float = 16f / 9f) {
     )
     /** When on, games are played by their built-in scripted players (input layer), not by the puppets. */
     var autoplay = false
+    /** Solo mode: a single puppet stands in the middle of the picture (the opponent is the computer). */
+    var solo = false
+        set(value) {
+            field = value
+            puppets[0].cx = aspect * (if (value) 0.5f else 0.27f)
+        }
     /** The developer control strip can be collapsed so it does not cover buttons near the bottom of the screen. */
     var controlsVisible = true
     private var timeNanos = 0L
@@ -69,7 +75,7 @@ class SimulatedInput(private val aspect: Float = 16f / 9f) {
         while (acc >= 1.0 / 30.0) {
             acc -= 1.0 / 30.0
             timeNanos += 33_333_333L
-            val people = puppets.map { it.pose(0.002f, rng) }.toMutableList()
+            val people = (if (solo) puppets.take(1) else puppets.toList()).map { it.pose(0.002f, rng) }.toMutableList()
             rng.shuffle(people)
             out.add(PoseFrame(timeNanos, aspect, people, simulated = true))
         }

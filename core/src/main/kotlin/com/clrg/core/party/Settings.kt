@@ -31,6 +31,8 @@ data class Settings(
     var dwellSeconds: Float = 1.5f,
     var gestureSensitivity: Float = 1f,
     var steeringOnlySlalom: Boolean = false,
+    // solo play
+    var cpuLevel: String = "MEDIUM",
     // camera / tracking
     var cameraId: String? = null,
     var wideAngle: Boolean = false,
@@ -48,7 +50,7 @@ data class Settings(
         mapOf(
             "v" to 1, "musicVolume" to musicVolume, "sfxVolume" to sfxVolume, "highContrast" to highContrast,
             "reducedEffects" to reducedEffects, "largeText" to largeText, "captions" to captions, "dwellSeconds" to dwellSeconds,
-            "gestureSensitivity" to gestureSensitivity, "steeringOnlySlalom" to steeringOnlySlalom, "cameraId" to cameraId,
+            "gestureSensitivity" to gestureSensitivity, "steeringOnlySlalom" to steeringOnlySlalom, "cpuLevel" to cpuLevel, "cameraId" to cameraId,
             "wideAngle" to wideAngle, "mirror" to mirror, "quality" to quality.name, "preferTvAsSecondScreen" to preferTvAsSecondScreen,
             "showCameraInset" to showCameraInset, "devOverlay" to devOverlay, "skeletonOverlay" to skeletonOverlay,
         ),
@@ -70,6 +72,7 @@ data class Settings(
                 dwellSeconds = o.float("dwellSeconds", d.dwellSeconds).coerceIn(0.8f, 3f),
                 gestureSensitivity = o.float("gestureSensitivity", d.gestureSensitivity).coerceIn(0.5f, 2f),
                 steeringOnlySlalom = o.bool("steeringOnlySlalom", d.steeringOnlySlalom),
+                cpuLevel = o.str("cpuLevel", d.cpuLevel),
                 cameraId = (o.map["cameraId"] as? String),
                 wideAngle = o.bool("wideAngle", d.wideAngle),
                 mirror = o.bool("mirror", d.mirror),

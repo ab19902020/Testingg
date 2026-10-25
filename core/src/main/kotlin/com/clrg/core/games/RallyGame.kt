@@ -338,23 +338,48 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
         return clamp(bx + vx * t * 1.4f, -1.4f, 1.4f) + dirToward(k) * cfg.racketReach
     }
 
-    private val botOffset = DoubleArray(2) { Double.NaN }
-    private val botFor = DoubleArray(2) { Double.NaN }
+    // ---- CPU player -------------------------------------------------------------------------------------
+    // It sees what a human sees: the ball, and the shrinking ring that shows when the perfect moment is. Its swing
+    // timing has a human-like random error that grows as rallies get faster, it sometimes doesn't swing at all, and
+    // in table tennis it sometimes picks the wrong stroke.
+    private val botPlanFor = DoubleArray(2) { Double.NaN }
+    private val botSwingAt = DoubleArray(2)
+    private val botWillSwing = BooleanArray(2)
+    private val botSwung = BooleanArray(2)
+    private val botForehandPlan = BooleanArray(2)
+    private val botServeAt = FloatArray(2) { Float.NaN }
 
-    /** Which stroke the bot should play (table tennis overrides). */
+    /** Which stroke the incoming ball needs (table tennis overrides). */
     protected open fun botForehand(k: Int) = true
 
+    /** Chance that the CPU picks the wrong stroke (table tennis overrides). */
+    protected open fun botWrongStrokeChance(skill: Float) = 0f
+
+    /** Extra timing difficulty of the incoming ball (table tennis: after a smash). */
+    protected open fun incomingPressure() = 1f
+
     override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
-        if (state == State.SERVE && server == k && stateTime > 1.0f && stateTime < 1.0f + 1.5f / 120f) {
-            inp.events.add(GestureEvent.Swing(playTime, 1, -1f, 0f, 0.6f, true))
-        }
-        if (state == State.RALLY && receiver == k && !hitTime.isNaN()) {
-            if (botFor[k] != hitTime) {
-                botFor[k] = hitTime
-                botOffset[k] = (rng.nextFloat() * 2f - 1f) * (1f - skill) * cfg.window * 1.3
+        val power = clamp(lerp(0.35f, 0.8f, skill) + (rng.nextFloat() - 0.5f) * 0.2f, 0.1f, 1f)
+        if (state == State.SERVE && server == k) {
+            if (botServeAt[k].isNaN()) botServeAt[k] = lerp(1.6f, 0.9f, skill) + rng.nextFloat() * 0.8f
+            if (stateTime >= botServeAt[k]) {
+                inp.events.add(GestureEvent.Swing(playTime, 1, -1f, 0f, power, true))
+                botServeAt[k] = Float.MAX_VALUE // one serve swing per serve
             }
-            val t = hitTime + botOffset[k]
-            if (playTime <= t && playTime + 1.0 / 120.0 > t) inp.events.add(GestureEvent.Swing(playTime, 1, -1f, 0f, skill, botForehand(k)))
+        } else if (state != State.SERVE) botServeAt[k] = Float.NaN
+        if (state == State.RALLY && receiver == k && !hitTime.isNaN()) {
+            if (botPlanFor[k] != hitTime) {
+                botPlanFor[k] = hitTime
+                val sigma = lerp(0.15f, 0.045f, skill) * (1f + 0.04f * rally) * incomingPressure()
+                botSwingAt[k] = hitTime + rng.gaussian() * sigma
+                botWillSwing[k] = !rng.chance(lerp(0.06f, 0.01f, skill))
+                botForehandPlan[k] = botForehand(k) != rng.chance(botWrongStrokeChance(skill))
+                botSwung[k] = false
+            }
+            if (botWillSwing[k] && !botSwung[k] && playTime >= botSwingAt[k]) {
+                inp.events.add(GestureEvent.Swing(playTime, 1, -1f, 0f, power, botForehandPlan[k]))
+                botSwung[k] = true
+            }
         }
     }
 

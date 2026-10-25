@@ -80,12 +80,29 @@ gesture system.
 
 ## Game framework (`core/game`, `core/games`)
 
-* `MiniGame` - `start`, fixed-step `update(dt, inputs)`, `render`, `result`, instruction `demo`, and a scripted
-  `autoplay` used only by tests and developer mode.
+* `MiniGame` - `start`, fixed-step `update(dt, inputs)`, `render`, `result`, instruction `demo`, and
+  `autoplay(k, input, skill, rng)`: the game's computer player (solo mode's opponent; also used by tests and the
+  developer autoplay).
 * `GameSession` - instructions -> both players raise a hand -> countdown -> play -> results; pauses when a player
   is lost (0.5 s settle once everyone is back, then a 3 s resume countdown); user pause; TV-loss pause.
 * Seeds: each match gets a seed; both players receive identical challenges (presents, shots, gates).
 * `RallyGame` is the shared base for Tennis and Table Tennis.
+
+## Solo mode and computer players (`core/game/Cpu.kt`)
+
+* `PlayerTracker.solo`: slot 0 may stand anywhere in the picture; slot 1 is disabled (never acquired, never waited
+  for). Switching mode forgets identities and calibrations because the starting areas change.
+* `PlayerInfo.cpu` / `cpuSkill`: `GameSession` never fills a CPU player's input from tracking, treats it as always
+  ready, never pauses for it, and before every 120 Hz step calls the game's `autoplay` for it. CPU gestures go
+  through the same `PlayerInput` path as a camera player's and are valid for that step only.
+* `CpuLevel` (Easy/Medium/Hard = skill 0.3/0.6/0.88) and `CpuTraits` (reaction time, hand speed) give every game's
+  CPU the same human-like limits. Each CPU sees only what a player sees on screen (e.g. the rally ring after the
+  bounce, presents as they appear, the visible stretch of slope) and has per-event errors: timing, aim, missed
+  cues, wrong strokes, rhythm drops.
+* `BotBody` turns the CPU's actions (hand targets, swing/throw/bowl/shield events, arm pumping, tuck, lean) into
+  an `AvatarPose` with two-bone arm IK, so the CPU's character moves like a camera player's. The dance game poses its
+  CPU dancer itself (`cpuPosesAvatar`).
+* `GameApp.startSolo/leaveSolo` switch modes; Quick Match, the tournament and the full set-up always leave solo.
 
 ## UI (`core/ui`)
 

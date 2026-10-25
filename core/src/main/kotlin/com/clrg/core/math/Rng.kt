@@ -30,6 +30,13 @@ class Rng(seed: Long) {
 
     fun chance(p: Float): Boolean = nextFloat() < p
 
+    /** Standard normal sample (Box-Muller): used for human-like timing and aiming errors of CPU players. */
+    fun gaussian(): Float {
+        val u1 = nextFloat().coerceAtLeast(1e-7f)
+        val u2 = nextFloat()
+        return (kotlin.math.sqrt(-2.0 * kotlin.math.ln(u1.toDouble())) * kotlin.math.cos(2.0 * kotlin.math.PI * u2)).toFloat()
+    }
+
     fun <T> pick(list: List<T>): T = list[nextInt(list.size)]
 
     fun <T> shuffle(list: MutableList<T>) {

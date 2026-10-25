@@ -394,8 +394,23 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
     /** True when the lane is waiting for a bowl. */
     fun ready(k: Int) = lanes[k].state == LaneState.AIM && lanes[k].stateTime > 0.4f
 
+    private val botBowlAt = FloatArray(2) { Float.NaN }
+
+    /**
+     * CPU player: takes a human amount of time to line up, aims at the pocket (first ball) or at the pins still
+     * standing (second ball), with an aiming error that shrinks with skill.
+     */
     override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
-        inp.lean = 0.1f
-        if (ready(k) && lanes[k].stateTime > 1.0f) inp.events.add(GestureEvent.Bowl(playTime, 1, (rng.nextFloat() * 2f - 1f) * (1f - skill), 0.4f + 0.5f * skill))
+        val lane = lanes[k]
+        inp.lean = 0f
+        if (lane.state != LaneState.AIM) { botBowlAt[k] = Float.NaN; return }
+        if (botBowlAt[k].isNaN()) botBowlAt[k] = 0.5f + lerp(2.4f, 1.0f, skill) * rng.range(0.8f, 1.3f)
+        if (lane.stateTime < botBowlAt[k] || !ready(k)) return
+        val standing = lane.pins.filter { !it.removed && !it.down }
+        val aimX = if (standing.size >= 10 || standing.isEmpty()) 0.05f else standing.map { it.x }.average().toFloat()
+        val finalX = aimX + rng.gaussian() * lerp(0.2f, 0.06f, skill)
+        val aim = clamp(kotlin.math.atan((finalX - lane.startX) / HEAD_PIN_Y) / MAX_AIM_RAD, -1f, 1f)
+        inp.events.add(GestureEvent.Bowl(playTime, 1, aim, clamp(lerp(0.45f, 0.85f, skill) + (rng.nextFloat() - 0.5f) * 0.2f, 0f, 1f)))
+        botBowlAt[k] = Float.MAX_VALUE
     }
 }

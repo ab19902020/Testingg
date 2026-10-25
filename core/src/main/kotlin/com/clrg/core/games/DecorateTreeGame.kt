@@ -127,13 +127,43 @@ class DecorateTreeGame(env: GameEnv) : MiniGame(env) {
 
     private fun pan(k: Int) = if (k == 0) -0.6f else 0.6f
 
+    // ---- CPU player: looks for an ornament, reaches for it, holds still (with a small human wobble that can
+    // break the hold on lower levels), carries it to the glowing spot, and pauses a moment between steps.
+    private val botPauseUntil = DoubleArray(2)
+    private val botPhase = IntArray(2) { -9 }
+    private val botWobX = FloatArray(2)
+    private val botWobY = FloatArray(2)
+    private val botHand = IntArray(2) { 1 }
+
     override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
-        for (h in 0..1) inp.handVisible[h] = true
-        inp.handX[0] = -0.4f; inp.handY[0] = -0.6f
-        if (finishTime[k] >= 0 || rng.nextFloat() > 0.3f + 0.7f * skill) return
-        val (tx, ty) = if (holding[k] < 0) trays[k].first { it.refill <= 0f }.let { it.x to it.y } else sequence[placed[k]].let { it.x to spotY(k, it) }
-        inp.handX[1] += (tx - inp.handX[1]) * 0.2f
-        inp.handY[1] += (ty - inp.handY[1]) * 0.2f
+        val dt = 1f / 120f
+        val speed = com.clrg.core.game.CpuTraits.handSpeed(skill) * com.clrg.core.math.lerp(0.6f, 0.85f, skill)
+        // a new step (picking or placing) starts with a short look-and-think pause
+        val phase = placed[k] * 2 + if (holding[k] >= 0) 1 else 0
+        if (phase != botPhase[k]) {
+            botPhase[k] = phase
+            botPauseUntil[k] = playTime + com.clrg.core.math.lerp(1.5f, 0.3f, skill) * rng.range(0.7f, 1.3f)
+        }
+        // slowly wandering hand tremor
+        val wob = com.clrg.core.math.lerp(0.1f, 0.03f, skill)
+        botWobX[k] = (botWobX[k] + rng.gaussian() * wob * 0.15f) * 0.985f
+        botWobY[k] = (botWobY[k] + rng.gaussian() * wob * 0.15f) * 0.985f
+        val rest = floatArrayOf(-0.4f, -0.75f, 0.4f, -0.75f)
+        var tx = Float.NaN; var ty = 0f
+        if (finishTime[k] < 0 && playTime >= botPauseUntil[k]) {
+            if (holding[k] < 0) {
+                val slot = trays[k].filter { it.refill <= 0f }.minByOrNull { kotlin.math.hypot(it.x - inp.handX[botHand[k]], it.y - inp.handY[botHand[k]]) }
+                if (slot != null) { botHand[k] = if (slot.x < 0) 0 else 1; tx = slot.x; ty = slot.y }
+            } else {
+                botHand[k] = holdingHand[k].coerceAtLeast(0)
+                val sp = sequence[placed[k]]
+                tx = sp.x; ty = spotY(k, sp)
+            }
+        }
+        for (h in 0..1) {
+            val (gx, gy) = if (h == botHand[k] && !tx.isNaN()) (tx + botWobX[k]) to (ty + botWobY[k]) else rest[h * 2] to rest[h * 2 + 1]
+            com.clrg.core.game.CpuTraits.moveHand(inp, h, gx, gy, speed, dt)
+        }
     }
 
     private fun laneRect(k: Int) = Rect(if (k == 0) 0f else screenW / 2f, 120f, if (k == 0) screenW / 2f else screenW, 1080f)

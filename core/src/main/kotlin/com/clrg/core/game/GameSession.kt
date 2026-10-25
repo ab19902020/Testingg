@@ -4,6 +4,7 @@ import com.clrg.core.audio.MusicTrack
 import com.clrg.core.audio.Sfx
 import com.clrg.core.gesture.GestureEvent
 import com.clrg.core.gesture.PlayerControls
+import com.clrg.core.math.Rng
 import com.clrg.core.math.clamp01
 import com.clrg.core.math.easeOutBack
 import com.clrg.core.render.Colors
@@ -44,6 +45,34 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
     /** Called before every fixed simulation step (developer autoplay writes scripted inputs here). */
     var beforeStep: (() -> Unit)? = null
 
+    /** Players controlled by the computer (solo mode): never tracked, always ready, driven every step. */
+    val cpu = BooleanArray(2) { env.players[it].cpu }
+    /** Camera players whose input is currently written by the developer autoplay (tracking input is not copied in). */
+    val scripted = BooleanArray(2)
+    private val cpuRng = Array(2) { Rng(env.seed * 7919 + 101 + it) }
+    private val bots = Array(2) { BotBody() }
+    private val newCpuEvents = ArrayList<GestureEvent>()
+
+    init {
+        for (k in 0..1) if (cpu[k]) { ready[k] = true; inputs[k].tracked = true; bots[k].reset(inputs[k]) }
+    }
+
+    /** Runs the CPU players for one simulation step (their gestures go through the same input path as a human's). */
+    private fun driveCpu(dt: Float, live: Boolean) {
+        for (k in 0..1) {
+            if (!cpu[k]) continue
+            val inp = inputs[k]
+            inp.tracked = true
+            newCpuEvents.clear()
+            if (live) {
+                val before = inp.events.size
+                game.autoplay(k, inp, env.players[k].cpuSkill, cpuRng[k])
+                for (i in before until inp.events.size) newCpuEvents.add(inp.events[i])
+            }
+            bots[k].step(inp, dt, newCpuEvents, game.cpuPosesAvatar)
+        }
+    }
+
     fun startNow() {
         if (phase == Phase.INSTRUCTIONS) enter(Phase.COUNTDOWN)
     }
@@ -81,11 +110,14 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
      */
     fun update(dt: Double, controls: Array<PlayerControls>, slots: Array<PlayerSlot>) {
         phaseTime += dt
-        val anyLost = !allowWithoutTracking && slots.any { it.needsAttention }
+        val anyLost = !allowWithoutTracking && slots.indices.any { !cpu[it] && slots[it].needsAttention }
         for (k in 0..1) {
+            if (cpu[k]) continue
+            if (scripted[k]) { controls[k].discardEvents(); continue }
             inputs[k].fill(controls[k], slots[k].isPlaying)
             controls[k].drainEvents(pendingEvents[k])
         }
+        if (phase != Phase.PLAYING) driveCpu(dt.toFloat(), live = false)
         when (phase) {
             Phase.INSTRUCTIONS -> {
                 for (k in 0..1) {
@@ -112,12 +144,14 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
                 var steps = 0
                 while (accumulator >= STEP && steps < 30) {
                     beforeStep?.invoke()
+                    driveCpu(STEP.toFloat(), live = true)
                     game.update(STEP.toFloat(), inputs)
+                    for (k in 0..1) if (cpu[k]) inputs[k].events.clear() // CPU gestures are for this step only
                     game.playTime += STEP
                     accumulator -= STEP
                     steps++
                     // events are delivered on the first step of the frame only
-                    if (steps == 1) for (k in 0..1) inputs[k].events.clear()
+                    if (steps == 1) for (k in 0..1) if (!cpu[k]) inputs[k].events.clear()
                     if (game.isOver) break
                 }
                 if (game.isOver) enter(Phase.FINISHED)
@@ -145,7 +179,7 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
 
     private fun markMissing(slots: Array<PlayerSlot>) {
         missing.clear()
-        slots.forEachIndexed { i, s -> if (s.needsAttention) missing.add(i) }
+        slots.forEachIndexed { i, s -> if (!cpu[i] && s.needsAttention) missing.add(i) }
     }
 
     val isLive: Boolean get() = phase == Phase.PLAYING

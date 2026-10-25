@@ -2,13 +2,13 @@
 
 An Android party game for families. The phone runs the game, its camera follows two players' bodies (no
 controllers or wearables) and the picture goes to the TV through a wired USB-C to HDMI adapter. Ten two-player
-minigames, a party tournament with pair rotation and a persistent scoreboard.
+minigames, a party tournament with pair rotation and a persistent scoreboard - and **Play Solo**: one person
+against a computer opponent (Easy, Medium or Hard) in any of the ten games.
 
-> **Status, plainly:** the source project is complete, all automated tests pass and a signed debug APK has been
-> built and verified. **Nothing has been run on a physical phone or TV yet** (the build environment has no Android
-> device or emulator). Camera tracking on a device, on-device performance, TV output and audio latency are
-> therefore **unverified**. See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the exact status of every check and
-> the on-device checklist.
+> **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
+> reports that version 1.0.1 works on their phone; the detailed on-device checklist (tracking quality, frame
+> rates, latency, TV modes) has not been run yet, and solo mode (1.1.0) has only been tested with simulated input.
+> See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the exact status of every check.
 
 ## What's in the box
 
@@ -22,6 +22,17 @@ minigames, a party tournament with pair rotation and a persistent scoreboard.
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.1.0
+
+* **Play Solo:** one person against a computer player in all ten games. Pick who is playing and the opponent:
+  **Sprout (Easy)**, **Jingles (Medium)** or **Blitz (Hard)**. You can stand anywhere in the middle of the picture;
+  setup, calibration and the start gesture are for you alone, and the game only ever pauses for you.
+* The computer players play fair: each sees only what a person sees on screen, reacts after a human-like delay,
+  moves its hands at a human speed and makes mistakes (more on Easy, fewer on Hard). Their characters animate their
+  swings, throws, reaches and dances like a camera player's would.
+* Quick Match's "Who is playing?" screen has a **Just me** button that starts the chosen game against the
+  computer. The Party Tournament stays a two-person mode.
 
 ## Changes in 1.0.1
 
@@ -50,7 +61,8 @@ minigames, a party tournament with pair rotation and a persistent scoreboard.
 9. **Christmas Goalkeepers** - reach to save shots.
 10. **Decorate the Tree** - hold a hand still to pick up and hang ornaments.
 
-Every game is played by two people at the same time, each controlling their own side with their own body.
+Every game is played by two people at the same time, each controlling their own side with their own body - or,
+with **Play Solo**, by one person against the computer.
 
 ## Quick start (players)
 
@@ -59,13 +71,15 @@ Every game is played by two people at the same time, each controlling their own 
 3. Put the phone in landscape on a stand near the TV at about chest height, camera facing the room.
 4. Open the app and follow the setup: TV check -> place the phone -> step into your outlines -> calibrate ->
    both players raise a hand and hold to start.
+5. On your own? Choose **Play Solo**, pick yourself and an opponent level, then a game. Stand in the middle of
+   the picture, calibrate, and raise a hand to start.
 
 ## Quick start (developers)
 
 ```bash
 # needs JDK 17+ and an Android SDK with platforms;android-35 and build-tools;35.0.0
 echo "sdk.dir=$ANDROID_HOME" > local.properties
-./gradlew :core:test            # 74 JVM tests (the 6 real-model tests are skipped unless configured)
+./gradlew :core:test            # 81 JVM tests (the 6 real-model tests are skipped unless configured)
 ./gradlew :app:assembleDebugApk # -> app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
 adb install -r app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
 ```

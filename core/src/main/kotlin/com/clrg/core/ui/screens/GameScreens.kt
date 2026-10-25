@@ -36,17 +36,22 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
 
     override fun onEnter() {
         if (::session.isInitialized) return
+        val level = app.cpuLevel
         val players = (0..1).map { k ->
             val prof = app.activePlayers[k]
-            val cal = app.tracker.slots[k].calibration
-            PlayerInfo(k, prof.id, prof.name, app.playerColor(k), cal?.dominantHand ?: prof.hand ?: Hand.RIGHT, cal?.mode ?: prof.mode)
+            if (level != null && k == 1) {
+                PlayerInfo(k, prof.id, prof.name, app.playerColor(k), Hand.RIGHT, MovementMode.STANDARD, cpu = true, cpuSkill = level.skill)
+            } else {
+                val cal = app.tracker.slots[k].calibration
+                PlayerInfo(k, prof.id, prof.name, app.playerColor(k), cal?.dominantHand ?: prof.hand ?: Hand.RIGHT, cal?.mode ?: prof.mode)
+            }
         }
         val env = GameEnv(players, app.settings.copy(), seed, app.audio, app.platform::nowNanos)
         val game = entry.create(env)
         session = GameSession(game, env)
         session.allowWithoutTracking = app.settings.simulatedInput && app.sim.autoplay
         session.beforeStep = {
-            if (app.settings.simulatedInput && app.sim.autoplay) for (k in 0..1) game.autoplay(k, session.inputs[k], 0.85f - 0.25f * k, autoRng[k])
+            if (app.settings.simulatedInput && app.sim.autoplay) for (k in 0..1) if (!session.cpu[k]) game.autoplay(k, session.inputs[k], 0.85f - 0.25f * k, autoRng[k])
         }
         app.controls.forEach { it.compactSwings = game.compactSwings }
         app.audio.playMusic(MusicTrack.CALM)
@@ -68,6 +73,7 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         session.allowWithoutTracking = app.settings.simulatedInput && app.sim.autoplay
+        for (k in 0..1) session.scripted[k] = session.allowWithoutTracking && !session.cpu[k]
         if (session.allowWithoutTracking && session.phase == Phase.INSTRUCTIONS) { session.ready[0] = true; session.ready[1] = true }
         session.update(dt.toDouble(), app.controls, app.tracker.slots)
         session.render(g, app.time)
@@ -121,6 +127,7 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
             Draw.progressRing(g, x, r.bottom - 120f, 50f, prog, if (session.ready[k]) Colors.GOOD else c, 12f)
             g.text(if (session.ready[k]) "OK" else "P${k + 1}", x, r.bottom - 120f, 34f, if (session.ready[k]) Colors.GOOD else c)
             val msg = when {
+                session.cpu[k] -> "${app.activePlayers[k].name} (CPU, ${app.cpuLevel?.label ?: ""}) is ready"
                 session.ready[k] -> "${app.activePlayers[k].name} is ready"
                 !slot.isPlaying -> "${app.activePlayers[k].name}: step into view"
                 else -> "${app.activePlayers[k].name}: raise a hand to start"
@@ -140,7 +147,8 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
             val s = app.tracker.slots[k]
             val side = if (k == 0) "LEFT" else "RIGHT"
             val why = if (s.lostReason == LostReason.LOW_CONFIDENCE) "the camera can't see you clearly" else "you're out of view"
-            val msg = "${app.activePlayers[k].name} (P${k + 1}): $why - please step back into the $side area"
+            val msg = if (app.solo) "${app.activePlayers[k].name}: $why - please step back into the picture"
+                else "${app.activePlayers[k].name} (P${k + 1}): $why - please step back into the $side area"
             g.text(msg, g.width / 2f, y, ui.fit(g, msg, 40f, g.width - 220f), app.playerColor(k))
             if (s.acquireProgressSec > 0f) Draw.progressRing(g, g.width / 2f + 820f, y, 22f, s.acquireProgressSec / app.tracker.config.reacquireSec, Colors.GOOD, 6f)
             y += 64f
@@ -182,7 +190,7 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
     }
 }
 
-class ResultsScreen(app: GameApp, private val result: MatchResult, private val gameId: String, private val match: TournamentMatch?) : Screen(app) {
+class ResultsScreen(app: GameApp, val result: MatchResult, private val gameId: String, private val match: TournamentMatch?) : Screen(app) {
     override val music = MusicTrack.VICTORY
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
@@ -210,7 +218,7 @@ class ResultsScreen(app: GameApp, private val result: MatchResult, private val g
                 app.pop()
                 SetupFlow.start(app) { app.replace(GameScreen(app, gameId, null)) }
             }
-            if (ui.button(g, "another", Rect(g.width / 2f - 310f, by, g.width / 2f + 310f, by + 110f), "Choose another game")) app.replace(GameSelectScreen(app))
+            if (ui.button(g, "another", Rect(g.width / 2f - 310f, by, g.width / 2f + 310f, by + 110f), "Choose another game")) app.replace(if (app.solo) SoloFlow.gameSelect(app) else GameSelectScreen(app))
             if (ui.button(g, "menu", Rect(g.width / 2f + 340f, by, g.width / 2f + 860f, by + 110f), "Main menu", accent = Colors.ICE)) app.popToRoot()
         }
     }

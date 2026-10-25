@@ -1,17 +1,19 @@
 # Test report
 
-Date: 2026-10-25 (version 1.0.1). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
-(no KVM) or TV was available.** Everything below that needs a device is marked **UNVERIFIED**.
+Date: 2026-10-25 (version 1.1.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+(no KVM) or TV was available here.** The only real-device evidence is the owner's report that version 1.0.1 works
+on their phone (section 4). Everything else that needs a device is marked **UNVERIFIED**.
 
 ## Summary
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **74 passed, 0 failed, 0 skipped** (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **81 passed, 0 failed, 1 skipped** (the skipped one is a developer diagnostic) (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
-| App launches and runs on Android | **UNVERIFIED** - no device/emulator |
-| Live camera tracking of two real people | **UNVERIFIED** |
+| App launches and runs on Android | **Reported working by the owner** (1.0.1 on their phone, after the camera crash fix); not tested here |
+| Live camera tracking of real people | Owner reports the game working; tracking quality not measured - **UNVERIFIED** in detail |
+| Solo mode against the computer (1.1.0) | Passed with simulated input and CPU-vs-CPU matches; **not yet tried on a phone** |
 | On-device performance (fps, latency, thermal) | **UNVERIFIED** - no numbers measured; none are claimed |
 | TV output over USB-C/HDMI, Presentation mode, cable unplug | **UNVERIFIED** |
 | Audio output and latency | **UNVERIFIED** |
@@ -20,9 +22,9 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (74)
+## 1. Automated tests (81)
 
-Run: `./gradlew :core:test` (68 tests) plus 6 real-model tests that need the validation environment
+Run: `./gradlew :core:test` (75 tests) plus 6 real-model tests that need the validation environment
 (`tools/pose-validation/run_real_model_tests.sh`).
 
 ### Pose pipeline - fixtures from the real models (`BlazePoseFixtureTest`, 5 passed)
@@ -85,6 +87,31 @@ restart of the app object; TV unplugged mid-match pauses with a notice and freez
 backgrounding pauses the match and returning does not restart play by itself. (The display and lifecycle events
 are injected by the test; the Android side that produces them is not exercised.)
 
+### Computer opponents (`CpuOpponentTest`, 4 passed)
+Every game is playable against every level (CPU against CPU through the real match flow); the computer player never
+causes a tracking pause while the camera player does; the CPU's character animates. Difficulty ordering, from 8
+matches per pairing (both sides swapped):
+
+| Game | Hard beats Easy | Medium beats Easy | Hard beats Medium |
+|---|---|---|---|
+| Tennis | 1.00 | 1.00 | 1.00 |
+| Snowball Showdown | 0.88 | 0.88 | 0.69 |
+| Present Catch | 1.00 | 1.00 | 0.88 |
+| Reindeer Racing | 1.00 | 1.00 | 1.00 |
+| Festive Bowling | 0.75 | 1.00 | 0.75 |
+| Table Tennis | 1.00 | 1.00 | 1.00 |
+| Elf Dance-Off | 1.00 | 1.00 | 1.00 |
+| Sleigh Slalom | 0.88 | 0.75 | 1.00 |
+| Goalkeepers | 1.00 | 0.94 | 0.81 |
+| Decorate the Tree | 1.00 | 1.00 | 1.00 |
+
+This shows the levels are ordered; it does not show how they compare with a real person at the camera.
+
+### Solo flow (`SoloFlowTest`, 2 passed - simulated input)
+Main menu -> Play Solo -> choose Hard -> game -> one-person framing, calibration (no panel for the CPU) and start
+gesture -> match with the CPU (both sides score) -> results -> another solo game keeps the calibration -> Quick
+Match switches back to two people. Quick Match's "Just me" button switches to solo with one person.
+
 ### Crash report (`CrashReportFlowTest`, 2 passed)
 A report about a previous crash is shown first at startup, long reports page through, nothing is shared until
 Share is tapped, Continue returns to the main menu; a "body tracking could not start" message appears on camera
@@ -103,8 +130,8 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,169,283 bytes, SHA-256 `b82a5796ee27def4349763db04f1b7a63bec1124a768b13c6cc6979d73ac011c` |
-| Package / version | `com.clrg.christmasgames`, versionCode 2, versionName 1.0.1 |
+| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,189,763 bytes, SHA-256 `26be12664d60ff98a6df9c8d2407339c006af9472e71e0e22f87c53b4ae6a236` |
+| Package / version | `com.clrg.christmasgames`, versionCode 3, versionName 1.1.0 |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
 | Signature | `apksigner verify`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
 | Reproducibility | A clean rebuild (`./gradlew clean :app:assembleDebugApk`) produced a byte-identical APK with the same debug key |
@@ -145,6 +172,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Report | Version | Status |
 |---|---|---|
+| "This is all working now" - owner, after installing 1.0.1 | 1.0.1 | App starts, camera permission works, game runs on the owner's phone (model not reported). |
 | Crash right after allowing the camera (first real-device report) | 1.0.0 | Most likely cause found by code review (camera opened twice after the permission dialog; an error on the camera thread was not caught). Fixed in 1.0.1. **The fix itself is not yet confirmed on the phone.** 1.0.1 also shows a crash report on the next launch if anything still goes wrong. |
 
 ## 5. Physical-device checklist (to do)

@@ -53,6 +53,7 @@ data class TrackerConfig(
 /** Horizontal starting/playing area in frame units. */
 data class PlayArea(val x0: Float, val x1: Float) {
     val center: Float get() = (x0 + x1) / 2f
+    val width: Float get() = x1 - x0
     fun contains(x: Float, margin: Float = 0f) = x >= x0 - margin && x <= x1 + margin
 }
 
@@ -83,6 +84,9 @@ class PlayerSlot(val index: Int) {
     var calibration: Calibration? = null
     var area = PlayArea(0f, 1f)
         internal set
+    /** False for a slot that is not a camera player (the computer opponent in solo mode): never acquired or waited for. */
+    var enabled = true
+        internal set
     var lastSeenNanos = 0L
         internal set
     var missingSec = 0f
@@ -103,7 +107,7 @@ class PlayerSlot(val index: Int) {
         internal set
 
     val isPlaying: Boolean get() = state == SlotState.ACTIVE || state == SlotState.MISSING
-    val needsAttention: Boolean get() = state == SlotState.LOST || state == SlotState.EMPTY
+    val needsAttention: Boolean get() = enabled && (state == SlotState.LOST || state == SlotState.EMPTY)
 
     internal fun clear() {
         state = SlotState.EMPTY
@@ -140,6 +144,19 @@ class PlayerTracker(val playerCount: Int = 2, var config: TrackerConfig = Tracke
     var lastFrameSimulated = false
         private set
 
+    /**
+     * Solo mode: only slot 0 is a camera player and may stand anywhere in the picture; the other slots are disabled
+     * (computer opponents). Switching mode forgets identities and calibrations, because starting areas change.
+     */
+    var solo = false
+        set(value) {
+            if (field == value) return
+            field = value
+            resetAll()
+            slots.forEachIndexed { i, s -> s.enabled = !value || i == 0 }
+            updateAreas()
+        }
+
     init {
         updateAreas()
     }
@@ -161,6 +178,10 @@ class PlayerTracker(val playerCount: Int = 2, var config: TrackerConfig = Tracke
     }
 
     private fun updateAreas() {
+        if (solo) {
+            slots.forEachIndexed { i, s -> s.area = if (i == 0) PlayArea(0f, aspect) else PlayArea(aspect, aspect) }
+            return
+        }
         val w = aspect / playerCount
         slots.forEachIndexed { i, s -> s.area = PlayArea(i * w, (i + 1) * w) }
     }
@@ -193,7 +214,7 @@ class PlayerTracker(val playerCount: Int = 2, var config: TrackerConfig = Tracke
 
         // --- 2) Acquisition (setup) / guarded reacquisition (locked) --------------------------------------
         for (slot in slots) {
-            if (slot.isPlaying) continue
+            if (slot.isPlaying || !slot.enabled) continue
             val pick = if (locked && slot.calibration != null) pickReacquire(slot, cands, used) else pickAcquire(slot, cands, used)
             if (pick < 0) {
                 slot.pendingX = Float.NaN
@@ -225,7 +246,7 @@ class PlayerTracker(val playerCount: Int = 2, var config: TrackerConfig = Tracke
         if (!locked) {
             for (slot in slots) {
                 val m = slot.metrics ?: continue
-                if (!slot.area.contains(m.shoulderX, margin = 0.12f * aspect / playerCount)) {
+                if (!slot.area.contains(m.shoulderX, margin = 0.12f * slot.area.width)) {
                     slot.clear()
                 }
             }
@@ -374,7 +395,7 @@ class PlayerTracker(val playerCount: Int = 2, var config: TrackerConfig = Tracke
             val c = cands[i]
             if (c.confidence < 0.4f) continue
             val nearLast = hypot(c.shoulderX - slot.shoulderX, c.shoulderY - slot.shoulderY) < 1.5f * cal.bodyScale
-            if (!slot.area.contains(c.shoulderX, margin = 0.15f * aspect / playerCount) && !nearLast) continue
+            if (!slot.area.contains(c.shoulderX, margin = 0.15f * slot.area.width) && !nearLast) continue
             val ratio = c.scale / cal.bodyScale
             if (ratio < config.reacquireScaleMin || ratio > config.reacquireScaleMax) continue
             var cost = abs(ln(ratio)) * 2f + abs(c.shoulderX - slot.area.center) / cal.bodyScale * 0.2f
@@ -397,6 +418,6 @@ class PlayerTracker(val playerCount: Int = 2, var config: TrackerConfig = Tracke
         const val MIN_PLAYER_SCALE = 0.06f
     }
 
-    /** True when every player slot is being tracked. */
-    val allPlaying: Boolean get() = slots.all { it.isPlaying }
+    /** True when every camera player slot is being tracked. */
+    val allPlaying: Boolean get() = slots.all { !it.enabled || it.isPlaying }
 }

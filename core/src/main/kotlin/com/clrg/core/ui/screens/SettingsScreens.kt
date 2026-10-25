@@ -120,6 +120,7 @@ class HelpScreen(app: GameApp) : Screen(app) {
                 "Calibration measures each player's size and comfortable reach so everybody plays fairly.",
                 "Hands-free menus: once calibrated, raise a hand to move your cursor and hold it on a button.",
                 "If someone steps away the game pauses and waits for them - spectators can't take over.",
+                "On your own? Play Solo: you against a computer player (Easy, Medium or Hard). Stand in the middle.",
             ), 32f)
             2 -> infoPanel(g, app, body, "Privacy", listOf(
                 "The camera picture is processed on this phone, frame by frame, to find body positions.",

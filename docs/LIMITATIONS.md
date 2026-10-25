@@ -44,6 +44,12 @@ no Android device and no emulator. Until the checklist in [TEST_REPORT.md](TEST_
 
 ## Game and UI limitations
 
+* **Solo mode difficulty is tuned without real players.** The Easy/Medium/Hard opponents were balanced by playing
+  them against each other (Hard beats Medium beats Easy in every game) and by modelling human reaction times and
+  hand speeds. How they compare with a real person at the camera - including the tracking delay a person has and
+  the computer does not - still has to be tried and may need retuning.
+* Solo mode is one person against the computer; there is no two-people-against-the-computer mode, and the Party
+  Tournament has no computer players.
 * English only.
 * The UI is drawn on a canvas, so Android TalkBack cannot read it. Large text, high contrast, reduced effects and
   sound captions are provided instead.

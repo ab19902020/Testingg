@@ -137,13 +137,44 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
     private fun pan(k: Int) = if (k == 0) -0.6f else 0.6f
     private fun sx(x: Float) = x * screenW
 
+    // ---- CPU player: throws at a human pace, sees incoming snowballs after a reaction delay, then dodges or
+    // shields (sometimes it doesn't notice at all), and wanders around its fort between throws.
+    private class BotView(val react: Boolean, val delay: Float, val shield: Boolean)
+    private val botViews = HashMap<Ball, BotView>()
     private val botLean = FloatArray(2)
+    private val botHold = FloatArray(2)
+    private val botNextThrow = FloatArray(2) { -1f }
+    private val botNextWander = FloatArray(2)
+
     override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
-        if (cooldown[k] <= 0f && stun[k] <= 0f && rng.chance(0.02f + 0.03f * skill)) inp.events.add(GestureEvent.Throw(playTime, 1, 0f, skill))
-        val incoming = balls.firstOrNull { !it.done && it.owner != k && it.flight - it.t < 0.7f && kotlin.math.abs(it.x1 - px[k]) < HIT_RADIUS * 1.5f }
-        if (incoming != null && rng.chance(skill)) botLean[k] = if (px[k] > ZONE_CENTER[k]) -1f else 1f
-        else if (incoming != null && shieldLeft[k] > 0 && shieldTime[k] <= 0f && rng.chance(0.02f * skill)) inp.events.add(GestureEvent.HandsUp(playTime))
-        else if (rng.chance(0.01f)) botLean[k] = 0f
+        val dt = 1f / 120f
+        val now = playTime.toFloat()
+        if (cooldown[k] <= 0f && stun[k] <= 0f && playTime < MATCH_SEC) {
+            if (botNextThrow[k] < 0f) botNextThrow[k] = now + lerp(1.3f, 0.35f, skill) + rng.nextFloat() * lerp(1.0f, 0.4f, skill)
+            if (now >= botNextThrow[k]) {
+                inp.events.add(GestureEvent.Throw(playTime, 1, 0f, clamp(lerp(0.4f, 0.85f, skill) + (rng.nextFloat() - 0.5f) * 0.2f, 0f, 1f)))
+                botNextThrow[k] = -1f
+            }
+        }
+        botViews.keys.removeAll { it.done }
+        botHold[k] -= dt
+        var threat: Ball? = null
+        for (b in balls) {
+            if (b.done || b.owner == k) continue
+            val v = botViews.getOrPut(b) {
+                BotView(rng.chance(lerp(0.5f, 0.92f, skill)), com.clrg.core.game.CpuTraits.reaction(skill) * rng.range(0.85f, 1.3f), rng.chance(lerp(0.05f, 0.2f, skill)))
+            }
+            if (v.react && b.t >= v.delay && abs(b.x1 - px[k]) < HIT_RADIUS * 1.6f) { threat = b; if (v.shield && shieldLeft[k] > 0 && shieldTime[k] <= 0f) { inp.events.add(GestureEvent.HandsUp(playTime)); botViews[b] = BotView(true, v.delay, false) } }
+        }
+        if (threat != null && shieldTime[k] <= 0f && botHold[k] <= 0f) {
+            // step away from where the snowball will land, toward the side with more room
+            val room = px[k] - ZONE_CENTER[k]
+            botLean[k] = if (abs(room) > ZONE_HALF * 0.5f) -kotlin.math.sign(room) else if (px[k] >= threat.x1) 1f else -1f
+            botHold[k] = 0.6f
+        } else if (botHold[k] <= 0f && now >= botNextWander[k]) {
+            botLean[k] = rng.range(-0.8f, 0.8f)
+            botNextWander[k] = now + lerp(3.5f, 1.5f, skill) * rng.range(0.6f, 1.4f)
+        }
         inp.lean = botLean[k]
     }
 

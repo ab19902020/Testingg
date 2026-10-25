@@ -152,15 +152,44 @@ class PresentCatchGame(env: GameEnv) : MiniGame(env) {
 
     private fun pan(k: Int) = if (k == 0) -0.6f else 0.6f
 
+    // ---- CPU player: notices each new present after a reaction delay (and sometimes not at all), moves a hand
+    // there at a human speed, waits for it, then returns to a ready position in front of the chest. It steers its
+    // hands around coal it has noticed, but now and then grabs coal by mistake.
+    private class BotView(val go: Boolean, val noticeAt: Double)
+    private val botViews = HashMap<LiveItem, BotView>()
+
     override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
+        val dt = 1f / 120f
         val spots = spotsFor(k)
-        val target = live[k].filter { !it.caught && it.state < 2 && it.item.kind != Kind.COAL && (it.state == 1 || it.t > FALL * 0.5f) }
-            .minByOrNull { it.item.spawn }
-        for (h in 0..1) { inp.handVisible[h] = true; inp.handX[h] = if (h == 0) -0.35f else 0.35f; inp.handY[h] = -0.7f }
-        if (target != null && rng.nextFloat() < 0.5f + 0.5f * skill) {
-            val sp = spots[target.item.spot]
-            val h = if (sp.x < 0) 0 else 1
-            inp.handX[h] = sp.x; inp.handY[h] = sp.y
+        botViews.keys.removeAll { it.state == 2 }
+        val wanted = live[k].filter { li ->
+            val v = botViews.getOrPut(li) {
+                val isCoal = li.item.kind == Kind.COAL
+                val go = if (isCoal) rng.chance(lerp(0.12f, 0.0f, skill)) else rng.chance(lerp(0.72f, 0.97f, skill))
+                BotView(go, li.item.spawn + com.clrg.core.game.CpuTraits.reaction(skill) * rng.range(0.85f, 1.3f))
+            }
+            v.go && playTime >= v.noticeAt && !li.caught && !li.touchedCoal && li.state < 2
+        }.sortedBy { it.item.spawn }
+        val speed = com.clrg.core.game.CpuTraits.handSpeed(skill)
+        // coal the CPU has noticed (and isn't mistakenly going for) is kept away from
+        val avoid = live[k].filter { li ->
+            li.item.kind == Kind.COAL && !li.touchedCoal && li.state < 2 && botViews[li]?.let { !it.go && playTime >= it.noticeAt } == true
+        }.map { spots[it.item.spot] }
+        for (h in 0..1) {
+            // each hand covers its own side; the overhead spot goes to whichever hand is free
+            val target = wanted.firstOrNull { val x = spots[it.item.spot].x; if (h == 0) x < -0.01f else x > 0.01f }
+                ?: wanted.firstOrNull { kotlin.math.abs(spots[it.item.spot].x) <= 0.01f && wanted.none { o -> o !== it && (if (h == 0) spots[o.item.spot].x < -0.01f else spots[o.item.spot].x > 0.01f) } }
+            val (tx, ty) = if (target != null) spots[target.item.spot].let { it.x to it.y } else (if (h == 0) -0.25f else 0.25f) to -0.1f
+            val ox = inp.handX[h]
+            val oy = inp.handY[h]
+            com.clrg.core.game.CpuTraits.moveHand(inp, h, tx, ty, speed, dt)
+            val c = avoid.firstOrNull { hypot(inp.handX[h] - it.x, inp.handY[h] - it.y) < CATCH_R + 0.08f }
+            if (c != null) {
+                // back off from the coal instead of moving through it
+                val d = hypot(ox - c.x, oy - c.y).coerceAtLeast(1e-3f)
+                inp.handX[h] = ox + (ox - c.x) / d * speed * dt
+                inp.handY[h] = oy + (oy - c.y) / d * speed * dt
+            }
         }
     }
 

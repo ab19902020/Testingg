@@ -128,15 +128,27 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
 
     private fun pan(k: Int) = if (k == 0) -0.6f else 0.6f
 
+    // ---- CPU player: reacts to the glowing target after a human delay (sometimes too late or not at all),
+    // moves the nearer hand there at a human speed and aims with a little error.
+    private class BotView(val go: Boolean, val delay: Float, val ex: Float, val ey: Float)
+    private val botViews = HashMap<LiveShot, BotView>()
+
     override fun autoplay(k: Int, inp: PlayerInput, skill: Float, rng: com.clrg.core.math.Rng) {
-        for (h in 0..1) inp.handVisible[h] = true
+        val dt = 1f / 120f
+        val speed = com.clrg.core.game.CpuTraits.handSpeed(skill)
+        botViews.keys.removeAll { it.resolved }
         val ls = live[k].firstOrNull { !it.resolved }
-        if (ls == null) { inp.handX[0] = -0.3f; inp.handY[0] = -0.5f; inp.handX[1] = 0.3f; inp.handY[1] = -0.5f; return }
-        val reaction = 0.25f + (1f - skill) * 1.2f
-        val h = if (ls.shot.tx < 0) 0 else 1
-        if (ls.t > reaction) {
-            inp.handX[h] += (ls.shot.tx - inp.handX[h]) * 0.25f
-            inp.handY[h] += (targetY(k, ls.shot) - inp.handY[h]) * 0.25f
+        val v = ls?.let { s ->
+            botViews.getOrPut(s) {
+                val sd = lerp(0.2f, 0.06f, skill)
+                BotView(rng.chance(lerp(0.88f, 0.98f, skill)), com.clrg.core.game.CpuTraits.reaction(skill) * rng.range(0.85f, 1.35f), rng.gaussian() * sd, rng.gaussian() * sd)
+            }
+        }
+        val h = if (ls != null && ls.shot.tx < 0) 0 else 1
+        for (i in 0..1) {
+            val (tx, ty) = if (ls != null && v != null && v.go && i == h && ls.t >= v.delay) (ls.shot.tx + v.ex) to (targetY(k, ls.shot) + v.ey)
+                else (if (i == 0) -0.3f else 0.3f) to -0.1f
+            com.clrg.core.game.CpuTraits.moveHand(inp, i, tx, ty, speed, dt)
         }
     }
 

@@ -30,7 +30,10 @@ object Hud {
                 g.fillRoundRect(bx, 66f, bx + 150f, 114f, 16f, c)
                 g.text(scores[i].toString(), bx + 75f, 90f, 44f, Colors.BLACK)
             }
-            if (inputs != null) {
+            if (env.players[i].cpu) {
+                val tagX = if (left) 240f else g.width - 240f
+                Draw.badge(g, tagX, 90f, "CPU", 0xFFCFD8DC.toInt(), 22f)
+            } else if (inputs != null) {
                 val dotX = if (left) 215f else g.width - 215f
                 g.fillCircle(dotX, 90f, 10f, if (inputs[i].tracked) Colors.GOOD else Colors.BAD)
             }

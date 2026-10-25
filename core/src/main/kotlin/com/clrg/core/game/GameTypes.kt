@@ -19,7 +19,11 @@ import com.clrg.core.tracking.Hand
 import com.clrg.core.tracking.MovementMode
 
 /** Who is playing in this match. */
-class PlayerInfo(val index: Int, val profileId: Int, val name: String, val color: Int, val hand: Hand, val mode: MovementMode)
+class PlayerInfo(
+    val index: Int, val profileId: Int, val name: String, val color: Int, val hand: Hand, val mode: MovementMode,
+    /** Controlled by the computer (solo mode), with this skill (0..1, see [CpuLevel]). */
+    val cpu: Boolean = false, val cpuSkill: Float = CpuLevel.MEDIUM.skill,
+)
 
 /**
  * Snapshot of one player's motion controls for a simulation tick. Every minigame reads only this, so all ten
@@ -176,6 +180,9 @@ abstract class MiniGame(val env: GameEnv) {
 
     /** Called when live play starts or stops (pause, tracking loss, finish) - e.g. to pause synchronised music. */
     open fun onLiveChanged(live: Boolean) {}
+
+    /** True when the game poses its CPU player's character itself in [autoplay] (the dance game). */
+    open val cpuPosesAvatar: Boolean = false
 
     /** Games that use small, quick arm strokes (table tennis) lower the swing thresholds. */
     open val compactSwings: Boolean = false
