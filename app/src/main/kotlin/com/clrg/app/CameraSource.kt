@@ -66,6 +66,11 @@ class CameraSource(private val context: Context) {
     private var retryCount = 0
     @Volatile var fps = 0f
         private set
+    /** True while the camera delivers (up to) 60 frames per second instead of 30. */
+    @Volatile var highFps = false
+        private set
+    private var wantHighFps = false
+    private var requestBuilder: CaptureRequest.Builder? = null
     private var lastFrameNs = 0L
 
     val infos: List<Info> by lazy { enumerate() }
@@ -211,12 +216,34 @@ class CameraSource(private val context: Context) {
         return pool.minByOrNull { abs(it.width * it.height - TARGET.width * TARGET.height) } ?: sizes.first()
     }
 
-    private fun chooseFps(id: String): Range<Int>? {
+    private fun chooseFps(id: String, high: Boolean): Range<Int>? {
         val ranges = manager.getCameraCharacteristics(id).get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: return null
+        if (high) {
+            // 60 fps for smoother, lower-latency tracking when the phone can keep up (steady range preferred)
+            (ranges.firstOrNull { it.lower == 60 && it.upper == 60 } ?: ranges.filter { it.upper == 60 && it.lower >= 30 }.maxByOrNull { it.lower })?.let { return it }
+        }
         // prefer a fixed or near-fixed 30 fps range (steady timing); fall back to the highest upper bound
         return ranges.firstOrNull { it.lower == 30 && it.upper == 30 }
             ?: ranges.filter { it.upper == 30 }.maxByOrNull { it.lower }
             ?: ranges.maxByOrNull { it.upper * 100 + it.lower }
+    }
+
+    /** Whether this camera offers a 60 fps range at all. */
+    fun supportsHighFps(): Boolean = active?.let { a -> chooseFps(a.id, true)?.upper == 60 } ?: false
+
+    /** Asks for 60 (or back to 30) frames per second; applied to the running session without reopening the camera. */
+    fun setHighFps(on: Boolean) = handler.post {
+        if (wantHighFps == on) return@post
+        wantHighFps = on
+        val s = session ?: return@post
+        val b = requestBuilder ?: return@post
+        val info = active ?: return@post
+        guarded("frame rate", info.id) {
+            val range = chooseFps(info.id, on) ?: return@guarded
+            b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
+            s.setRepeatingRequest(b.build(), null, handler)
+            highFps = range.upper >= 60
+        }
     }
 
     private fun createSession(cam: CameraDevice, info: Info, gen: Int) {
@@ -240,14 +267,17 @@ class CameraSource(private val context: Context) {
                     // a session for a camera that has since been closed or replaced: drop it
                     if (gen != generation || device !== cam || !running) { try { s.close() } catch (_: Throwable) {}; return@guarded }
                     session = s
+                    val range = chooseFps(info.id, wantHighFps)
+                    highFps = (range?.upper ?: 30) >= 60
                     val req = cam.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                         addTarget(r.surface)
-                        chooseFps(info.id)?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+                        range?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
                         set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
                         set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                         set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
                         if (Build.VERSION.SDK_INT >= 30 && wantWide && info.zoomMin < 0.99f) set(CaptureRequest.CONTROL_ZOOM_RATIO, info.zoomMin)
                     }
+                    requestBuilder = req
                     try {
                         s.setRepeatingRequest(req.build(), null, handler)
                         status = CameraStatus(CameraState.RUNNING, "${size.width}x${size.height}", info.id)
@@ -280,6 +310,7 @@ class CameraSource(private val context: Context) {
         opening = false
         try { session?.close() } catch (_: Throwable) {}
         session = null
+        requestBuilder = null
         try { device?.close() } catch (_: Throwable) {}
         device = null
         active = null

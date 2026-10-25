@@ -24,6 +24,33 @@ object Common {
         return b
     }
 
+    /** Live tracking-quality meter for player [k]: five bars, a word and the most useful tip (wrapped to [w]). */
+    fun qualityMeter(g: Gfx, app: GameApp, k: Int, x: Float, y: Float, w: Float) {
+        val q = com.clrg.core.tracking.TrackingQuality.of(app.tracker.slots[k], if (app.settings.simulatedInput) 0f else app.platform.perf().inferenceFps)
+        val c = app.playerColor(k)
+        g.text("Tracking", x + w / 2f, y, 28f, app.theme.dim)
+        val bw = (w - 40f) / 5f
+        for (i in 0 until 5) {
+            val bx = x + 20f + i * bw
+            val bh = 18f + i * 10f
+            val on = i < q.bars
+            val col = if (!on) 0x33FFFFFF else when { q.score >= 0.62f -> Colors.GOOD; q.score >= 0.42f -> Colors.WARN; else -> Colors.BAD }
+            g.fillRoundRect(bx + 4f, y + 80f - bh, bx + bw - 4f, y + 80f, 5f, col)
+        }
+        g.text(q.label, x + w / 2f, y + 110f, 34f, if (q.score >= 0.62f) Colors.GOOD else if (q.score >= 0.42f) Colors.WARN else c)
+        q.tip?.let { tip ->
+            // simple word wrap
+            val words = tip.split(" ")
+            var line = ""
+            var ly = y + 150f
+            for (wd in words) {
+                val next = if (line.isEmpty()) wd else "$line $wd"
+                if (g.measureText(next, 24f, false) > w && line.isNotEmpty()) { g.text(line, x + w / 2f, ly, 24f, Colors.WHITE, bold = false); ly += 30f; line = wd } else line = next
+            }
+            if (line.isNotEmpty()) g.text(line, x + w / 2f, ly, 24f, Colors.WHITE, bold = false)
+        }
+    }
+
     /** Small status chips (camera, TV, players) along the bottom of the menus. */
     fun statusBar(g: Gfx, app: GameApp) {
         val y = g.height - 46f

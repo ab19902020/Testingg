@@ -36,13 +36,15 @@ class BodyFrame {
     var shift = 0f
     /** Sideways torso tilt (shoulder centre vs hip centre), sine-like, + = leaning to screen right. */
     var tilt = 0f
+    /** Vertical shift of the shoulders from the calibrated neutral height, in S units (+ = higher, - = crouching). */
+    var rise = 0f
 
     fun copyFrom(o: BodyFrame) {
         t = o.t; scale = o.scale; originX = o.originX; originY = o.originY
         o.wx.copyInto(wx); o.wy.copyInto(wy); o.ex.copyInto(ex); o.ey.copyInto(ey)
         o.sx.copyInto(sx); o.sy.copyInto(sy); o.wv.copyInto(wv); o.wz.copyInto(wz)
         noseX = o.noseX; noseY = o.noseY; hipX = o.hipX; hipY = o.hipY; hipsVisible = o.hipsVisible
-        shift = o.shift; tilt = o.tilt
+        shift = o.shift; tilt = o.tilt; rise = o.rise
     }
 
     companion object {
@@ -82,6 +84,7 @@ class BodyFrame {
                 out.hipX = 0f; out.hipY = -1f; out.tilt = 0f
             }
             out.shift = if (cal != null) (ox - cal.neutralShoulderX) / cal.bodyScale else 0f
+            out.rise = if (cal != null) (cal.neutralShoulderY - oy) / cal.bodyScale else 0f
             return true
         }
     }

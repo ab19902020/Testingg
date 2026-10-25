@@ -281,7 +281,8 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
             }
         }
 
-        // 2) hands-free cursors from calibrated, tracked players
+        // 2) latency compensation for what players see, then hands-free cursors from calibrated, tracked players
+        if (!settings.simulatedInput) for (c in controls) c.predict(nowNanos / 1e9)
         updateCursors(g)
 
         // 3) input + screens

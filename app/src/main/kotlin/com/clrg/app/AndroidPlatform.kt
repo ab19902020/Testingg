@@ -50,6 +50,7 @@ class AndroidPlatform(
         camera.configure(settings.cameraId, settings.wideAngle)
         pose.mirror = settings.mirror
         pose.quality = settings.quality
+        pose.allowHighFps = settings.highFpsCamera
         router.preferPresentation = settings.preferTvAsSecondScreen
     }
 

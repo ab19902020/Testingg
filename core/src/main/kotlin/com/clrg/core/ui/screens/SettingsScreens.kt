@@ -61,6 +61,7 @@ class SettingsScreen(app: GameApp) : Screen(app) {
                 QualityMode.values().forEachIndexed { i, q ->
                     if (ui.button(g, "q$i", Rect(qr.left + 400f + i * 330f, qr.top, qr.left + 710f + i * 330f, qr.bottom), q.label, size = 32f, selected = s.quality == q)) { s.quality = q; changed = true }
                 }
+                if (ui.toggle(g, "fps60", row(), "Smoother tracking: 60 fps camera when the phone keeps up", s.highFpsCamera)) { s.highFpsCamera = !s.highFpsCamera; changed = true }
                 if (ui.toggle(g, "tv2", row(), "Use the TV as a separate screen when the phone supports it", s.preferTvAsSecondScreen)) { s.preferTvAsSecondScreen = !s.preferTvAsSecondScreen; changed = true }
                 if (ui.toggle(g, "inset", row(), "Show a small camera view during games", s.showCameraInset)) { s.showCameraInset = !s.showCameraInset; changed = true }
             }

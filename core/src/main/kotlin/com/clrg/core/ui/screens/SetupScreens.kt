@@ -150,6 +150,8 @@ class FramingScreen(app: GameApp, private val then: () -> Unit, private val full
         Common.header(g, ui, if (app.solo) "3. Stand in the picture" else "3. Stand in your areas", app = app)
         if (full) SetupFlow.stepLabel(g, 3)
         PreviewView.draw(g, app, Rect(260f, 150f, g.width - 260f, 860f))
+        Common.qualityMeter(g, app, 0, 20f, 260f, 220f)
+        if (!app.solo) Common.qualityMeter(g, app, 1, g.width - 240f, 260f, 220f)
         if (app.solo) {
             val (msg, ok) = hint(0)
             val text = "${app.activePlayers[0].name}: $msg"

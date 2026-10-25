@@ -277,7 +277,7 @@ class PlayerTracker(val playerCount: Int = 2, var config: TrackerConfig = Tracke
         slot.shoulderY = m.shoulderY
         slot.scale = if (first) m.scale else slot.scale + min(1f, sinceSeen / 0.4f) * (m.scale - slot.scale)
         slot.confidence = if (first) m.confidence else slot.confidence + min(1f, sinceSeen / 0.25f) * (m.confidence - slot.confidence)
-        slot.smooth.update(m.pose, if (first) 0f else sinceSeen)
+        slot.smooth.update(m.pose, if (first) 0f else sinceSeen, slot.scale)
         slot.metrics = m
         slot.lastSeenNanos = nanos
         slot.missingSec = 0f

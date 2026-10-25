@@ -145,6 +145,8 @@ class TfliteRunner(assets: AssetManager, val variant: String, wantGpu: Boolean) 
  */
 class PoseEngine(private val context: Context, private val camera: CameraSource, private val sink: (PoseFrame) -> Unit) {
     @Volatile var quality = QualityMode.AUTO
+    /** Allow the camera to run at 60 fps when inference is fast enough and the phone is cool. */
+    @Volatile var allowHighFps = true
     @Volatile var mirror = true
     @Volatile var displayRotationDeg = 90
     @Volatile var enabled = true
@@ -187,6 +189,8 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     private var avgMs = 0f
     private var slowSince = 0L
     private var fastSince = 0L
+    private var fpsUpSince = 0L
+    private var fpsDownSince = 0L
     private var frameCount = 0L
     private var skipToggle = 0L
     @Volatile var dropped = 0L
@@ -407,7 +411,7 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
             captureToResultMs = if (realtime) (t1 - captureNs) / 1e6f else Float.NaN,
             droppedFrames = dropped, delegate = runner?.delegateName ?: "-", model = "BlazePose $variant",
             inputSize = "${o.bufferWidth}x${o.bufferHeight} rot ${o.rotationCw}", thermal = thermal,
-            adaptiveLevel = "${quality.label}/$variant",
+            adaptiveLevel = "${quality.label}/$variant/${if (camera.highFps) 60 else 30}fps",
         )
     }
 
@@ -419,8 +423,26 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
             context.getSharedPreferences("pose_engine", Context.MODE_PRIVATE).edit().putBoolean(KEY_GPU_OFF, true).apply()
     }
 
+    /**
+     * Camera frame rate: 60 fps only while one frame's inference comfortably fits in 1/60 s and the phone is not
+     * warm; back to 30 fps (with a few seconds of hysteresis) when inference slows down or the phone heats up.
+     */
+    private fun adaptFrameRate(now: Long) {
+        val warm = Build.VERSION.SDK_INT >= 29 && power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE
+        if (!camera.highFps) {
+            val ok = allowHighFps && !warm && avgMs > 0f && avgMs < 11f && camera.supportsHighFps()
+            if (ok) { if (fpsUpSince == 0L) fpsUpSince = now } else fpsUpSince = 0L
+            if (fpsUpSince != 0L && now - fpsUpSince > 4_000_000_000L) { camera.setHighFps(true); fpsUpSince = 0L }
+        } else {
+            val bad = !allowHighFps || warm || avgMs > 14.5f
+            if (bad) { if (fpsDownSince == 0L) fpsDownSince = now } else fpsDownSince = 0L
+            if (fpsDownSince != 0L && (now - fpsDownSince > 2_000_000_000L || !allowHighFps)) { camera.setHighFps(false); fpsDownSince = 0L }
+        }
+    }
+
     /** AUTO quality: drop to the lite model when slow or hot, return to full when there is headroom. */
     private fun adapt(now: Long) {
+        adaptFrameRate(now)
         if (quality != QualityMode.AUTO) return
         val hot = Build.VERSION.SDK_INT >= 29 && power.currentThermalStatus >= PowerManager.THERMAL_STATUS_SEVERE
         if (variant == "full") {

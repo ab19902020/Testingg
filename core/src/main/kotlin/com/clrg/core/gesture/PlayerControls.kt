@@ -17,6 +17,10 @@ class AvatarPose {
     val fore = floatArrayOf((-PI / 2 - 0.1).toFloat(), (-PI / 2 + 0.1).toFloat())
     /** Sideways lean of the torso (radians, + = toward screen right). */
     var tilt = 0f
+    /** Sideways tilt of the head relative to the body (radians, + = toward screen right). */
+    var head = 0f
+    /** Rise of the body from its neutral height (S units: + = up on tiptoes / jumping, - = crouching). */
+    var rise = 0f
     var valid = false
 
     fun update(f: BodyFrame, lean: Float) {
@@ -26,11 +30,13 @@ class AvatarPose {
             fore[h] = atan2(f.wy[h] - f.ey[h], f.wx[h] - f.ex[h])
         }
         tilt = lean * 0.35f
+        head = (atan2(f.noseX, maxOf(f.noseY, 0.15f)) * 0.9f - tilt).coerceIn(-0.6f, 0.6f)
+        rise = f.rise.coerceIn(-0.9f, 0.6f)
         valid = true
     }
 
     fun copyFrom(o: AvatarPose) {
-        o.upper.copyInto(upper); o.fore.copyInto(fore); tilt = o.tilt; valid = o.valid
+        o.upper.copyInto(upper); o.fore.copyInto(fore); tilt = o.tilt; head = o.head; rise = o.rise; valid = o.valid
     }
 }
 
@@ -101,6 +107,10 @@ class PlayerControls(val playerIndex: Int) {
 
     val history = BodyHistory()
     private val frame = BodyFrame()
+    /** Latest frame moved forward to the render time (latency compensation for what is shown on screen). */
+    private val predicted = BodyFrame()
+    /** Smoothed joint velocities in S units/s: wrists, elbows (x, y per side), nose (x, y), rise. */
+    private val vel = FloatArray(11)
     private val swing = SwingDetector()
     private val throwD = ThrowDetector()
     private val bowl = BowlDetector()
@@ -142,6 +152,15 @@ class PlayerControls(val playerIndex: Int) {
         val dt = if (lastT < 0) 0f else (tSec - lastT).toFloat().coerceIn(0f, 0.25f)
         if (lastT >= 0 && tSec - lastT > 0.5) history.clear() // gap: don't detect across a tracking gap
         lastT = tSec
+        if (history.size > 0 && dt > 0f) {
+            val p = history.get(0)
+            fun v(i: Int, cur: Float, prev: Float) { vel[i] += 0.5f * ((cur - prev) / dt - vel[i]) }
+            for (h in 0..1) {
+                v(h * 2, frame.wx[h], p.wx[h]); v(h * 2 + 1, frame.wy[h], p.wy[h])
+                v(4 + h * 2, frame.ex[h], p.ex[h]); v(5 + h * 2, frame.ey[h], p.ey[h])
+            }
+            v(8, frame.noseX, p.noseX); v(9, frame.noseY, p.noseY); v(10, frame.rise, p.rise)
+        } else vel.fill(0f)
         history.push(frame)
         hasPose = true
         val t = tuning
@@ -161,6 +180,42 @@ class PlayerControls(val playerIndex: Int) {
         tuck = frame.wv[0] > 0.3f && frame.wv[1] > 0.3f &&
             hypot(frame.wx[0] - frame.wx[1], frame.wy[0] - frame.wy[1]) < 0.6f &&
             frame.wy[0] in -1.0f..0.35f && frame.wy[1] in -1.0f..0.35f
+    }
+
+    /**
+     * Latency compensation for everything the player *sees* (their character's arms and the hand positions used by
+     * reach games and menu cursors): the latest tracked pose is moved forward to [nowSec] along its smoothed velocity
+     * (at most [MAX_LEAD] s, damped, and limited in distance). This also turns 30 fps tracking into smooth 60 fps
+     * motion. Gesture detection keeps using the measured frames only.
+     */
+    fun predict(nowSec: Double) {
+        if (!hasPose) return
+        val f = history.latest ?: return
+        var lead = (nowSec - f.t).toFloat()
+        if (lead < -0.05f || lead > 0.5f) lead = 0f // different clocks (simulation) or stale data: show as measured
+        lead = lead.coerceIn(0f, MAX_LEAD) * LEAD_GAIN
+        predicted.copyFrom(f)
+        fun d(i: Int) = (vel[i] * lead).coerceIn(-MAX_SHIFT, MAX_SHIFT)
+        for (h in 0..1) {
+            predicted.wx[h] = f.wx[h] + d(h * 2); predicted.wy[h] = f.wy[h] + d(h * 2 + 1)
+            predicted.ex[h] = f.ex[h] + d(4 + h * 2); predicted.ey[h] = f.ey[h] + d(5 + h * 2)
+        }
+        predicted.noseX = f.noseX + d(8); predicted.noseY = f.noseY + d(9); predicted.rise = f.rise + d(10)
+        avatar.update(predicted, leanT.value)
+        val reach = calibration?.reach ?: 1.5f
+        for (h in 0..1) {
+            handX[h] = predicted.wx[h] / reach
+            handY[h] = predicted.wy[h] / reach
+        }
+    }
+
+    companion object {
+        /** Longest time the shown pose is moved forward (s). */
+        const val MAX_LEAD = 0.09f
+        /** Fraction of the full extrapolation used (damps overshoot when a movement stops). */
+        const val LEAD_GAIN = 0.75f
+        /** Largest forward shift of a joint (S units). */
+        const val MAX_SHIFT = 0.35f
     }
 
     /** Moves pending events into [out] (called once per game tick). */

@@ -38,6 +38,8 @@ data class Settings(
     var wideAngle: Boolean = false,
     var mirror: Boolean = true,
     var quality: QualityMode = QualityMode.AUTO,
+    /** Let the camera run at 60 fps when the phone keeps up (smoother, quicker tracking; a little more heat). */
+    var highFpsCamera: Boolean = true,
     // display
     var preferTvAsSecondScreen: Boolean = true,
     var showCameraInset: Boolean = true,
@@ -51,7 +53,7 @@ data class Settings(
             "v" to 1, "musicVolume" to musicVolume, "sfxVolume" to sfxVolume, "highContrast" to highContrast,
             "reducedEffects" to reducedEffects, "largeText" to largeText, "captions" to captions, "dwellSeconds" to dwellSeconds,
             "gestureSensitivity" to gestureSensitivity, "steeringOnlySlalom" to steeringOnlySlalom, "cpuLevel" to cpuLevel, "cameraId" to cameraId,
-            "wideAngle" to wideAngle, "mirror" to mirror, "quality" to quality.name, "preferTvAsSecondScreen" to preferTvAsSecondScreen,
+            "wideAngle" to wideAngle, "mirror" to mirror, "quality" to quality.name, "highFpsCamera" to highFpsCamera, "preferTvAsSecondScreen" to preferTvAsSecondScreen,
             "showCameraInset" to showCameraInset, "devOverlay" to devOverlay, "skeletonOverlay" to skeletonOverlay,
         ),
     )
@@ -77,6 +79,7 @@ data class Settings(
                 wideAngle = o.bool("wideAngle", d.wideAngle),
                 mirror = o.bool("mirror", d.mirror),
                 quality = runCatching { QualityMode.valueOf(o.str("quality", d.quality.name)) }.getOrDefault(d.quality),
+                highFpsCamera = o.bool("highFpsCamera", d.highFpsCamera),
                 preferTvAsSecondScreen = o.bool("preferTvAsSecondScreen", d.preferTvAsSecondScreen),
                 showCameraInset = o.bool("showCameraInset", d.showCameraInset),
                 devOverlay = o.bool("devOverlay", d.devOverlay),
