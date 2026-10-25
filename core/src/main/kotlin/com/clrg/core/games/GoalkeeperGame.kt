@@ -27,7 +27,7 @@ import kotlin.math.sin
  * rounds, each a little faster. Shots stay inside the player's calibrated reach (no diving or deep crouching).
  */
 class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
-    override val info = INFO
+    override val info: GameInfo get() = if (env.sporty) SPORTS_INFO else INFO
 
     class Shot(val time: Double, val tx: Float, val ty: Float, val flight: Float, val round: Int)
     class LiveShot(val shot: Shot, var resolved: Boolean = false, var saved: Boolean = false, var t: Float = 0f)
@@ -49,6 +49,17 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
             gentleNotes = "Shots are placed inside each player's calibrated reach; seated players get no low shots.",
             music = MusicTrack.GAME, scoreUnit = "saves", goal = "Most saves",
         )
+        val SPORTS_INFO by lazy { GameInfo(
+            id = "goalie_s", title = "Penalty Save", tagline = "Reach out and stop the penalties!",
+            howTo = listOf(
+                "A striker shoots at your goal. The target spot lights up on the goal first.",
+                "Reach a hand to that spot before the ball arrives to make a SAVE.",
+                "Both goals get exactly the same shots. Three short rounds, each a bit faster.",
+                "Most saves wins. Chain saves together for a streak!",
+            ),
+            controls = INFO.controls, gentleNotes = INFO.gentleNotes,
+            music = MusicTrack.GAME, scoreUnit = "saves", goal = "Most saves",
+        ) }
     }
 
     val saves = IntArray(2)
@@ -188,8 +199,11 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
     private fun renderLane(g: Gfx, k: Int, inp: PlayerInput, time: Double) {
         val lane = Rect(if (k == 0) 0f else screenW / 2f, 0f, if (k == 0) screenW / 2f else screenW, 1080f)
         g.save(); g.clipRect(lane.left, lane.top, lane.right, lane.bottom)
-        Draw.nightSky(g, lane, time + k)
-        Draw.aurora(g, Rect(lane.left, 0f, lane.right, 460f), time + k * 3, 0.8f)
+        if (env.sporty) g.gradientRect(lane.left, 0f, lane.right, 560f, 0xFF0B2350.toInt(), 0xFF2B5C9E.toInt())
+        else {
+            Draw.nightSky(g, lane, time + k)
+            Draw.aurora(g, Rect(lane.left, 0f, lane.right, 460f), time + k * 3, 0.8f)
+        }
         // stadium stand silhouette with twinkling crowd lights
         g.gradientRect(lane.left, 560f, lane.right, 700f, 0xFF1A2335.toInt(), 0xFF0E1420.toInt())
         for (i in 0 until 26) {
@@ -199,12 +213,13 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
         }
         Draw.floodlight(g, lane.left + 70f, 700f, 330f, lane.cx - 60f, 1000f, 240f)
         Draw.floodlight(g, lane.right - 70f, 700f, 330f, lane.cx + 60f, 1000f, 240f)
-        Draw.stringLights(g, lane.left, lane.right, 130f, time)
+        if (!env.sporty) Draw.stringLights(g, lane.left, lane.right, 130f, time)
         g.gradientRect(lane.left, 700f, lane.right, 1080f, 0xFF2E8B55.toInt(), 0xFF145030.toInt())
         for (i in 0 until 8) g.fillRect(lane.left, 700f + i * 50f, lane.right, 725f + i * 50f, 0x14FFFFFF)
         Draw.lightPool(g, lane.cx, 900f, lane.width * 0.5f, 110f, 0x30FFF6D8)
-        // snow along the edge of the pitch
-        g.fillRoundRectGradient(lane.left, 694f, lane.right, 716f, 10f, Colors.SNOW, 0xFFB0C4DE.toInt())
+        // snow along the edge of the pitch (Christmas) or the white touchline
+        if (env.sporty) g.fillRect(lane.left, 700f, lane.right, 708f, 0xCCFFFFFF.toInt())
+        else g.fillRoundRectGradient(lane.left, 694f, lane.right, 716f, 10f, Colors.SNOW, 0xFFB0C4DE.toInt())
         val gr = goalRect(k)
         // net
         g.fillRectRadial(gr.left, gr.top, gr.right, gr.bottom, gr.cx, gr.cy, gr.width * 0.7f, 0x1AFFFFFF, 0x40000814)
@@ -222,18 +237,19 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
             hands[h * 2] = px; hands[h * 2 + 1] = py
         }
         val (_, shoulderY) = goalPoint(k, 0f, 0f)
-        Draw.buddy(g, gr.cx, shoulderY + 0.6f * 560f * 0.65f, 560f * 0.65f, env.color(k), inp.avatar,
+        Draw.person(g, env.sporty, gr.cx, shoulderY + 0.6f * 560f * 0.65f, 560f * 0.65f, env.color(k), inp.avatar,
             if (saveFlash[k] < 0.6f) Expression.EXCITED else if (goalFlash[k] < 0.6f) Expression.OOPS else Expression.FOCUSED,
             t = time, handTargets = hands, mittenScale = 2.0f)
         for (h in 0..1) g.strokeCircle(hands[h * 2], hands[h * 2 + 1], saveRadius(k) / 1.15f * gr.width / 2f, 3f, Colors.withAlpha(env.color(k), 0.45f))
-        // posts and crossbar (candy cane)
-        for (px in floatArrayOf(gr.left, gr.right)) { g.fillRect(px - 12f, gr.top - 12f, px + 12f, gr.bottom, Colors.WHITE); for (i in 0 until 10) g.fillRect(px - 12f, gr.top + i * 56f, px + 12f, gr.top + i * 56f + 24f, Colors.CANDY) }
+        // posts and crossbar (candy cane at Christmas, plain white otherwise)
+        for (px in floatArrayOf(gr.left, gr.right)) { g.fillRect(px - 12f, gr.top - 12f, px + 12f, gr.bottom, Colors.WHITE); if (!env.sporty) for (i in 0 until 10) g.fillRect(px - 12f, gr.top + i * 56f, px + 12f, gr.top + i * 56f + 24f, Colors.CANDY) }
         g.fillRect(gr.left - 12f, gr.top - 24f, gr.right + 12f, gr.top, Colors.WHITE)
-        for (i in 0 until 14) g.fillRect(gr.left + i * gr.width / 14f, gr.top - 24f, gr.left + i * gr.width / 14f + 24f, gr.top, Colors.CANDY)
+        if (!env.sporty) for (i in 0 until 14) g.fillRect(gr.left + i * gr.width / 14f, gr.top - 24f, gr.left + i * gr.width / 14f + 24f, gr.top, Colors.CANDY)
         // kicker elf in the foreground
         val kickerX = lane.cx + lane.width * 0.28f
         val kickPose = AvatarPose().apply { valid = true; upper[0] = 2.4f; fore[0] = 2.6f; upper[1] = 0.6f; fore[1] = 0.4f }
-        Draw.elf(g, kickerX, 1070f, 300f, kickPose, time, 0f)
+        if (env.sporty) Draw.athlete(g, kickerX, 1070f, 300f, 0xFF424242.toInt(), kickPose, Expression.FOCUSED, t = time, look = 2)
+        else Draw.elf(g, kickerX, 1070f, 300f, kickPose, time, 0f)
         // shots: target marker, then ball flying from the kicker to the goal plane
         for (ls in live[k]) {
             val tx = ls.shot.tx; val ty = targetY(k, ls.shot)
@@ -265,7 +281,14 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
     private fun drawBall(g: Gfx, x: Float, y: Float, r: Float, time: Double) {
         g.fillCircle(x, y, r, Colors.WHITE)
         g.strokeCircle(x, y, r, r * 0.12f, 0xFF263238.toInt())
-        Draw.star(g, x, y, r * 0.55f, Colors.CANDY, time.toFloat() * 4f)
+        if (env.sporty) {
+            // classic football patches
+            g.fillCircle(x, y, r * 0.32f, 0xFF212121.toInt())
+            for (i in 0 until 5) {
+                val a = time.toFloat() * 4f + i * 1.2566f
+                g.fillCircle(x + kotlin.math.cos(a) * r * 0.72f, y + kotlin.math.sin(a) * r * 0.72f, r * 0.2f, 0xFF212121.toInt())
+            }
+        } else Draw.star(g, x, y, r * 0.55f, Colors.CANDY, time.toFloat() * 4f)
     }
 
     override fun demo(g: Gfx, r: Rect, t: Double) {
@@ -273,7 +296,7 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
         val target = floatArrayOf(r.cx + r.width * 0.28f, r.top + r.height * 0.3f)
         val k = clamp01((phase - 0.2f) / 0.4f)
         val hands = floatArrayOf(r.cx - r.width * 0.12f, r.cy + r.height * 0.2f, lerp(r.cx + r.width * 0.12f, target[0], k), lerp(r.cy + r.height * 0.2f, target[1], k))
-        Draw.buddy(g, r.cx, r.bottom + r.height * 0.1f, r.height * 1.0f, env.color(1), null, Expression.FOCUSED, t = t, handTargets = hands, mittenScale = 2f)
+        Draw.person(g, env.sporty, r.cx, r.bottom + r.height * 0.1f, r.height * 1.0f, env.color(1), null, Expression.FOCUSED, t = t, handTargets = hands, mittenScale = 2f)
         g.strokeCircle(target[0], target[1], 30f, 5f, Colors.GOLD)
         if (phase > 0.4f) drawBall(g, lerp(r.left + 40f, target[0], clamp01((phase - 0.4f) / 0.3f)), lerp(r.bottom - 30f, target[1], clamp01((phase - 0.4f) / 0.3f)), 18f, t)
     }

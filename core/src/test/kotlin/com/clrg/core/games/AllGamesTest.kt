@@ -71,7 +71,7 @@ class AllGamesTest {
 
     @Test
     fun activePlayerBeatsIdlePlayer() {
-        for (id in listOf("tennis", "tabletennis", "catch", "reindeer", "bowling", "dance", "slalom", "goalie", "tree", "snowball", "clays", "boxing", "archery")) {
+        for (id in listOf("tennis", "tabletennis", "catch", "reindeer", "bowling", "dance", "slalom", "goalie", "tree", "snowball", "clays", "boxing", "archery", "gallery", "darts", "goalie_s")) {
             val d = play(id, floatArrayOf(0.95f, -1f))
             val r = d.game.result()
             assertEquals(0, r.winner, "$id: active player should win, got ${r.scores.toList()} ${r.details}")

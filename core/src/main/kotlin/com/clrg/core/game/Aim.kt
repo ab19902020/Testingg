@@ -43,9 +43,10 @@ class AimCursor {
     fun reset() { seen = false; fx.reset(); fy.reset(); hN = 0; centreX = Float.NaN; centreY = Float.NaN; x = 0f; y = 0f; bx = 0f; by = 0f; offX = 0f; offY = 0f }
 
     /** Half the screen width in view units for a [width] x 1080 screen. */
-    fun halfWidth(width: Float) = width / 2f
+    /** Half the width (view units) the crosshair covers: 960 for the whole screen, 480 for one half of a split screen. */
+    var halfWidth = 540f * ASPECT
 
-    private fun gainX(mode: MovementMode) = 540f * ASPECT / (if (mode == MovementMode.STANDARD) BOX_HALF_W else BOX_HALF_W * GENTLE_BOX)
+    private fun gainX(mode: MovementMode) = halfWidth / (if (mode == MovementMode.STANDARD) BOX_HALF_W else BOX_HALF_W * GENTLE_BOX)
     private fun gainY(mode: MovementMode) = 540f / (if (mode == MovementMode.STANDARD) BOX_HALF_H else BOX_HALF_H * GENTLE_BOX)
 
     /** Default "straight ahead" for the gun hand: in front of that shoulder, at shoulder height. */
@@ -66,7 +67,7 @@ class AimCursor {
         val (dx0, dy0) = defaultCentre(inp.gunHand)
         val cx = if (centreX.isNaN()) dx0 else centreX
         val cy = if (centreY.isNaN()) dy0 else centreY
-        val lim = 540f * ASPECT * 1.02f
+        val lim = halfWidth * 1.02f
         return ((ax - cx) * gainX(inp.mode)).coerceIn(-lim, lim) to (-(ay - cy) * gainY(inp.mode)).coerceIn(-560f, 560f)
     }
 

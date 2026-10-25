@@ -74,7 +74,7 @@ class ArcheryGame(env: GameEnv) : MiniGame(env) {
     val arrows = ArrayList<Arrow>()
     val shots = IntArray(2)
     val tens = IntArray(2)
-    val aim = arrayOf(AimCursor(), AimCursor())
+    val aim = arrayOf(AimCursor(), AimCursor()).onEach { it.halfWidth = 480f }
     private val windSign = if (env.rng(77).chance(0.5f)) 1f else -1f
     private val arrowClock = DoubleArray(2)
     private val doneAt = DoubleArray(2) { Double.NaN }
