@@ -13,6 +13,12 @@ import kotlin.math.sign
 /** Discrete gesture events. Times are in seconds on the pose clock. */
 sealed class GestureEvent(val t: Double, val hand: Int) {
     /**
+     * Game play time at which the player made this gesture, as they saw the game (camera and display delays taken
+     * off). Set when the event is handed to a game; NaN means "now" (computer players, scripted input).
+     */
+    var at: Double = Double.NaN
+
+    /**
      * Fast arm swing. dirX/dirY: unit direction on screen (x right, y up). power 0..1.
      * forehand: swing with the playing hand moving across the body from its own side.
      */
@@ -101,9 +107,34 @@ class SwingDetector {
         val playing = if (tune.hand == Hand.RIGHT) RIGHT else LEFT
         val acrossDir = if (bestHand == RIGHT) -1f else 1f
         val forehand = if (bestHand == playing) sign(dx) == acrossDir else sign(dx) != acrossDir
-        out.add(GestureEvent.Swing(now.t, bestHand, dx / len, dy / len, power, forehand))
+        out.add(GestureEvent.Swing(peakTime(h, bestHand, now.t), bestHand, dx / len, dy / len, power, forehand))
         armed[0] = false; armed[1] = false
         cooldownUntil = now.t + tune.swingCooldown
+    }
+
+    /**
+     * When the swing happened: the moment the hand moved fastest (where a racket meets the ball), looked up in the
+     * last [PEAK_SEARCH_SEC]. A swing is only recognised once enough distance has been covered, which is usually a
+     * little after that moment; stamping the event with the fastest moment keeps the judged timing independent of
+     * how quickly the detector fired.
+     */
+    private fun peakTime(h: BodyHistory, hand: Int, fallback: Double): Double {
+        val nowT = h.latest?.t ?: return fallback
+        var best = -1f
+        var t = fallback
+        for (k in 0 until h.size - 1) {
+            val a = h.get(k); val b = h.get(k + 1)
+            if (nowT - b.t > PEAK_SEARCH_SEC) break
+            val dt = (a.t - b.t).toFloat()
+            if (dt <= 0f) continue
+            val v = hypot(a.wx[hand] - b.wx[hand], a.wy[hand] - b.wy[hand]) / dt
+            if (v > best) { best = v; t = (a.t + b.t) / 2.0 }
+        }
+        return t
+    }
+
+    companion object {
+        const val PEAK_SEARCH_SEC = 0.25
     }
 }
 
@@ -217,8 +248,8 @@ class LeanTracker {
         var v = r / tune.leanRange
         v = if (abs(v) < tune.leanDeadZone) 0f else (v - sign(v) * tune.leanDeadZone) / (1f - tune.leanDeadZone)
         v = clamp(v, -1f, 1f)
-        // light smoothing; fast enough for steering
-        val a = clamp(dt / 0.08f, 0f, 1f)
+        // light smoothing (the landmarks are already smoothed); quick enough for steering
+        val a = clamp(dt / 0.05f, 0f, 1f)
         value += a * (v - value)
     }
 }

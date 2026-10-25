@@ -23,14 +23,19 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
     override val info = INFO
 
     override val cfg = Config(
-        gravity = 2.8f, netH = 0.11f, hitH = 0.2f, window = 0.32f,
-        slowFlight = 1.3f, fastFlight = 0.85f, speedupPerHit = 0.025f, minFlightFactor = 0.72f,
+        // a big court and unhurried shots: plenty of time to see the ball coming and swing
+        gravity = 2.8f, netH = 0.11f, hitH = 0.2f, window = 0.36f,
+        slowFlight = 1.5f, fastFlight = 1.0f, speedupPerHit = 0.022f, minFlightFactor = 0.74f,
         pointsToWin = 7, serveEvery = 1, restitution = 0.72f, friction = 0.9f,
         homeX = 0.95f, moveSpeed = 3.2f, racketReach = 0.09f, autoServeSec = 8f,
+        windowShrinkPerHit = 0.032f, minWindowFactor = 0.55f, maxCourtX = 1.2f,
     )
 
     private val groundY = 850f
-    private fun unit() = screenW * 0.3f
+    /** Court depth on screen: back and front edges above/below [groundY]. */
+    private val back = 88f
+    private val front = 74f
+    private fun unit() = screenW * 0.355f
     override fun toScreenX(x: Float) = screenW / 2f + x * unit()
     override fun toScreenY(h: Float) = groundY - h * unit()
 
@@ -60,29 +65,29 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
         Draw.stringLights(g, 0f, w, 10f, time)
         // court
         val l = toScreenX(-1f); val r = toScreenX(1f)
-        val apron = floatArrayOf(l - 130f, groundY + 95f, r + 130f, groundY + 95f, r + 10f, groundY - 95f, l - 10f, groundY - 95f)
-        g.fillPolygonGradient(apron, 4, groundY - 95f, groundY + 95f, 0xFF2E6F8E.toInt(), 0xFF1B4F6B.toInt())
-        val pts = floatArrayOf(l - 70f, groundY + 60f, r + 70f, groundY + 60f, r - 30f, groundY - 70f, l + 30f, groundY - 70f)
-        g.fillPolygonGradient(pts, 4, groundY - 70f, groundY + 60f, 0xFFD24B43.toInt(), 0xFF962A2A.toInt())
-        Draw.lightPool(g, w / 2f, groundY - 5f, (r - l) * 0.55f, 70f, 0x33FFF6D8)
+        val apron = floatArrayOf(l - 150f, groundY + front + 40f, r + 150f, groundY + front + 40f, r + 10f, groundY - back - 28f, l - 10f, groundY - back - 28f)
+        g.fillPolygonGradient(apron, 4, groundY - back - 28f, groundY + front + 40f, 0xFF2E6F8E.toInt(), 0xFF1B4F6B.toInt())
+        val pts = floatArrayOf(l - 85f, groundY + front, r + 85f, groundY + front, r - 36f, groundY - back, l + 36f, groundY - back)
+        g.fillPolygonGradient(pts, 4, groundY - back, groundY + front, 0xFFD24B43.toInt(), 0xFF962A2A.toInt())
+        Draw.lightPool(g, w / 2f, groundY - 5f, (r - l) * 0.55f, 85f, 0x33FFF6D8)
         g.polyline(pts, 4, 6f, Colors.WHITE, closed = true)
-        g.line(l - 30f, groundY - 40f, r + 30f, groundY - 40f, 3f, 0x66FFFFFF)
-        g.line(l - 52f, groundY + 34f, r + 52f, groundY + 34f, 3f, 0x66FFFFFF)
-        g.line(w / 2f, groundY - 70f, w / 2f, groundY + 60f, 4f, 0x99FFFFFF.toInt())
-        for (x in floatArrayOf(-0.55f, 0.55f)) g.line(toScreenX(x) - 10f, groundY - 70f, toScreenX(x) + 10f, groundY + 60f, 4f, 0x88FFFFFF.toInt())
+        g.line(l - 36f, groundY - back * 0.57f, r + 36f, groundY - back * 0.57f, 3f, 0x66FFFFFF)
+        g.line(l - 63f, groundY + front * 0.57f, r + 63f, groundY + front * 0.57f, 3f, 0x66FFFFFF)
+        g.line(w / 2f, groundY - back, w / 2f, groundY + front, 4f, 0x99FFFFFF.toInt())
+        for (x in floatArrayOf(-0.55f, 0.55f)) g.line(toScreenX(x) - 12f, groundY - back, toScreenX(x) + 12f, groundY + front, 4f, 0x88FFFFFF.toInt())
         // highlight the side that must hit next
         val rcv = receiver
         if (state == State.RALLY && rcv >= 0) {
             val a = 0.15f + 0.1f * sin((time * 8).toFloat())
-            val x0 = if (rcv == 0) l - 70f else w / 2f
-            val x1 = if (rcv == 0) w / 2f else r + 70f
-            g.fillRect(x0, groundY - 70f, x1, groundY + 60f, Colors.withAlpha(env.color(rcv), a))
+            val x0 = if (rcv == 0) l - 85f else w / 2f
+            val x1 = if (rcv == 0) w / 2f else r + 85f
+            g.fillRect(x0, groundY - back, x1, groundY + front, Colors.withAlpha(env.color(rcv), a))
         }
         // characters (behind the net for depth)
         for (k in 0..1) drawPlayer(g, k, inputs[k], time)
         // net in perspective: spans the court from back to front, with mesh and tinsel along the top
         val nh = cfg.netH * unit() * 1.4f
-        val bxN = w / 2f; val backY = groundY - 70f; val frontY = groundY + 60f
+        val bxN = w / 2f; val backY = groundY - back; val frontY = groundY + front
         val net = floatArrayOf(bxN + 12f, backY, bxN - 12f, frontY, bxN - 12f, frontY - nh, bxN + 12f, backY - nh)
         g.fillPolygon(net, 4, 0x55FFFFFF)
         for (i in 1 until 6) {
@@ -140,7 +145,7 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
             isReceiver -> Expression.FOCUSED
             else -> Expression.HAPPY
         }
-        Draw.buddy(g, x, groundY, 300f, c, pose, expr, Prop.RACKET, input.dominant, time)
+        Draw.buddy(g, x, groundY, 320f, c, pose, expr, Prop.RACKET, input.dominant, time)
         if (swingAge[k] < 0.25f) {
             val a = 1f - swingAge[k] / 0.25f
             val dir = if (k == 0) 1f else -1f

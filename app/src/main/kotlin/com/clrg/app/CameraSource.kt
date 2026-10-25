@@ -269,12 +269,19 @@ class CameraSource(private val context: Context) {
                     session = s
                     val range = chooseFps(info.id, wantHighFps)
                     highFps = (range?.upper ?: 30) >= 60
-                    val req = cam.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                    // preview template: frame rate and low delay before post-processing quality (the record template
+                    // may add multi-frame noise reduction, which delays frames and smears fast-moving arms)
+                    val chars = manager.getCameraCharacteristics(info.id)
+                    val req = cam.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                         addTarget(r.surface)
                         range?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
                         set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
                         set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                         set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
+                        if (chars.get(CameraCharacteristics.NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES)?.contains(CaptureRequest.NOISE_REDUCTION_MODE_FAST) == true)
+                            set(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_FAST)
+                        if (chars.get(CameraCharacteristics.EDGE_AVAILABLE_EDGE_MODES)?.contains(CaptureRequest.EDGE_MODE_FAST) == true)
+                            set(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_FAST)
                         if (Build.VERSION.SDK_INT >= 30 && wantWide && info.zoomMin < 0.99f) set(CaptureRequest.CONTROL_ZOOM_RATIO, info.zoomMin)
                     }
                     requestBuilder = req

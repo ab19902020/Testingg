@@ -40,6 +40,13 @@ data class Settings(
     var quality: QualityMode = QualityMode.AUTO,
     /** Let the camera run at 60 fps when the phone keeps up (smoother, quicker tracking; a little more heat). */
     var highFpsCamera: Boolean = true,
+    /**
+     * Delay between the game drawing a frame and the players seeing it, plus their usual reaction habit (ms): the
+     * phone display and the TV. Measured by the timing test; timing games allow for it.
+     */
+    var displayDelayMs: Int = 60,
+    /** True once the timing test has measured [displayDelayMs] (otherwise it is a typical default). */
+    var timingMeasured: Boolean = false,
     // display
     var preferTvAsSecondScreen: Boolean = true,
     var showCameraInset: Boolean = true,
@@ -53,13 +60,16 @@ data class Settings(
             "v" to 1, "musicVolume" to musicVolume, "sfxVolume" to sfxVolume, "highContrast" to highContrast,
             "reducedEffects" to reducedEffects, "largeText" to largeText, "captions" to captions, "dwellSeconds" to dwellSeconds,
             "gestureSensitivity" to gestureSensitivity, "steeringOnlySlalom" to steeringOnlySlalom, "cpuLevel" to cpuLevel, "cameraId" to cameraId,
-            "wideAngle" to wideAngle, "mirror" to mirror, "quality" to quality.name, "highFpsCamera" to highFpsCamera, "preferTvAsSecondScreen" to preferTvAsSecondScreen,
+            "wideAngle" to wideAngle, "mirror" to mirror, "quality" to quality.name, "highFpsCamera" to highFpsCamera,
+            "displayDelayMs" to displayDelayMs, "timingMeasured" to timingMeasured, "preferTvAsSecondScreen" to preferTvAsSecondScreen,
             "showCameraInset" to showCameraInset, "devOverlay" to devOverlay, "skeletonOverlay" to skeletonOverlay,
         ),
     )
 
     companion object {
         const val KEY = "settings"
+        const val MIN_DELAY_MS = -100
+        const val MAX_DELAY_MS = 400
 
         fun fromJson(text: String?): Settings {
             val o = JObj.parse(text) ?: return Settings()
@@ -80,6 +90,8 @@ data class Settings(
                 mirror = o.bool("mirror", d.mirror),
                 quality = runCatching { QualityMode.valueOf(o.str("quality", d.quality.name)) }.getOrDefault(d.quality),
                 highFpsCamera = o.bool("highFpsCamera", d.highFpsCamera),
+                displayDelayMs = o.int("displayDelayMs", d.displayDelayMs).coerceIn(MIN_DELAY_MS, MAX_DELAY_MS),
+                timingMeasured = o.bool("timingMeasured", d.timingMeasured),
                 preferTvAsSecondScreen = o.bool("preferTvAsSecondScreen", d.preferTvAsSecondScreen),
                 showCameraInset = o.bool("showCameraInset", d.showCameraInset),
                 devOverlay = o.bool("devOverlay", d.devOverlay),

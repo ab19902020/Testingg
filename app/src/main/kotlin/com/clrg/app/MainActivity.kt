@@ -39,6 +39,8 @@ class MainActivity : Activity() {
         CrashReporter.install(this)
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // ask a connected TV for its low-delay game mode (HDMI ALLM / game content type) where supported
+        if (Build.VERSION.SDK_INT >= 30) window.setPreferMinimalPostProcessing(true)
         val crashReport = try { CrashReporter.collect(this) } catch (t: Throwable) { null }
         store = PrefsStore(this)
         audioEngine = AudioEngine(48000)

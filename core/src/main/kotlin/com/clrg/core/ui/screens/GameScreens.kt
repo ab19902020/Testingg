@@ -46,7 +46,7 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
                 PlayerInfo(k, prof.id, prof.name, app.playerColor(k), cal?.dominantHand ?: prof.hand ?: Hand.RIGHT, cal?.mode ?: prof.mode)
             }
         }
-        val env = GameEnv(players, app.settings.copy(), seed, app.audio, app.platform::nowNanos)
+        val env = GameEnv(players, app.settings.copy(), seed, app.audio, app.platform::nowNanos, app.timing)
         val game = entry.create(env)
         session = GameSession(game, env)
         session.allowWithoutTracking = app.settings.simulatedInput && app.sim.autoplay

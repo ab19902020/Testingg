@@ -106,16 +106,21 @@ class DanceOffGame(env: GameEnv) : MiniGame(env) {
         for (k in 0..1) lastGradeTime[k] += dt
         if (judgeIndex >= cues.size) return
         val cue = cues[judgeIndex]
+        var maxLag = 0f
         for (k in 0..1) {
+            // a camera player's pose reaches the game a little after they strike it: compare it with the beat they
+            // were dancing to at that moment
+            val lagBeats = (avatarLag(k) / spb).toFloat()
+            maxLag = maxOf(maxLag, lagBeats)
             val sim = if (inputs[k].tracked) cue.shape.similarity(inputs[k].avatar, tolerance(k)) else 0f
             liveSim[k] = sim
-            val off = abs(beat - cue.beat)
+            val off = abs(beat - lagBeats - cue.beat)
             if (off <= WINDOW_BEATS) {
                 val v = sim * (1f - 0.35f * off / WINDOW_BEATS)
                 if (v > best[k]) best[k] = v
             }
         }
-        if (beat > cue.beat + WINDOW_BEATS) {
+        if (beat - maxLag > cue.beat + WINDOW_BEATS) {
             for (k in 0..1) {
                 val g = when {
                     best[k] >= 0.8f -> Grade.PERFECT

@@ -20,6 +20,11 @@ import kotlin.math.sqrt
  * Aiming rule (shown in the instructions): the ball is returned automatically toward the opponent; *when* you swing
  * sets the shot. On time = deep, fast shot. A little early = deeper, a little late = shorter. Far too early = long
  * (OUT), far too late = into the NET. No swing = miss.
+ *
+ * Timing is judged by when the swing was *made*: a camera player's swing arrives a little after they make it
+ * (camera, tracking) and they react to a picture that is a little old (phone display, TV), so the swing is compared
+ * with where the ball was at that moment, the ball is returned from there, and a miss is only called once a swing
+ * that was made in time could no longer be on its way ([inputGrace]).
  */
 abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     class Config(
@@ -44,6 +49,8 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
         /** How fast the timing window tightens per hit in a rally, and its floor. */
         val windowShrinkPerHit: Float = 0.025f,
         val minWindowFactor: Float = 0.6f,
+        /** Furthest a character runs from the net (court units), so they stay on screen. */
+        val maxCourtX: Float = 1.3f,
     )
 
     enum class State { SERVE, RALLY, POINT_OVER, MATCH_OVER }
@@ -92,6 +99,28 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     private var pointsPlayed = 0
     protected val rng = env.rng(11)
 
+    // recent ball positions (one per simulation step) so a swing can be judged against where the ball was
+    private val histT = DoubleArray(HISTORY)
+    private val histX = FloatArray(HISTORY)
+    private val histH = FloatArray(HISTORY)
+    private var histHead = -1
+    private var histSize = 0
+
+    private fun recordBall() {
+        histHead = (histHead + 1) % HISTORY
+        histT[histHead] = playTime; histX[histHead] = bx; histH[histHead] = bh
+        if (histSize < HISTORY) histSize++
+    }
+
+    /** Index into the history of the newest ball position at or before play time [t] (-1 if none). */
+    private fun ballIndexAt(t: Double): Int {
+        for (k in 0 until histSize) {
+            val i = ((histHead - k) % HISTORY + HISTORY) % HISTORY
+            if (histT[i] <= t + 1e-9) return i
+        }
+        return -1
+    }
+
     override fun start() {
         px[0] = -cfg.homeX; px[1] = cfg.homeX
         server = 0
@@ -128,15 +157,18 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
             }
             State.RALLY -> {
                 stepBall(dt)
+                recordBall()
                 val r = receiver
                 if (r >= 0 && !hitTime.isNaN()) {
-                    val e = ((playTime - hitTime) / window()).toFloat()
                     val s = swings[r]
                     if (s != null) {
-                        if (e < -1f) onTooEarly(r) else if (e <= 1f) hit(r, e, s)
-                    } else if (e > 1.15f && state == State.RALLY) {
-                        endPoint(1 - r, PointReason.MISSED)
+                        val at = madeAt(s)
+                        val e = ((at - hitTime) / window()).toFloat()
+                        if (e < -1f) onTooEarly(r) else if (e <= 1f) hit(r, e, s, at)
                     }
+                    // no swing that was made in time can still be on its way: missed
+                    val eLatest = ((playTime - inputGrace(r) - hitTime) / window()).toFloat()
+                    if (eLatest > 1.15f && state == State.RALLY && receiver == r) endPoint(1 - r, PointReason.MISSED)
                 }
                 moveCharacters(dt)
             }
@@ -167,7 +199,7 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     abstract fun toScreenY(h: Float): Float
 
     protected fun popup(text: String, player: Int, size: Float = 50f) =
-        env.popups.add(text, toScreenX(px[player]), toScreenY(0.55f), env.color(player), size)
+        env.popups.add(text, toScreenX(px[player]).coerceIn(240f, screenW - 240f), toScreenY(0.55f), env.color(player), size)
 
     private fun serve(power: Float, auto: Boolean) {
         val target = 1 - server
@@ -263,24 +295,28 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
         hitX = bx + vx * tau
     }
 
-    private fun hit(player: Int, e: Float, s: GestureEvent.Swing) {
+    private fun hit(player: Int, e: Float, s: GestureEvent.Swing, at: Double) {
         val q = clamp(1f - abs(e), 0f, 1f)
         rally++
         longestRally = max(longestRally, rally)
         val target = 1 - player
         val modifier = shotModifier(player, s, q)
+        // return the ball from where it was when the swing was made (it may have flown on while the swing arrived)
+        val i = if (at < playTime) ballIndexAt(at) else -1
+        val fromX = if (i >= 0) histX[i] else bx
+        val fromH = if (i >= 0) histH[i] else bh
         when {
             e < -0.7f -> {
-                launch(player, bx, max(bh, cfg.hitH), dirToward(target) * 1.2f, flightTime(q, s.power) * 0.9f, net = false)
+                launch(player, fromX, max(fromH, cfg.hitH), dirToward(target) * 1.2f, flightTime(q, s.power) * 0.9f, net = false)
                 popup("Too early!", player)
             }
             e > 0.7f -> {
-                launch(player, bx, max(bh, cfg.hitH * 0.7f), dirToward(target) * 0.3f, 0.5f, net = true)
+                launch(player, fromX, max(fromH, cfg.hitH * 0.7f), dirToward(target) * 0.3f, 0.5f, net = true)
                 popup("Too late!", player)
             }
             else -> {
                 val landFrac = clamp(0.62f - 0.4f * e + modifier.depthBonus, 0.25f, 0.97f)
-                launch(player, bx, max(bh, cfg.hitH), dirToward(target) * landFrac, flightTime(q, s.power) * modifier.timeFactor, net = false)
+                launch(player, fromX, max(fromH, cfg.hitH), dirToward(target) * landFrac, flightTime(q, s.power) * modifier.timeFactor, net = false)
                 onGoodHit(player, q, modifier)
             }
         }
@@ -325,7 +361,7 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
                 state == State.RALLY && receiver == k -> predictedLanding(k)
                 else -> d * cfg.homeX
             }
-            val clampT = clamp(target * d, 0.35f, 1.3f) * d
+            val clampT = clamp(target * d, 0.35f, cfg.maxCourtX) * d
             px[k] += clamp(clampT - px[k], -cfg.moveSpeed * dt, cfg.moveSpeed * dt)
         }
     }
@@ -384,6 +420,11 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     }
 
     override val isOver: Boolean get() = state == State.MATCH_OVER
+
+    companion object {
+        /** Ball positions kept for judging late-arriving swings: 0.6 s at 120 steps per second. */
+        private const val HISTORY = 72
+    }
 
     override fun result(): MatchResult = MatchResult(
         info.id, scores.copyOf(), winnerOf(scores[0], scores[1]), info.scoreUnit,

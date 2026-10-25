@@ -19,7 +19,7 @@ class AllGamesTest {
         val rngs = arrayOf(Rng(seeds[0]), Rng(seeds[1]))
         var nextShot = 0
         val shotTimes = doubleArrayOf(6.0, 20.0)
-        d.runUntilOver(260.0) { t ->
+        d.runUntilOver(420.0) { t ->
             for (k in 0..1) if (skills[k] >= 0f) d.game.autoplay(k, d.inputs[k], skills[k], rngs[k]) else idle(d, k)
             if (shots && nextShot < shotTimes.size && t >= shotTimes[nextShot]) { d.screenshot("${id}_${nextShot}"); nextShot++ }
         }

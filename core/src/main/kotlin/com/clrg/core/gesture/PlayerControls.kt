@@ -211,7 +211,7 @@ class PlayerControls(val playerIndex: Int) {
 
     companion object {
         /** Longest time the shown pose is moved forward (s). */
-        const val MAX_LEAD = 0.09f
+        const val MAX_LEAD = 0.12f
         /** Fraction of the full extrapolation used (damps overshoot when a movement stops). */
         const val LEAD_GAIN = 0.75f
         /** Largest forward shift of a joint (S units). */

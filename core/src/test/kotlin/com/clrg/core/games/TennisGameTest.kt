@@ -33,7 +33,7 @@ class TennisGameTest {
     @Test
     fun farTooEarlyGoesOutAndFarTooLateHitsTheNet() {
         val d = GameDriver(::TennisGame)
-        // P2 swings 0.27 s early (beyond 70% of the 0.32 s window) -> long -> OUT -> point to P1
+        // P2 swings 0.27 s early (beyond 70% of the 0.36 s window) -> long -> OUT -> point to P1
         d.run(8.0) { d.autoSwing(0); d.autoSwing(1, offset = -0.27) }
         assertEquals(1, d.game.scores[0], "early return should be out")
         assertEquals(RallyGame.PointReason.OUT, d.game.pointReason)

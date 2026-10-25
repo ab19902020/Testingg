@@ -43,6 +43,8 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
     val ui = Ui(theme) { audio.play(it, 0.5f) }
     val sim = SimulatedInput()
     val devOverlay = DevOverlay(this)
+    /** Camera and display delays: timing games judge movements by when they were made. */
+    val timing = com.clrg.core.game.InputTiming()
 
     /** Who is playing as P1 (left) and P2 (right) right now. */
     val activePlayers = arrayOf(roster.players[0], roster.players[1])
@@ -138,6 +140,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         theme.largeText = settings.largeText
         ui.dwellSeconds = settings.dwellSeconds
         controls.forEach { it.sensitivity = settings.gestureSensitivity }
+        timing.displayDelay = settings.displayDelayMs / 1000.0
         platform.applySettings(settings)
         platform.setSimulatedInput(settings.simulatedInput)
     }
@@ -270,14 +273,19 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         handleLifecycle()
 
         // 1) tracking: every pending pose frame goes through the tracker and the gesture detectors
+        timing.poseNow = nowNanos / 1e9
         if (settings.simulatedInput) {
+            // simulated poses have their own clock and no camera or TV: judged as they arrive
+            timing.enabled = false
             poseQueue.clear()
             for (f in sim.update(dt)) feedPose(f)
         } else {
+            timing.enabled = true
             while (true) {
                 val f = poseQueue.poll() ?: break
                 feedPose(f)
-                lastPoseLatencyMs = (nowNanos - f.processedNanos) / 1e6f + (f.processedNanos - f.timestampNanos) / 1e6f
+                lastPoseLatencyMs = (nowNanos - f.timestampNanos) / 1e6f
+                timing.observe((nowNanos - f.timestampNanos) / 1e9)
             }
         }
 

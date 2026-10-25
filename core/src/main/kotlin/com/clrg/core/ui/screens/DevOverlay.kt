@@ -14,7 +14,8 @@ class DevOverlay(private val app: GameApp) {
         lines += "Camera %.0f fps   Inference %.0f fps".format(p.cameraFps, p.inferenceFps)
         lines += "Pose %.1f ms (prep %.1f, det %.1f, lm %.1f)".format(p.inferenceMs, p.preprocessMs, p.detectorMs, p.landmarkMs)
         lines += if (p.captureToResultMs.isNaN()) "Capture->pose: n/a" else "Capture->pose %.0f ms".format(p.captureToResultMs)
-        lines += if (app.lastPoseLatencyMs.isNaN()) "Capture->game: n/a" else "Capture->game %.0f ms".format(app.lastPoseLatencyMs)
+        lines += if (app.lastPoseLatencyMs.isNaN()) "Capture->game: n/a" else "Capture->game %.0f ms (avg %.0f, high %.0f)".format(app.lastPoseLatencyMs, app.timing.pipeline * 1000, app.timing.pipelineHigh * 1000)
+        lines += "TV allowance %d ms%s  timing wait %.0f ms".format(app.settings.displayDelayMs, if (app.settings.timingMeasured) " (measured)" else "", app.timing.grace * 1000)
         lines += "${p.delegate} | ${p.model} | ${p.inputSize}"
         lines += "Thermal ${p.thermal} | adapt ${p.adaptiveLevel}"
         lines += "Dropped cam ${p.droppedFrames}  pose ${app.droppedPoseFrames}"

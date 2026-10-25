@@ -93,6 +93,8 @@ class DisplayRouter(private val activity: Activity, private val onChange: () -> 
     private class GamePresentation(ctx: Context, display: Display, private val onSurface: (SurfaceHolder?) -> Unit) : Presentation(ctx, display) {
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
+            // low-delay game mode on the TV (HDMI ALLM / game content type) where the TV and phone support it
+            if (android.os.Build.VERSION.SDK_INT >= 30) window?.setPreferMinimalPostProcessing(true)
             val view = SurfaceView(context)
             view.holder.addCallback(object : SurfaceHolder.Callback {
                 override fun surfaceCreated(holder: SurfaceHolder) = onSurface(holder)

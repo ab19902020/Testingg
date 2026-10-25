@@ -1,7 +1,10 @@
 package com.clrg.app
 
 import android.graphics.Canvas
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
+import android.view.Choreographer
 import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
@@ -18,8 +21,12 @@ object SurfaceLock
 
 /**
  * Render thread. Draws the game (virtual 1080-unit-high canvas) on the TV surface when the TV is used as a second
- * screen, otherwise on the phone surface (which is mirrored to the TV). Rendering is paced to the display and capped
- * at 60 fps; game simulation inside GameApp uses its own fixed time step.
+ * screen, otherwise on the phone surface (which is mirrored to the TV). Game simulation inside GameApp uses its own
+ * fixed time step.
+ *
+ * Frames are started on the display's vsync (Choreographer) and capped at about 60 fps. Drawing right after vsync
+ * means each frame is shown at the next refresh instead of waiting in a queue of finished frames, which a free-running
+ * loop builds up (adding up to two frames, ~33 ms, of delay between a movement and the picture).
  */
 class GameRenderer(private val app: GameApp, private val router: DisplayRouter, private val power: android.os.PowerManager) {
     @Volatile private var phoneHolder: SurfaceHolder? = null
@@ -52,41 +59,64 @@ class GameRenderer(private val app: GameApp, private val router: DisplayRouter, 
 
     fun shutdown() {
         running = false
+        handler?.post { Looper.myLooper()?.quitSafely() }
         thread?.join(1000)
         thread = null
     }
 
+    private var lastVsync = 0L
+    private var lastDrawn = 0L
+    /** Measured time between vsyncs (ns); 60 Hz until known. */
+    private var vsyncPeriod = 16_666_667L
+    @Volatile private var handler: Handler? = null
+
     private fun loop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY)
-        var last = System.nanoTime()
-        while (running) {
-            try {
-                if (!active) { Thread.sleep(30); last = System.nanoTime(); continue }
-                var drew = false
-                synchronized(SurfaceLock) {
-                    val tv = router.tvHolder
-                    val phone = phoneHolder
-                    val target = tv ?: phone
-                    if (target != null) {
-                        phoneShowsGame = tv == null
-                        drawGame(target, tv == null)
-                        if (tv != null && phone != null && frame % 3 == 0L) drawCompanion(phone)
-                        drew = true
-                    }
+        Looper.prepare()
+        val h = Handler(Looper.myLooper()!!)
+        handler = h
+        val choreographer = Choreographer.getInstance()
+        val callback = object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                if (!running) { Looper.myLooper()?.quitSafely(); return }
+                if (!active) {
+                    // paused: no vsync callbacks needed, check again shortly
+                    lastVsync = 0L
+                    h.postDelayed({ choreographer.postFrameCallback(this) }, 50)
+                    return
                 }
-                if (!drew) { Thread.sleep(16); continue }
-                frame++
-                // cap at ~60 fps (TVs run at 60 Hz; saves power and heat on 120 Hz phones); 30 fps when the phone is hot
-                val hot = power.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_SEVERE
-                val now = System.nanoTime()
-                val wait = (if (hot) 33_000_000L else 16_000_000L) - (now - last)
-                if (wait > 1_000_000L) Thread.sleep(wait / 1_000_000L)
-                last = System.nanoTime()
-            } catch (t: Throwable) {
-                // never let one bad frame take the whole game down; slow down so a persistent error can't spin
-                Log.e("GameRenderer", "render loop", t)
-                try { Thread.sleep(100) } catch (_: InterruptedException) {}
+                choreographer.postFrameCallback(this)
+                onVsync(frameTimeNanos)
             }
+        }
+        choreographer.postFrameCallback(callback)
+        Looper.loop()
+    }
+
+    private fun onVsync(frameTimeNanos: Long) {
+        if (lastVsync != 0L) {
+            val d = frameTimeNanos - lastVsync
+            if (d in 4_000_000L..40_000_000L) vsyncPeriod += (d - vsyncPeriod) / 8
+        }
+        lastVsync = frameTimeNanos
+        // ~60 fps on any refresh rate (TVs run at 60 Hz; saves power and heat on 120 Hz phones); 30 fps when hot
+        val hot = power.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_SEVERE
+        val target = if (hot) 33_333_333L else 16_666_667L
+        if (lastDrawn != 0L && frameTimeNanos - lastDrawn < target - vsyncPeriod / 2) return
+        lastDrawn = frameTimeNanos
+        try {
+            synchronized(SurfaceLock) {
+                val tv = router.tvHolder
+                val phone = phoneHolder
+                val surfaceTarget = tv ?: phone ?: return
+                phoneShowsGame = tv == null
+                drawGame(surfaceTarget, tv == null)
+                if (tv != null && phone != null && frame % 3 == 0L) drawCompanion(phone)
+            }
+            frame++
+        } catch (t: Throwable) {
+            // never let one bad frame take the whole game down
+            Log.e("GameRenderer", "render frame", t)
         }
     }
 

@@ -78,6 +78,8 @@ class GameEnv(
     val audio: AudioEngine? = null,
     /** Monotonic clock (ns) - for music-synchronised games. */
     val clock: () -> Long = System::nanoTime,
+    /** Camera and display delays, for judging timing by when a movement was made (off by default). */
+    val timing: InputTiming = InputTiming(),
 ) {
     val particles = Particles().also { it.reduced = settings.reducedEffects }
     val popups = Popups()
@@ -189,6 +191,18 @@ abstract class MiniGame(val env: GameEnv) {
 
     /** Text for the current status line under the HUD, e.g. "Holly to serve". */
     open fun status(): String? = null
+
+    /** Play time at which [e] was made (as the player saw the game); "now" for computer and scripted players. */
+    protected fun madeAt(e: GestureEvent): Double = if (e.at.isNaN()) playTime else minOf(e.at, playTime)
+
+    /**
+     * Extra time to wait after a deadline before deciding that camera player [k] did not react: their movement may
+     * still be on its way through the camera and the TV. Zero for computer players.
+     */
+    protected fun inputGrace(k: Int): Double = if (env.players[k].cpu) 0.0 else env.timing.grace
+
+    /** How far behind the real body the avatar/hand data of player [k] are (zero for computer players). */
+    protected fun avatarLag(k: Int): Double = if (env.players[k].cpu) 0.0 else env.timing.avatarLag
 
     protected fun winnerOf(a: Int, b: Int) = if (a > b) 0 else if (b > a) 1 else -1
 }

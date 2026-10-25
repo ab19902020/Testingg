@@ -139,7 +139,11 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
             }
             Phase.PLAYING -> {
                 if (anyLost) { markMissing(slots); discardEvents(); enter(Phase.TRACKING_PAUSED); return }
-                for (k in 0..1) { inputs[k].events.addAll(pendingEvents[k]); pendingEvents[k].clear() } // kept until a step consumes them
+                for (k in 0..1) {
+                    // camera gestures: when were they made, in game time, as the player saw the game?
+                    for (e in pendingEvents[k]) if (e.at.isNaN()) e.at = game.playTime - env.timing.rewind(e.t)
+                    inputs[k].events.addAll(pendingEvents[k]); pendingEvents[k].clear() // kept until a step consumes them
+                }
                 accumulator += dt.coerceAtMost(0.25)
                 var steps = 0
                 while (accumulator >= STEP && steps < 30) {

@@ -15,7 +15,7 @@ import kotlin.math.roundToInt
 
 class SettingsScreen(app: GameApp) : Screen(app) {
     private var tab = 0
-    private val tabs = listOf("Sound", "Accessibility", "Camera & TV", "Developer")
+    private val tabs = listOf("Sound", "Accessibility", "Camera & TV", "Timing", "Developer")
     private var confirmReset = false
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
@@ -66,6 +66,24 @@ class SettingsScreen(app: GameApp) : Screen(app) {
                 if (ui.toggle(g, "inset", row(), "Show a small camera view during games", s.showCameraInset)) { s.showCameraInset = !s.showCameraInset; changed = true }
             }
             3 -> {
+                val r = row()
+                val label = "TV + camera delay allowance" + if (s.timingMeasured) " (measured)" else " (typical value)"
+                when (ui.stepper(g, "delay", r, label, "${s.displayDelayMs} ms")) {
+                    -1 -> { s.displayDelayMs = (s.displayDelayMs - 10).coerceAtLeast(com.clrg.core.party.Settings.MIN_DELAY_MS); s.timingMeasured = false; changed = true }
+                    1 -> { s.displayDelayMs = (s.displayDelayMs + 10).coerceAtMost(com.clrg.core.party.Settings.MAX_DELAY_MS); s.timingMeasured = false; changed = true }
+                }
+                if (ui.button(g, "timingTest", row(), "Run the timing test (about 30 seconds)", accent = Colors.GOOD, size = 36f)) app.push(TimingTestScreen(app))
+                ui.paragraph(g, listOf(
+                    "Tennis, table tennis, goalkeeping, snowball dodging and dancing judge your moves by when you",
+                    "made them. The camera's delay is measured automatically; the TV's can only be measured with",
+                    "the timing test. Swings counted late? Raise the allowance. Counted early? Lower it.",
+                    "",
+                    "For the quickest response: switch on your TV's Game mode (also called PC or low-latency mode;",
+                    "the game asks the TV for it automatically where supported), use the cable instead of screen",
+                    "casting, keep the room bright, and leave 'Smoother tracking: 60 fps' on.",
+                ), 160f, y + 10f, 29f, app.theme.dim)
+            }
+            4 -> {
                 if (ui.toggle(g, "perf", row(), "Performance overlay (frame rate, latency, tracking)", s.devOverlay)) { s.devOverlay = !s.devOverlay; changed = true }
                 if (ui.toggle(g, "skel", row(), "Skeleton + tracking debug overlay", s.skeletonOverlay)) { s.skeletonOverlay = !s.skeletonOverlay; changed = true }
                 if (ui.toggle(g, "sim", row(), "SIMULATED INPUT (testing without camera - not real tracking)", s.simulatedInput)) {

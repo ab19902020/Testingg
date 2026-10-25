@@ -53,7 +53,7 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
         )
     }
 
-    class Ball(val owner: Int, val x0: Float, val x1: Float, val flight: Float, var t: Float = 0f, var done: Boolean = false)
+    class Ball(val owner: Int, val x0: Float, val x1: Float, val flight: Float, var t: Float = 0f, var done: Boolean = false, var doneAt: Float = 0f)
 
     val scores = IntArray(2)
     /** Arena x (0..1) of each player. */
@@ -106,8 +106,10 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
         while (it.hasNext()) {
             val b = it.next()
             b.t += dt
-            if (b.t >= b.flight && !b.done) {
+            // a camera player's dodge or shield is seen a little late (camera, TV): decide once it could have arrived
+            if (b.t >= b.flight + inputGrace(1 - b.owner) && !b.done) {
                 b.done = true
+                b.doneAt = b.t
                 val target = 1 - b.owner
                 val hitX = b.x1
                 if (abs(px[target] - hitX) < HIT_RADIUS) {
@@ -132,7 +134,7 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
                     env.sfx(Sfx.SPLAT, 0.4f, pan(target), 1.3f)
                 }
             }
-            if (b.t > b.flight + 0.3f) it.remove()
+            if (b.done && b.t > b.doneAt + 0.3f) it.remove()
         }
     }
 
@@ -278,7 +280,7 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
         }
         // snowballs in flight
         for (b in balls) {
-            if (b.done) continue
+            if (b.done || b.t >= b.flight) continue
             val u = (b.t / b.flight).coerceIn(0f, 1f)
             val x = sx(lerp(b.x0, b.x1, u))
             val y = groundY - 330f - 380f * 4f * u * (1f - u) + 150f * u

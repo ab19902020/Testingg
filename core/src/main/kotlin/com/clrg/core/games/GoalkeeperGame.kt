@@ -56,6 +56,8 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
     val streak = IntArray(2)
     val bestStreak = IntArray(2)
     private val shots = ArrayList<Shot>()
+    /** The shot sequence (same for both goals). */
+    val shotList: List<Shot> get() = shots
     private val live = Array(2) { ArrayList<LiveShot>() }
     private val next = IntArray(2)
     private var screenW = 1920f
@@ -101,11 +103,12 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
                 ls.t += dt
                 val arrive = WINDUP + ls.shot.flight
                 if (!ls.resolved && ls.t >= arrive - 0.06f) {
-                    // a hand at the target spot as the ball arrives (small grace before) saves it
+                    // a hand at the target spot as the ball arrives (small grace before) saves it; camera players'
+                    // hands are seen a little late (camera, TV), so their window stays open that much longer
                     val tx = ls.shot.tx; val ty = targetY(k, ls.shot)
                     val r = saveRadius(k)
                     val saved = (0..1).any { h -> inp.handVisible[h] && hypot(inp.handX[h] - tx, inp.handY[h] - ty) < r }
-                    if (saved || ls.t >= arrive + 0.06f) {
+                    if (saved || ls.t >= arrive + 0.06f + inputGrace(k)) {
                         ls.resolved = true
                         ls.saved = saved
                         val (px, py) = goalPoint(k, tx, ty)
