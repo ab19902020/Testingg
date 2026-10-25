@@ -54,6 +54,7 @@ class AndroidPlatform(
         pose.upsideDown = settings.upsideDown(id)
         pose.quality = settings.quality
         pose.allowHighFps = settings.highFpsCamera
+        camera.sharpMotion = settings.sharpMotion
         router.preferPresentation = settings.preferTvAsSecondScreen
     }
 

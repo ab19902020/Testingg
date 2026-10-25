@@ -8,6 +8,8 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.media.ImageReader
@@ -36,7 +38,13 @@ class CameraSource(private val context: Context) {
         val TARGET = Size(1280, 720)
     }
 
-    class Info(val id: String, val front: Boolean, val sensorOrientation: Int, val hFovDeg: Float, val zoomMin: Float, val realtimeTimestamps: Boolean)
+    class Info(
+        val id: String, val front: Boolean, val sensorOrientation: Int, val hFovDeg: Float, val zoomMin: Float, val realtimeTimestamps: Boolean,
+        /** The camera lets the app set exposure time and sensitivity itself (sharp-motion exposure). */
+        val manualSensor: Boolean = false,
+        val exposureMinNs: Long = 0L, val exposureMaxNs: Long = 0L,
+        val isoMin: Int = 0, val isoMax: Int = 0, val maxAnalogIso: Int = 0,
+    )
 
     private val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
     private val thread = HandlerThread("camera").apply { start() }
@@ -87,7 +95,14 @@ class CameraSource(private val context: Context) {
             val hfov = if (sensor != null && focal != null && focal > 0f) Math.toDegrees(2.0 * atan(sensor.width / (2.0 * focal))).toFloat() else 70f
             val zoomMin = if (Build.VERSION.SDK_INT >= 30) c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.lower ?: 1f else 1f
             val ts = c.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE) == CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME
-            Info(id, facing == CameraCharacteristics.LENS_FACING_FRONT, c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0, hfov, zoomMin, ts)
+            val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: IntArray(0)
+            val manual = caps.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) &&
+                caps.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_READ_SENSOR_SETTINGS)
+            val er = c.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+            val ir = c.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+            val analog = c.get(CameraCharacteristics.SENSOR_MAX_ANALOG_SENSITIVITY) ?: 0
+            Info(id, facing == CameraCharacteristics.LENS_FACING_FRONT, c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0, hfov, zoomMin, ts,
+                manual && er != null && ir != null, er?.lower ?: 0L, er?.upper ?: 0L, ir?.lower ?: 0, ir?.upper ?: 0, analog)
         }
     } catch (e: Exception) {
         Log.e(TAG, "enumerate failed", e)
@@ -241,8 +256,9 @@ class CameraSource(private val context: Context) {
         guarded("frame rate", info.id) {
             val range = chooseFps(info.id, on) ?: return@guarded
             b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
-            s.setRepeatingRequest(b.build(), null, handler)
             highFps = range.upper >= 60
+            if (ae == Ae.MANUAL) b.set(CaptureRequest.SENSOR_FRAME_DURATION, frameNs())
+            s.setRepeatingRequest(b.build(), captureCb, handler)
         }
     }
 
@@ -286,7 +302,10 @@ class CameraSource(private val context: Context) {
                     }
                     requestBuilder = req
                     try {
-                        s.setRepeatingRequest(req.build(), null, handler)
+                        ae = Ae.AUTO; aeSince = SystemClock.elapsedRealtime(); refLuma = Float.NaN
+                        s.setRepeatingRequest(req.build(), captureCb, handler)
+                        handler.removeCallbacks(exposureTick)
+                        handler.postDelayed(exposureTick, 300)
                         status = CameraStatus(CameraState.RUNNING, "${size.width}x${size.height}", info.id)
                         retryCount = 0
                     } catch (e: Exception) {
@@ -315,6 +334,8 @@ class CameraSource(private val context: Context) {
     private fun closeInternal() {
         generation++
         opening = false
+        handler.removeCallbacks(exposureTick)
+        ae = Ae.AUTO
         try { session?.close() } catch (_: Throwable) {}
         session = null
         requestBuilder = null
@@ -325,6 +346,137 @@ class CameraSource(private val context: Context) {
         reader = null
         // waits for the consumer to finish copying any image it holds from this reader
         synchronized(frameLock) { try { r?.close() } catch (_: Throwable) {} }
+    }
+
+    // ------------------------------------------------------------------ sharp-motion exposure
+
+    /**
+     * Sharper fast movements. Indoors the camera's own auto exposure keeps the shutter open for most of each frame
+     * (often 1/30 s), so a swinging arm is a long blur and the body tracker loses the hand. Where the camera allows
+     * it, once auto exposure has settled the same brightness is set up with a much shorter exposure (1/100 or 1/120 s,
+     * matched to the room's mains-light flicker) and a higher sensitivity, and the sensitivity is then adjusted to
+     * keep the picture as bright as auto exposure had it. Falls back to auto exposure when the light changes a lot,
+     * when the option is off, and for good if the camera refuses.
+     */
+    @Volatile var sharpMotion = true
+    /** For the motion test screen: how the camera is exposing right now. */
+    @Volatile var exposureInfo = "-"
+        private set
+    @Volatile private var lastExpNs = 0L
+    @Volatile private var lastIso = 0
+    @Volatile private var lastFlicker = -1
+    @Volatile private var luma = Float.NaN
+    private var manualFailed = false
+    private enum class Ae { AUTO, MANUAL }
+    private var ae = Ae.AUTO
+    private var aeSince = 0L
+    private var manualExp = 0L
+    private var manualIso = 0
+    private var refLuma = Float.NaN
+    private var offSince = 0L
+
+    private val captureCb = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+            result.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.let { lastExpNs = it }
+            result.get(CaptureResult.SENSOR_SENSITIVITY)?.let { lastIso = it }
+            result.get(CaptureResult.STATISTICS_SCENE_FLICKER)?.let { lastFlicker = it }
+        }
+    }
+
+    /** Mean brightness (0..255) of the latest frame, measured by the tracking thread. */
+    fun reportLuma(v: Float) { luma = v }
+
+    private val exposureTick = object : Runnable {
+        override fun run() {
+            val info = active
+            try { exposureStep() } catch (t: Throwable) {
+                Log.w(TAG, "sharp-motion exposure refused, staying on auto exposure", t)
+                manualFailed = true
+                try { toAuto() } catch (_: Throwable) {}
+            }
+            if (running && info != null && session != null) handler.postDelayed(this, 250)
+        }
+    }
+
+    private fun frameNs(): Long = if (highFps) 16_666_666L else 33_333_333L
+
+    /** An exposure that does not beat with the room's mains-powered lights (1/120 s for 60 Hz, else 1/100 s). */
+    private fun flickerSafeNs(): Long = if (lastFlicker == CaptureResult.STATISTICS_SCENE_FLICKER_60HZ) 8_333_333L else 10_000_000L
+
+    private fun isoCap(info: Info): Int {
+        val analogTwice = if (info.maxAnalogIso > 0) info.maxAnalogIso * 2 else info.isoMax
+        return minOf(info.isoMax, analogTwice, 3200).coerceAtLeast(info.isoMin)
+    }
+
+    private fun exposureStep() {
+        session ?: return
+        requestBuilder ?: return
+        val info = active ?: return
+        val now = SystemClock.elapsedRealtime()
+        val want = sharpMotion && info.manualSensor && !manualFailed
+        when (ae) {
+            Ae.AUTO -> {
+                exposureInfo = if (lastExpNs > 0) "auto exposure %.0f ms, ISO %d".format(lastExpNs / 1e6, lastIso) else "auto exposure"
+                if (!want || now - aeSince < 1500) return
+                val e0 = lastExpNs; val s0 = lastIso
+                val l = luma
+                if (e0 <= 0L || s0 <= 0 || l.isNaN()) return
+                val target = flickerSafeNs().coerceIn(info.exposureMinNs, info.exposureMaxNs)
+                if (e0 <= target * 1.15) return // a bright room: auto exposure is already short
+                val cap = isoCap(info)
+                var exp = target
+                var iso = (s0.toDouble() * e0 / target).toInt()
+                if (iso > cap) { iso = cap; exp = (s0.toDouble() * e0 / cap).toLong().coerceIn(target, e0) }
+                if (exp >= e0 * 0.8) return // too dark for a real gain
+                applyManual(exp, iso)
+                refLuma = l
+                ae = Ae.MANUAL; aeSince = now; offSince = 0L
+            }
+            Ae.MANUAL -> {
+                if (!want) { toAuto(); return }
+                exposureInfo = "sharp-motion exposure %.1f ms, ISO %d".format(manualExp / 1e6, manualIso)
+                val l = luma
+                if (l.isNaN() || refLuma.isNaN()) return
+                val ratio = refLuma / l.coerceAtLeast(1f)
+                // the lights changed a lot: let auto exposure measure again
+                if (ratio > 2.5f || ratio < 0.4f) {
+                    if (offSince == 0L) offSince = now else if (now - offSince > 1200) { toAuto(); return }
+                } else offSince = 0L
+                if (kotlin.math.abs(kotlin.math.ln(ratio)) < 0.12f) return
+                val gain = Math.pow(ratio.toDouble(), 0.6)
+                val cap = isoCap(info)
+                val iso = (manualIso * gain).toInt().coerceIn(info.isoMin, cap)
+                var exp = manualExp
+                val maxExp = (frameNs() - 1_000_000L).coerceAtMost(info.exposureMaxNs)
+                if (iso == cap && gain > 1.05) exp = (exp * gain).toLong().coerceAtMost(maxExp) // as a last resort, a longer exposure
+                if (iso == info.isoMin && gain < 0.95) exp = (exp * gain).toLong().coerceAtLeast(maxOf(info.exposureMinNs, 2_000_000L))
+                if (iso != manualIso || exp != manualExp) applyManual(exp, iso)
+            }
+        }
+    }
+
+    private fun applyManual(exp: Long, iso: Int) {
+        val s = session ?: return
+        val b = requestBuilder ?: return
+        val info = active ?: return
+        manualExp = exp.coerceIn(info.exposureMinNs, info.exposureMaxNs)
+        manualIso = iso.coerceIn(info.isoMin, info.isoMax)
+        b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+        b.set(CaptureRequest.SENSOR_EXPOSURE_TIME, manualExp)
+        b.set(CaptureRequest.SENSOR_SENSITIVITY, manualIso)
+        b.set(CaptureRequest.SENSOR_FRAME_DURATION, frameNs())
+        s.setRepeatingRequest(b.build(), captureCb, handler)
+    }
+
+    private fun toAuto() {
+        val s = session
+        val b = requestBuilder
+        ae = Ae.AUTO
+        aeSince = SystemClock.elapsedRealtime()
+        refLuma = Float.NaN
+        if (s == null || b == null) return
+        b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+        s.setRepeatingRequest(b.build(), captureCb, handler)
     }
 
     fun shutdown() {

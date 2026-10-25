@@ -336,6 +336,7 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
                 uBuf = copy(uP.buffer, uBuf)
                 vBuf = copy(vP.buffer, vBuf)
                 yuv = YuvImage(w, h, yBuf, yP.rowStride, uBuf, vBuf, uP.rowStride, uP.pixelStride)
+                camera.reportLuma(meanLuma(yBuf, w, h, yP.rowStride))
                 // camera timestamps -> System.nanoTime base (only meaningful for REALTIME timestamp sources)
                 captureNs = if (info.realtimeTimestamps) System.nanoTime() - (SystemClock.elapsedRealtimeNanos() - image.timestamp) else System.nanoTime()
             } finally {
@@ -373,6 +374,16 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         publishDebug(pipe, geo)
         updateStats(pipe, t0, t1, captureNs, info.realtimeTimestamps, orient)
         adapt(t1)
+    }
+
+    /** Mean brightness of a frame from a sparse grid of luma samples (for the sharp-motion exposure). */
+    private fun meanLuma(y: ByteArray, w: Int, h: Int, stride: Int): Float {
+        var sum = 0L; var n = 0
+        for (j in 1..14) {
+            val row = (h * j / 15) * stride
+            for (i in 1..24) { val k = row + w * i / 25; if (k < y.size) { sum += (y[k].toInt() and 0xFF); n++ } }
+        }
+        return if (n == 0) Float.NaN else sum.toFloat() / n
     }
 
     private fun configFor(variant: String, people: Int): PipelineConfig {
@@ -485,13 +496,14 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
             droppedFrames = dropped, delegate = runner?.delegateName ?: "-", model = "BlazePose $variant",
             inputSize = "${o.bufferWidth}x${o.bufferHeight} rot ${o.rotationCw}", thermal = thermal,
             adaptiveLevel = "${quality.label}/$variant/${if (camera.highFps) 60 else 30}fps",
+            exposure = camera.exposureInfo,
         )
     }
 
     companion object {
         const val KEY_GPU_OFF = "gpu_off"
-        /** Average tracking time per frame (ms) that still fits the 60 fps camera. */
-        const val FPS60_BUDGET_MS = 13f
+        /** Tracking slower than this (ms per picture) does not gain from a 60 fps camera. */
+        const val FPS60_MAX_TRACKING_MS = 40f
 
         /** Called at startup when the previous run crashed inside the GPU driver. */
         fun disableGpuForGood(context: Context) =
@@ -499,54 +511,42 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     }
 
     /**
-     * Camera frame rate: 60 fps while one frame's tracking fits in 1/60 s and the phone is not warm; back to 30 fps
-     * (with a couple of seconds of hysteresis) when tracking slows down or the phone heats up. 60 fps halves the wait
-     * for the next picture and the exposure time (less blur on fast arms).
+     * Camera frame rate: 60 fps whenever the camera offers it, the phone is not warm and tracking keeps up with at
+     * least ~25 pictures a second; back to 30 fps (with a couple of seconds of hysteresis) otherwise. Tracking always
+     * takes the newest picture, so even when it cannot use every one of 60, each picture it uses is fresher (less
+     * delay) and exposed for at most 1/60 s (less blur on fast arms).
      */
     private fun adaptFrameRate(now: Long) {
         val warm = Build.VERSION.SDK_INT >= 29 && power.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE
         if (!camera.highFps) {
-            val ok = allowHighFps && !warm && avgMs > 0f && avgMs < FPS60_BUDGET_MS && camera.supportsHighFps()
+            val ok = allowHighFps && !warm && avgMs > 0f && avgMs < FPS60_MAX_TRACKING_MS && camera.supportsHighFps()
             if (ok) { if (fpsUpSince == 0L) fpsUpSince = now } else fpsUpSince = 0L
             if (fpsUpSince != 0L && now - fpsUpSince > 3_000_000_000L) { camera.setHighFps(true); fpsUpSince = 0L }
         } else {
-            val bad = !allowHighFps || warm || avgMs > FPS60_BUDGET_MS + 2.5f
+            val bad = !allowHighFps || warm || avgMs > FPS60_MAX_TRACKING_MS + 6f
             if (bad) { if (fpsDownSince == 0L) fpsDownSince = now } else fpsDownSince = 0L
             if (fpsDownSince != 0L && (now - fpsDownSince > 2_000_000_000L || !allowHighFps)) { camera.setHighFps(false); fpsDownSince = 0L }
         }
     }
 
-    /** The lite model was chosen (in AUTO) so the camera could run at 60 fps. */
-    private var liteForSpeed = false
-    /** Tried that and the lite model was not fast enough either: keep the more accurate full model this session. */
-    private var liteForSpeedFailed = false
     private var speedSince = 0L
 
     /**
-     * AUTO quality, aiming for the quickest response: the full (more accurate) model when it is fast enough for the
-     * 60 fps camera, otherwise the lite model if that gets there - tried once per session, and undone if the lite
-     * model is not fast enough either. Also drops to lite when tracking is too slow even for 30 fps or the phone is
-     * hot, and returns to full when there is plenty of headroom.
+     * AUTO quality: the full model, which finds wrists and hands much more reliably during fast movement than the
+     * lite one, as long as it keeps up with about 26 pictures a second; the lite model only when the phone is too slow
+     * for that or hot, and back to full when there is headroom again.
      */
     private fun adapt(now: Long) {
         adaptFrameRate(now)
         if (quality != QualityMode.AUTO) return
         val hot = Build.VERSION.SDK_INT >= 29 && power.currentThermalStatus >= PowerManager.THERMAL_STATUS_SEVERE
-        val wantSpeed = allowHighFps && camera.supportsHighFps()
         fun switchTo(v: String) { variant = v; slowSince = 0L; fastSince = 0L; speedSince = 0L; avgMs = 0f }
         if (variant == "full") {
-            if (avgMs > 30f || hot) { if (slowSince == 0L) slowSince = now } else slowSince = 0L
-            if (slowSince != 0L && now - slowSince > 3_000_000_000L) { liteForSpeed = false; switchTo("lite"); return }
-            val tooSlowFor60 = wantSpeed && !liteForSpeedFailed && !camera.highFps && avgMs > FPS60_BUDGET_MS
-            if (tooSlowFor60) { if (speedSince == 0L) speedSince = now } else speedSince = 0L
-            if (speedSince != 0L && now - speedSince > 4_000_000_000L) { liteForSpeed = true; switchTo("lite") }
-        } else if (liteForSpeed) {
-            val pointless = !wantSpeed || (avgMs > FPS60_BUDGET_MS && !hot)
-            if (pointless) { if (speedSince == 0L) speedSince = now } else speedSince = 0L
-            if (speedSince != 0L && (now - speedSince > 4_000_000_000L || !wantSpeed)) { liteForSpeed = false; liteForSpeedFailed = true; switchTo("full") }
+            if (avgMs > 38f || hot) { if (slowSince == 0L) slowSince = now } else slowSince = 0L
+            if (slowSince != 0L && now - slowSince > 3_000_000_000L) { switchTo("lite"); return }
         } else {
-            if (avgMs < 12f && !hot) { if (fastSince == 0L) fastSince = now } else fastSince = 0L
-            if (fastSince != 0L && now - fastSince > 15_000_000_000L) switchTo("full")
+            if (avgMs < 16f && !hot) { if (fastSince == 0L) fastSince = now } else fastSince = 0L
+            if (fastSince != 0L && now - fastSince > 10_000_000_000L) switchTo("full")
         }
     }
 }
