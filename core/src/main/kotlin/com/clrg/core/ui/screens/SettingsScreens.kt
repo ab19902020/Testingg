@@ -113,7 +113,7 @@ class SettingsScreen(app: GameApp) : Screen(app) {
 class HelpScreen(app: GameApp) : Screen(app) {
     private var tab = 0
     private var game = 0
-    private val tabs = listOf("Game controls", "TV & camera", "Privacy", "About")
+    private val tabs = listOf("Game controls", "Golf", "TV & camera", "Privacy", "About")
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
@@ -130,25 +130,36 @@ class HelpScreen(app: GameApp) : Screen(app) {
                 val r = Rect(600f, 270f, g.width - 60f, g.height - 40f)
                 infoPanel(g, app, r, info.title, info.howTo + listOf("") + info.controls.map { "${it.first}  ->  ${it.second}" } + listOf("", info.gentleNotes), 32f)
             }
-            1 -> infoPanel(g, app, body, "Setting up", listOf(
+            1 -> infoPanel(g, app, body, "Christmas Golf (1 to 4 players, taking turns)", listOf(
+                "Take turns: only the golfer whose turn it is stands in front of the camera. Raise a hand to start.",
+                "Choose a club or turn your aim: raise a hand and hold it over the button (hold on an arrow to keep turning).",
+                "Swing: hands together, low and still - then swing back and through like a real golf swing.",
+                "     The higher your backswing, the further the ball goes. Swing back down quickly.",
+                "     Bring your hands back through where they started for a straight shot.",
+                "Putt: hands together and low, draw them back sideways (further = harder) and stroke through.",
+                "Drive with the Driver, hit the approach with an iron or the wedge, then putt on the green.",
+                "Watch the wind and the slope arrows on the green. Water or out of bounds: one penalty stroke.",
+                "Three courses of three holes each. Fewest strokes wins.",
+            ), 31f)
+            2 -> infoPanel(g, app, body, "Setting up", listOf(
                 "TV: connect a USB-C to HDMI adapter (the phone must support USB-C video output),",
                 "     or cast the screen (works, but adds delay). The game is drawn for any screen shape.",
                 "Phone: landscape, steady on a stand near the TV, camera towards the players, chest height.",
                 "Space: stand 2-3 m away, side by side, an arm's length apart. Player 1 left, Player 2 right.",
                 "Light: make the room bright; avoid strong light behind you.",
                 "Calibration measures each player's size and comfortable reach so everybody plays fairly.",
-                "Hands-free menus: once calibrated, raise a hand to move your cursor and hold it on a button.",
+                "Hands-free menus: stand in front of the camera, raise a hand and hold it over a button to choose.",
                 "If someone steps away the game pauses and waits for them - spectators can't take over.",
                 "On your own? Play Solo: you against a computer player (Easy, Medium or Hard). Stand in the middle.",
             ), 32f)
-            2 -> infoPanel(g, app, body, "Privacy", listOf(
+            3 -> infoPanel(g, app, body, "Privacy", listOf(
                 "The camera picture is processed on this phone, frame by frame, to find body positions.",
                 "No video or photos are recorded, stored or uploaded - not even temporarily to disk.",
                 "The app has no internet permission at all. Player names and scores stay on this phone.",
                 "Clothing colours are used only in memory to tell the two players apart, and are forgotten",
                 "when the app closes. You can switch the camera permission off in Android settings.",
             ), 34f)
-            3 -> infoPanel(g, app, body, "About", listOf(
+            4 -> infoPanel(g, app, body, "About", listOf(
                 "Christmas Living Room Games - an original family party game.",
                 "Pose tracking: MediaPipe BlazePose models (Apache 2.0) run with TensorFlow Lite (Apache 2.0).",
                 "All characters, artwork, music and sound effects are original and generated in code.",

@@ -82,6 +82,8 @@ interface Platform {
     fun trackingProblem(): String? = null
     /** Opens the system share sheet with [text] (only ever on the player's request). */
     fun shareText(subject: String, text: String) {}
+    /** How many players the camera should follow (1 in solo and golf, 2 otherwise): tracking does less work for one. */
+    fun setExpectedPeople(n: Int) {}
 }
 
 /** Platform stub for tests and headless tools. */

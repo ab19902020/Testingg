@@ -51,16 +51,29 @@ class MainMenuScreen(app: GameApp) : Screen(app) {
         val (qm, solo) = row()
         if (ui.button(g, "quick", qm, "Quick Match", "Two players, pick a game", accent = Colors.GOLD)) app.push(GameSelectScreen(app))
         if (ui.button(g, "solo", solo, "Play Solo", "You against the computer", accent = Colors.GOLD)) app.push(SoloSetupScreen(app))
-        val (pt, pl) = row()
+        val (golf, pt) = row()
+        if (ui.button(g, "golf", golf, "Christmas Golf", "1 to 4 players, taking turns", accent = Colors.GOOD)) app.push(GolfSetupScreen(app))
         if (ui.button(g, "tournament", pt, "Party Tournament", app.tournament?.let { if (it.isComplete) "Last tournament finished" else "Continue: match ${it.currentIndex + 1} of ${it.matches.size}" } ?: "Whole-family scoreboard", accent = Colors.CANDY)) {
             if (app.tournament != null) app.push(TournamentHubScreen(app)) else app.push(TournamentSetupScreen(app))
         }
+        val (pl, tv) = row()
         if (ui.button(g, "players", pl, "Players", "${app.roster.players.size} family members", accent = Colors.ICE)) app.push(PlayersScreen(app))
-        val (tv, st) = row()
         if (ui.button(g, "setup", tv, "TV & Camera Setup", if (app.calibrated) "Players calibrated" else "Connect, place, calibrate", accent = Colors.GOOD)) SetupFlow.startFull(app)
+        val (st, help) = row()
         if (ui.button(g, "settings", st, "Settings", "Sound, accessibility, camera", accent = Colors.ICE)) app.push(SettingsScreen(app))
-        val help = Rect(g.width / 2f - bw / 2f, y, g.width / 2f + bw / 2f, y + bh); y += bh + gap
         if (ui.button(g, "help", help, "How to Play", "Controls for every game", accent = Colors.GOOD)) app.push(HelpScreen(app))
+        // hands-free: anyone in front of the camera can steer the menus with a raised hand
+        run {
+            val hint = when {
+                app.ui.cursors.any { it.active } -> "Hold your hand still over a button to choose it"
+                app.handCursorShown -> "Raise your hand higher to point"
+                else -> "Hands-free: stand in front of the camera and raise a hand, then hold it over a button"
+            }
+            val hw = g.measureText(hint, 30f, false) + 70f
+            g.fillRoundRect(g.width / 2f - hw / 2f, y + 4f, g.width / 2f + hw / 2f, y + 58f, 27f, 0xAA0B2A4F.toInt())
+            g.text(hint, g.width / 2f, y + 31f, 30f, Colors.GOLD, bold = false)
+            y += 62f
+        }
         if (app.canSwitchCamera && ui.button(g, "camSwitch", Rect(30f, 70f, 440f, 160f), app.cameraLabel(), "tap to switch", accent = Colors.ICE, size = 34f)) app.switchCamera()
         val dev = app.platform.deviceInfo()
         if (dev.meetsTarget == false) {

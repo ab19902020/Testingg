@@ -189,6 +189,56 @@ object Motions {
         p.setWrist(1, 0.45f, -0.55f - amp * phase)
     }
 
+    /** Golf address: both hands together, low in front. */
+    fun golfAddress(p: Puppet, x: Float = 0f) { p.setWrist(0, x - 0.06f, -1.1f); p.setWrist(1, x + 0.06f, -1.1f) }
+
+    /**
+     * Golf full swing at time [t] (s, 0 = start of the backswing): back over [back] s to a top position [rise] body
+     * units above the address on [side], a quick downswing of [down] s through the address point shifted by
+     * [offset], and a follow-through to the other side. Returns false once the swing is over.
+     */
+    fun golfSwing(p: Puppet, t: Double, rise: Float = 1.35f, side: Float = 1f, back: Double = 0.9, down: Double = 0.28, offset: Float = 0f): Boolean {
+        val ay = -1.1f
+        val topX = side * 0.65f
+        val topY = ay + rise
+        fun place(x: Float, y: Float) { p.setWrist(0, x - 0.06f, y); p.setWrist(1, x + 0.06f, y) }
+        val hold = 0.15
+        when {
+            t < 0 -> place(0f, ay)
+            t < back -> {
+                val e = ((1 - cos(PI * t / back)) / 2).toFloat()
+                place(topX * sin(e * PI.toFloat() / 2f), ay + rise * e)
+            }
+            t < back + hold -> place(topX, topY)
+            t < back + hold + down -> {
+                val u = ((t - back - hold) / down).toFloat()
+                val e = u * u // accelerating into the ball
+                place(topX + (offset - topX) * e, topY + (ay - 0.04f - topY) * e)
+            }
+            t < back + hold + down + 0.4 -> {
+                val u = ((t - back - hold - down) / 0.4).toFloat()
+                val e = sin(u * PI.toFloat() / 2f)
+                place(offset + (-side * 0.6f - offset) * e, ay - 0.04f + rise * 0.8f * e)
+            }
+            else -> { place(-side * 0.6f, ay + rise * 0.8f); return false }
+        }
+        return true
+    }
+
+    /** Putting stroke at time [t]: hands back sideways by [back] over [dur] s, then forward through and past. */
+    fun golfPutt(p: Puppet, t: Double, back: Float, side: Float = 1f, dur: Double = 0.7): Boolean {
+        val ay = -1.1f
+        fun place(x: Float) { p.setWrist(0, x - 0.06f, ay); p.setWrist(1, x + 0.06f, ay) }
+        when {
+            t < 0 -> place(0f)
+            t < dur -> place(side * back * ((1 - cos(PI * t / dur)) / 2).toFloat())
+            t < dur + 0.1 -> place(side * back)
+            t < 2 * dur + 0.1 -> place(side * back - side * back * 1.6f * ((1 - cos(PI * (t - dur - 0.1) / dur)) / 2).toFloat())
+            else -> { place(-side * back * 0.6f); return false }
+        }
+        return true
+    }
+
     /** Both hands overhead. */
     fun handsUp(p: Puppet) { p.setWrist(0, -0.25f, 0.95f); p.setWrist(1, 0.25f, 0.95f) }
 

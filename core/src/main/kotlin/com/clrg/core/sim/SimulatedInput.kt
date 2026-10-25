@@ -10,7 +10,7 @@ import com.clrg.core.ui.Ui
 
 enum class SimAction(val label: String) {
     SWING("Swing"), THROW("Throw"), BOWL("Bowl"), RAISE("Raise"), HANDS_UP("Both up"),
-    LEAN_LEFT("Lean L"), LEAN_RIGHT("Lean R"), PUMP("Pump"), TUCK("Tuck"), POSE("Pose"), REST("Rest"),
+    LEAN_LEFT("Lean L"), LEAN_RIGHT("Lean R"), PUMP("Pump"), TUCK("Tuck"), POSE("Pose"), GOLF("Golf"), PUTT("Putt"), REST("Rest"),
 }
 
 /**
@@ -44,6 +44,10 @@ class SimulatedInput(private val aspect: Float = 16f / 9f) {
     private val shapeIdx = IntArray(2)
     private var t = 0.0
     private val reachHold = BooleanArray(2)
+    /** How high the simulated golfer's backswing goes (body units; ~1.35 = full power). */
+    var golfRise = 1.35f
+    /** How far back the simulated putting stroke goes (body units; ~0.6 = longest putt). */
+    var puttBack = 0.3f
 
     fun trigger(p: Int, a: SimAction) {
         when (a) {
@@ -57,11 +61,16 @@ class SimulatedInput(private val aspect: Float = 16f / 9f) {
         }
     }
 
-    /** Moves player [p]'s right hand to a reach-space point (1 = comfortable reach) while held. */
+    /**
+     * Moves one of player [p]'s hands to a reach-space point (1 = comfortable reach) while held - the hand on that
+     * side, as a person would (the other hand rests).
+     */
     fun reach(p: Int, rx: Float, ry: Float) {
         reachHold[p] = true
         motion[p] = null
-        puppets[p].setWrist(1, rx * 1.5f, ry * 1.5f)
+        val hand = if (rx < -0.1f) 0 else 1
+        puppets[p].setWrist(hand, rx * 1.5f, ry * 1.5f)
+        puppets[p].setWrist(1 - hand, if (hand == 1) -0.42f else 0.42f, -1.05f)
     }
 
     fun releaseReach(p: Int) { reachHold[p] = false }
@@ -96,6 +105,8 @@ class SimulatedInput(private val aspect: Float = 16f / 9f) {
                 SimAction.RAISE -> { Motions.raise(pup, 1); if (k > 1.4f) done(p) }
                 SimAction.HANDS_UP -> { Motions.handsUp(pup); if (k > 0.9f) done(p) }
                 SimAction.POSE -> Motions.shape(pup, PoseShape.STANDARD_SET[shapeIdx[p]])
+                SimAction.GOLF -> if (k < 0.9f) Motions.golfAddress(pup) else if (!Motions.golfSwing(pup, (k - 0.9f).toDouble(), rise = golfRise)) done(p)
+                SimAction.PUTT -> if (k < 0.9f) Motions.golfAddress(pup) else if (!Motions.golfPutt(pup, (k - 0.9f).toDouble(), back = puttBack)) done(p)
                 else -> done(p)
             }
         } else if (pumping[p]) {
@@ -122,7 +133,7 @@ class SimulatedInput(private val aspect: Float = 16f / 9f) {
         val h = 84f
         val top = g.height - h - 10f
         g.fillRect(0f, top - 10f, g.width, g.height, 0xCC1A0000.toInt())
-        val actions = listOf(SimAction.SWING, SimAction.THROW, SimAction.BOWL, SimAction.RAISE, SimAction.HANDS_UP, SimAction.LEAN_LEFT, SimAction.LEAN_RIGHT, SimAction.PUMP, SimAction.TUCK, SimAction.POSE, SimAction.REST)
+        val actions = listOf(SimAction.SWING, SimAction.THROW, SimAction.BOWL, SimAction.RAISE, SimAction.HANDS_UP, SimAction.LEAN_LEFT, SimAction.LEAN_RIGHT, SimAction.PUMP, SimAction.TUCK, SimAction.POSE, SimAction.GOLF, SimAction.PUTT, SimAction.REST)
         val bw = (g.width / 2f - 40f) / actions.size
         for (p in 0..1) {
             val x0 = 20f + p * g.width / 2f

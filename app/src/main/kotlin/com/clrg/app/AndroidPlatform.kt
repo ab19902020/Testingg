@@ -63,6 +63,7 @@ class AndroidPlatform(
     override fun nowNanos(): Long = System.nanoTime()
     override fun previousCrash(): String? = crashReport
     override fun trackingProblem(): String? = pose.problem
+    override fun setExpectedPeople(n: Int) { pose.expectedPeople = n }
 
     override fun shareText(subject: String, text: String) {
         activity.runOnUiThread {

@@ -10,7 +10,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 enum class Expression { HAPPY, EXCITED, OOPS, FOCUSED }
-enum class Prop { NONE, RACKET, PADDLE, SNOWBALL, BOWLING_BALL, MITTENS_BIG, SHIELD }
+enum class Prop { NONE, RACKET, PADDLE, SNOWBALL, BOWLING_BALL, MITTENS_BIG, SHIELD, GOLF_CLUB, PUTTER }
 
 /**
  * Original, procedurally drawn art used across the collection (no external assets). Lighting convention: a soft key
@@ -384,6 +384,7 @@ object Draw {
         val twig = 0xFF7A5446.toInt()
         val twigDark = 0xFF3E2723.toInt()
         var mittenX = 0f; var mittenY = 0f; var foreAng = 0f
+        val bothX = FloatArray(2); val bothY = FloatArray(2)
         for (side in 0..1) {
             val sx = if (side == 0) sxL else sxR
             var up = pose?.upper?.get(side) ?: if (side == 0) -2.0f else -1.14f
@@ -423,6 +424,7 @@ object Draw {
             woolBall(g, wx + dy * mr * 0.55f * (if (side == 0) -1f else 1f), wy - dx * mr * 0.55f * (if (side == 0) -1f else 1f), mr * 0.42f, color)
             woolBall(g, wx, wy, mr, color)
             if (side == propHand) { mittenX = wx; mittenY = wy; foreAng = fo }
+            bothX[side] = wx; bothY[side] = wy
         }
         // head (tilts with the player's head)
         val hr = h * 0.15f
@@ -464,7 +466,11 @@ object Draw {
         g.fillCircleRadial(x + hr * 0.15f, hy - hr * 1.38f, pom * 0.85f, x + hr * 0.05f, hy - hr * 1.5f, pom * 1.3f, Colors.WHITE, 0xFFD5E2F1.toInt())
         g.restore()
         g.restore()
-        if (prop != Prop.NONE) drawProp(g, prop, mittenX, mittenY + lift, foreAng, h, tilt)
+        if (prop == Prop.GOLF_CLUB || prop == Prop.PUTTER) {
+            // held in both hands: the shaft carries on from the arms, away from the shoulders
+            val hx = (bothX[0] + bothX[1]) / 2f; val hy = (bothY[0] + bothY[1]) / 2f + lift
+            golfClub(g, hx, hy, hx - x, hy - (sy + lift), h, prop == Prop.PUTTER)
+        } else if (prop != Prop.NONE) drawProp(g, prop, mittenX, mittenY + lift, foreAng, h, tilt)
         if (shielded) {
             val cy = y - h * 0.55f
             g.fillCircleRadial(x, cy, h * 0.62f, x - h * 0.2f, cy - h * 0.25f, h * 0.9f, 0x1880D8FF, 0x5540C4FF)
@@ -515,6 +521,27 @@ object Draw {
         }
     }
 
+    /** Golf club gripped at ([hx], [hy]) pointing along ([dx], [dy]): shaft, grip and a wood-or-iron head. */
+    fun golfClub(g: Gfx, hx: Float, hy: Float, dx: Float, dy: Float, h: Float, putter: Boolean = false) {
+        val l = len(dx, dy).coerceAtLeast(1e-3f)
+        val ux = dx / l; val uy = dy / l
+        val shaft = h * (if (putter) 0.36f else 0.5f)
+        val ex = hx + ux * shaft; val ey = hy + uy * shaft
+        g.line(hx - ux * h * 0.04f, hy - uy * h * 0.04f, hx + ux * h * 0.06f, hy + uy * h * 0.06f, h * 0.03f, 0xFF263238.toInt()) // grip
+        g.line(hx, hy, ex, ey, h * 0.012f, 0xFFB0BEC5.toInt())
+        g.line(hx, hy, ex, ey, h * 0.006f, 0xFFECEFF1.toInt())
+        // head, set across the end of the shaft
+        val px = -uy; val py = ux
+        val hw = h * (if (putter) 0.06f else 0.05f)
+        val ht = h * (if (putter) 0.018f else 0.03f)
+        pts[0] = ex - px * ht; pts[1] = ey - py * ht
+        pts[2] = ex + px * hw * 1.6f - px * ht; pts[3] = ey + py * hw * 1.6f - py * ht
+        pts[4] = ex + px * hw * 1.6f + ux * ht * 1.8f; pts[5] = ey + py * hw * 1.6f + uy * ht * 1.8f
+        pts[6] = ex + ux * ht * 1.8f; pts[7] = ey + uy * ht * 1.8f
+        g.fillPolygonGradient(pts, 4, minOf(pts[1], pts[3], pts[5], pts[7]), maxOf(pts[1], pts[3], pts[5], pts[7]), 0xFFCFD8DC.toInt(), 0xFF546E7A.toInt())
+        g.polyline(pts, 4, h * 0.004f, 0xFF37474F.toInt(), closed = true)
+    }
+
     private fun drawProp(g: Gfx, prop: Prop, mx: Float, my: Float, foreAng: Float, h: Float, tilt: Float) {
         val dx = cos(foreAng)
         val dy = -sin(foreAng)
@@ -536,7 +563,7 @@ object Draw {
             Prop.SNOWBALL -> g.fillCircle(mx, my - h * 0.04f, h * 0.06f, Colors.SNOW)
             Prop.BOWLING_BALL -> { g.fillCircle(mx, my, h * 0.075f, 0xFF7B1FA2.toInt()); g.fillCircle(mx - h * 0.02f, my - h * 0.025f, h * 0.012f, 0xFF311B92.toInt()) }
             Prop.MITTENS_BIG -> g.fillCircle(mx, my, h * 0.07f, Colors.withAlpha(Colors.WHITE, 0.5f))
-            Prop.SHIELD, Prop.NONE -> Unit
+            Prop.SHIELD, Prop.NONE, Prop.GOLF_CLUB, Prop.PUTTER -> Unit
         }
     }
 

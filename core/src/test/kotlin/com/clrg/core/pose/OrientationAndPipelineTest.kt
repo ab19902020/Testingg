@@ -179,6 +179,27 @@ class OrientationAndPipelineTest {
         assertEquals(2, p2.size)
     }
 
+    @Test
+    fun onePlayerModesSearchForPeopleLessOften() {
+        // one person in the picture: expecting two keeps the person-detector running every frame; expecting one
+        // (solo, golf) lets it rest once that person is being followed
+        fun detectorCalls(desired: Int): Int {
+            val fake = FakeRunner(listOf(640f to 500f), sidePx = 500f)
+            val pipe = MultiPosePipeline(object : PoseModelRunner {
+                override fun runDetector(input: FloatArray, regressors: FloatArray, scores: FloatArray) = fake.runDetector(input, regressors, scores)
+                override fun runLandmarks(input: FloatArray, landmarks: FloatArray, flag: FloatArray, heatmap: FloatArray?) = fake.runLandmarks(input, landmarks, flag, heatmap)
+            }, PipelineConfig(maxPoses = desired + 1, desiredPoses = desired, searchRegions = listOf(RegionSpec(0f, 1f)), refineWithHeatmap = false, detectIntervalWhenSatisfied = 4))
+            val hook = GeometryHook(fake)
+            val img = RgbImage(64, 36)
+            repeat(24) { assertEquals(1, hook.run(pipe, img, FrameOrientation(1280, 720, 0)).size) }
+            return fake.detectorCalls
+        }
+        val two = detectorCalls(2)
+        val one = detectorCalls(1)
+        println("PIPELINE detector runs over 24 frames with one person: expecting two $two, expecting one $one")
+        assertTrue(one <= 8 && two >= 20, "expecting one: $one detector runs; expecting two: $two")
+    }
+
     /** The fake runner needs the crop geometry the pipeline is about to use; the pipeline observer provides it. */
     private class GeometryHook(val fake: FakeRunner) {
         fun run(pipe: MultiPosePipeline, img: PixelSource, o: FrameOrientation): List<RawPose> {

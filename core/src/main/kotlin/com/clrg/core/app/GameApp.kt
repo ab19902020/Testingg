@@ -223,6 +223,38 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         sim.solo = true
     }
 
+    /**
+     * Turn-based play (golf): one person at the camera at a time, standing anywhere in the picture. The others wait
+     * their turn out of the way. Uses the single-player tracking of solo mode, without a computer opponent slot.
+     */
+    fun startTurnTracking() {
+        cpuLevel = null
+        if (!tracker.solo) { tracker.solo = true; controls.forEach { it.calibration = null; it.reset() } }
+        sim.solo = true
+    }
+
+    /** The next person steps up: forget the last one, so whoever stands in front of the camera now is picked up. */
+    fun nextTurnPerson() {
+        tracker.resetAll()
+        controls.forEach { it.calibration = null; it.reset() }
+    }
+
+    /**
+     * Quick calibration of the person just picked up for their turn (body size and shoulder position from how they
+     * stand now; typical reach), then locks onto them so people walking past cannot take over. False until someone
+     * is being followed.
+     */
+    fun calibrateTurnPerson(profile: PlayerProfile?): Boolean {
+        val slot = tracker.slots[0]
+        val m = slot.metrics ?: return false
+        if (!slot.isPlaying) return false
+        val cal = com.clrg.core.tracking.Calibration.fromNeutral(m, profile?.hand ?: com.clrg.core.tracking.Hand.RIGHT, profile?.mode ?: com.clrg.core.tracking.MovementMode.STANDARD)
+        slot.calibration = cal
+        controls[0].calibration = cal
+        tracker.lock()
+        return true
+    }
+
     /** Back to two people at the camera (quick match, tournament, full set-up). */
     fun leaveSolo() {
         if (!solo && !tracker.solo) return
@@ -273,6 +305,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         handleLifecycle()
 
         // 1) tracking: every pending pose frame goes through the tracker and the gesture detectors
+        platform.setExpectedPeople(if (tracker.solo) 1 else 2)
         timing.poseNow = nowNanos / 1e9
         if (settings.simulatedInput) {
             // simulated poses have their own clock and no camera or TV: judged as they arrive
@@ -297,7 +330,8 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         val events = ArrayList<InputEvent>()
         while (true) events.add(inputQueue.poll() ?: break)
         val scr = current ?: return
-        val cursorsOn = scr.allowCursors && calibrated
+        // hands-free menus from the moment anyone is in front of the camera (no set-up needed first)
+        val cursorsOn = scr.allowCursors
         ui.begin(dt, events, cursorsOn)
         if (ui.backPressed && scr.onBack()) { /* handled */ }
         g.fillRect(0f, 0f, g.width, g.height, Colors.NIGHT_TOP)
@@ -325,13 +359,21 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         }
     }
 
+    /** True when someone in front of the camera has a hand cursor on screen right now. */
+    val handCursorShown: Boolean get() = ui.cursors.any { it.visible }
+
+    /**
+     * Hand cursors for everyone the camera is following - calibrated players, or anyone standing in front of the
+     * camera before set-up (with typical arm reach until they calibrate). A cursor only acts while its hand is
+     * raised above the waist, and only by holding still on a button.
+     */
     private fun updateCursors(g: Gfx) {
         for (k in 0..1) {
             val c = ui.cursors[k]
             val slot = tracker.slots[k]
             val ctl = controls[k]
             c.color = playerColor(k)
-            if (!calibrated || !slot.isPlaying || !ctl.hasPose) { c.active = false; c.visible = false; continue }
+            if (!slot.enabled || !slot.isPlaying || !ctl.hasPose) { c.active = false; c.visible = false; continue }
             // the higher of the two hands steers the cursor; it only acts when raised above the waist
             val h = if (!ctl.handVisible[0]) 1 else if (!ctl.handVisible[1]) 0 else if (ctl.handY[0] > ctl.handY[1]) 0 else 1
             val rx = ctl.handX[h]

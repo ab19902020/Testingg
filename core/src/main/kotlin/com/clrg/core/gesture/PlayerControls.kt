@@ -104,6 +104,10 @@ class PlayerControls(val playerIndex: Int) {
         private set
     /** Set by games that use small, quick strokes (table tennis): swing thresholds are scaled down. */
     var compactSwings = false
+    /** Golf: which stroke to look for (NONE outside golf). */
+    var golfStroke = GolfStroke.NONE
+    val golf = GolfSwingDetector()
+    private val golfShots = ArrayList<GolfSwingDetector.Shot>()
 
     val history = BodyHistory()
     private val frame = BodyFrame()
@@ -138,6 +142,7 @@ class PlayerControls(val playerIndex: Int) {
     fun reset() {
         history.clear()
         swing.reset(); throwD.reset(); bowl.reset(); leanT.reset(); pump.reset(); raise.reset()
+        golf.reset(); golfShots.clear()
         pending.clear()
         lastT = -1.0
         hasPose = false
@@ -170,6 +175,8 @@ class PlayerControls(val playerIndex: Int) {
         leanT.update(frame, t, dt)
         pump.update(frame, t, dt)
         raise.update(frame, t, dt, pending)
+        if (golfStroke == GolfStroke.NONE) golf.reset()
+        else golf.update(frame, golfStroke, calibration?.mode ?: MovementMode.STANDARD, calibration?.reach ?: 1.5f, sensitivity)?.let { golfShots.add(it) }
         avatar.update(frame, leanT.value)
         val reach = calibration?.reach ?: 1.5f
         for (h in 0..1) {
@@ -224,5 +231,8 @@ class PlayerControls(val playerIndex: Int) {
         pending.clear()
     }
 
-    fun discardEvents() = pending.clear()
+    fun discardEvents() { pending.clear(); golfShots.clear() }
+
+    /** Golf shots struck since the last call. */
+    fun drainGolfShots(out: MutableList<GolfSwingDetector.Shot>) { out.addAll(golfShots); golfShots.clear() }
 }

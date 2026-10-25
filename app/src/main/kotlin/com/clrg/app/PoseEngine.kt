@@ -150,6 +150,12 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     @Volatile var mirror = true
     @Volatile var displayRotationDeg = 90
     @Volatile var enabled = true
+    /**
+     * Players the game expects (1 in solo and golf, 2 otherwise). The pipeline follows one more person than that
+     * (so a spectator can never sneak in unnoticed) and only searches the whole picture for new people every few
+     * frames once everyone expected is being followed - for one player that saves the person-detector on most frames.
+     */
+    @Volatile var expectedPeople = 2
 
     private val lock = Object()
     private var pending = false
@@ -304,9 +310,7 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         initFailures = 0
         runner = r
         variant = wanted
-        val cfg = if (wanted == "lite") PipelineConfig(maxPoses = 3, detectIntervalWhenSatisfied = 6, refineWithHeatmap = false)
-        else PipelineConfig(maxPoses = 3, detectIntervalWhenSatisfied = 4, refineWithHeatmap = true)
-        pipeline = MultiPosePipeline(r, cfg)
+        pipeline = MultiPosePipeline(r, configFor(wanted, expectedPeople))
     }
 
     private fun processLatest() {
@@ -336,6 +340,8 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         ensureRunner()
         val pipe = pipeline ?: return
         if (info.id != lastCameraId) { pipe.reset(); lastCameraId = info.id }
+        val cfg = configFor(variant, expectedPeople)
+        if (pipe.config != cfg) pipe.config = cfg // keeps the people already being followed
         val rot = FrameOrientation.rotationFor(info.sensorOrientation, displayRotationDeg, info.front)
         val orient = FrameOrientation(w, h, rot)
         val t0 = System.nanoTime()
@@ -362,6 +368,12 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         publishDebug(pipe, geo)
         updateStats(pipe, t0, t1, captureNs, info.realtimeTimestamps, orient)
         adapt(t1)
+    }
+
+    private fun configFor(variant: String, people: Int): PipelineConfig {
+        val n = people.coerceIn(1, 2)
+        return if (variant == "lite") PipelineConfig(maxPoses = n + 1, desiredPoses = n, detectIntervalWhenSatisfied = 6, refineWithHeatmap = false)
+        else PipelineConfig(maxPoses = n + 1, desiredPoses = n, detectIntervalWhenSatisfied = 4, refineWithHeatmap = true)
     }
 
     private fun disableGpu() {
