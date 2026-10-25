@@ -136,6 +136,7 @@ class PresentCatchGame(env: GameEnv) : MiniGame(env) {
                         catchAnim[k] = 0f
                         env.popups.add("+${base + bonus}" + if (bonus > 0) " x${streak[k]}" else "", px, py - 60f, if (li.item.kind == Kind.GOLD) Colors.GOLD else env.color(k), 52f)
                         env.particles.burst(px, py, if (li.item.kind == Kind.GOLD) Colors.GOLD else li.item.color, 22, kind = Particles.Kind.STAR, size = 12f)
+                        env.particles.ring(px, py, if (li.item.kind == Kind.GOLD) Colors.GOLD else env.color(k), 100f)
                         env.sfx(Sfx.CATCH, 0.9f, pan(k))
                     }
                 }
@@ -215,6 +216,9 @@ class PresentCatchGame(env: GameEnv) : MiniGame(env) {
             val r = laneRect(k)
             g.save(); g.clipRect(r.left, 0f, r.right, g.height)
             Draw.nightSky(g, Rect(r.left, 0f, r.right, g.height), time + k * 3)
+            Draw.aurora(g, Rect(r.left, 0f, r.right, 520f), time + k * 5, 0.9f)
+            Draw.moon(g, if (k == 0) r.left + 120f else r.right - 120f, 220f, 46f)
+            Draw.pineRow(g, r.left, r.right, 860f, 0xFF0F2A2A.toInt(), 110f, 31 + k)
             Draw.pineRow(g, r.left, r.right, 900f, 0xFF173F33.toInt(), 140f, 11 + k)
             Draw.snowHills(g, Rect(r.left, 0f, r.right, g.height), 960f)
             Draw.snowfall(g, Rect(r.left, 0f, r.right, g.height), time + k, 30)
@@ -232,6 +236,7 @@ class PresentCatchGame(env: GameEnv) : MiniGame(env) {
                 hands[h * 2] = hx; hands[h * 2 + 1] = hy
             }
             val expr = if (catchAnim[k] < 0.5f) Expression.EXCITED else Expression.HAPPY
+            Draw.lightPool(g, cx, cy + 430f, 230f, 50f, Colors.withAlpha(env.color(k), 0.3f))
             Draw.buddy(g, cx, cy + 420f, 600f, env.color(k), inp.avatar, expr, t = time, handTargets = hands, mittenScale = 1.6f)
             for (li in live[k]) {
                 val sp = spots[li.item.spot]

@@ -183,15 +183,31 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
         val focused = focusId == id
         val hover = cursors.any { it.active && it.hoverId == id } || (pointerDown && downInside == id)
         val d = dwellOn(id)
-        val base = if (selected) Colors.withAlpha(accent, 0.85f) else theme.button
-        val fill = if (!enabled) 0x66222A35 else if (hover) Colors.lighter(base, 0.12f) else base
-        g.fillRoundRect(r.left + 5f, r.top + 8f, r.right + 5f, r.bottom + 8f, 26f, Colors.SHADOW)
-        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 26f, fill)
+        val pressed = pointerDown && downInside == id
+        val base = if (selected) Colors.withAlpha(accent, 0.92f) else theme.button
+        g.save()
+        if (pressed && enabled) { g.translate(r.cx, r.cy); g.scale(0.965f); g.translate(-r.cx, -r.cy) }
+        // soft drop shadow, and a glow when pointed at or focused
+        g.fillRoundRect(r.left + 3f, r.top + 10f, r.right + 3f, r.bottom + 11f, 28f, 0x33000000)
+        if ((focused || hover) && enabled) {
+            g.fillRoundRect(r.left - 9f, r.top - 9f, r.right + 9f, r.bottom + 9f, 34f, Colors.withAlpha(accent, 0.16f))
+            g.fillRoundRect(r.left - 4f, r.top - 4f, r.right + 4f, r.bottom + 4f, 30f, Colors.withAlpha(accent, 0.22f))
+        }
+        when {
+            !enabled -> g.fillRoundRect(r.left, r.top, r.right, r.bottom, 26f, 0x66222A35)
+            theme.highContrast -> g.fillRoundRect(r.left, r.top, r.right, r.bottom, 26f, base)
+            else -> {
+                val lift = if (hover) 0.3f else 0.17f
+                g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, 26f, Colors.lighter(base, lift), Colors.darker(base, 0.78f))
+                g.fillRoundRectGradient(r.left + 3f, r.top + 3f, r.right - 3f, r.top + r.height * 0.48f, 22f, 0x2EFFFFFF, 0x05FFFFFF)
+            }
+        }
         g.strokeRoundRect(r.left, r.top, r.right, r.bottom, 26f, if (focused) 7f else theme.borderWidth, if (focused || hover) accent else theme.buttonBorder)
         if (d > 0f) {
             g.save(); g.clipRect(r.left, r.top, r.left + r.width * d, r.bottom)
-            g.fillRoundRect(r.left, r.top, r.right, r.bottom, 26f, Colors.withAlpha(accent, 0.35f))
+            g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, 26f, Colors.withAlpha(accent, 0.55f), Colors.withAlpha(accent, 0.25f))
             g.restore()
+            g.glow(r.left + r.width * d, r.cy, r.height * 0.6f, Colors.withAlpha(accent, 0.5f))
         }
         val textColor = if (!enabled) 0x88FFFFFF.toInt() else if (selected) Colors.BLACK else Colors.WHITE
         val ts = size * theme.textScale
@@ -206,6 +222,7 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
             g.text(label, tx, r.cy - ts * 0.38f, fit(g, label, ts, r.width - 40f), textColor)
             g.text(sub, tx, r.cy + ts * 0.5f, fit(g, sub, ts * 0.55f, r.width - 40f, false), if (selected) 0xCC000000.toInt() else theme.dim, bold = false)
         }
+        g.restore()
         return activated == id
     }
 
@@ -213,15 +230,20 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
         val act = button(g, id, r, "", enabled = enabled)
         g.text(label, r.left + 30f, r.cy, fit(g, label, 40f * theme.textScale, r.width - 200f), Colors.WHITE, Align.LEFT)
         val sx = r.right - 110f
-        g.fillRoundRect(sx - 50f, r.cy - 24f, sx + 50f, r.cy + 24f, 24f, if (value) Colors.GOOD else 0xFF54637A.toInt())
-        g.fillCircle(if (value) sx + 26f else sx - 26f, r.cy, 20f, Colors.WHITE)
+        val track = if (value) Colors.GOOD else 0xFF54637A.toInt()
+        g.fillRoundRectGradient(sx - 50f, r.cy - 24f, sx + 50f, r.cy + 24f, 24f, Colors.darker(track, 0.75f), Colors.lighter(track, 0.15f))
+        if (value) g.glow(sx, r.cy, 70f, Colors.withAlpha(Colors.GOOD, 0.25f))
+        val kx = if (value) sx + 26f else sx - 26f
+        g.fillCircle(kx + 2f, r.cy + 4f, 20f, 0x44000000)
+        g.fillCircleRadial(kx, r.cy, 20f, kx - 6f, r.cy - 8f, 28f, Colors.WHITE, 0xFFC9D6E6.toInt())
         g.text(if (value) "ON" else "OFF", sx + (if (value) -22f else 22f), r.cy, 20f, if (value) 0xFF0B4D2C.toInt() else Colors.WHITE)
         return act
     }
 
     /** Label + value with - and + buttons. Returns -1, 0 or +1. */
     fun stepper(g: Gfx, id: String, r: Rect, label: String, value: String): Int {
-        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 26f, theme.button)
+        if (theme.highContrast) g.fillRoundRect(r.left, r.top, r.right, r.bottom, 26f, theme.button)
+        else g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, 26f, Colors.lighter(theme.button, 0.12f), Colors.darker(theme.button, 0.8f))
         g.strokeRoundRect(r.left, r.top, r.right, r.bottom, 26f, theme.borderWidth, theme.buttonBorder)
         g.text(label, r.left + 30f, r.cy, fit(g, label, 40f * theme.textScale, r.width - 420f), Colors.WHITE, Align.LEFT)
         val bw = r.height - 16f
@@ -234,7 +256,9 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
     }
 
     fun title(g: Gfx, text: String, y: Float = 70f, size: Float = 76f) {
-        g.text(text, g.width / 2f, y, size * theme.textScale, Colors.WHITE, outline = 0xAA000000.toInt(), outlineWidth = 8f)
+        val s = size * theme.textScale
+        g.text(text, g.width / 2f + 3f, y + 5f, s, 0x66000000, outline = 0x44000000, outlineWidth = 10f)
+        g.text(text, g.width / 2f, y, s, Colors.WHITE, outline = 0xCC0A1A33.toInt(), outlineWidth = 8f)
     }
 
     /** Touch/dwell back button (the Back key is handled globally through Screen.onBack). */
@@ -252,8 +276,9 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
             if (!c.visible) continue
             val a = if (c.active) 1f else 0.35f
             g.save(); g.setAlpha(a)
+            g.glow(c.x, c.y, 70f, Colors.withAlpha(c.color, 0.35f))
             g.fillCircle(c.x + 4f, c.y + 6f, 30f, Colors.SHADOW)
-            g.fillCircle(c.x, c.y, 28f, c.color)
+            g.fillCircleRadial(c.x, c.y, 28f, c.x - 9f, c.y - 10f, 40f, Colors.lighter(c.color, 0.4f), Colors.darker(c.color, 0.7f))
             g.strokeCircle(c.x, c.y, 28f, 5f, Colors.WHITE)
             if (c.dwell > 0f) Draw.progressRing(g, c.x, c.y, 44f, c.dwell / dwellSeconds, Colors.GOLD, 9f)
             g.text("P${c.player + 1}", c.x, c.y, 24f, Colors.BLACK)

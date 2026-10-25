@@ -103,6 +103,13 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
             x[k] = clamp(x[k] + clamp(inp.lean, -1f, 1f) * 1.25f * dt * (0.6f + 0.4f * speed[k] / 15f), -1f, 1f)
             val before = y[k]
             y[k] += speed[k] * dt
+            // cosmetic ski tracks: a sample every 0.8 m
+            if (y[k] - trailLastY[k] >= 0.8f) {
+                trailLastY[k] = y[k]
+                val n = trailN[k]
+                if (n < TRAIL) { trailX[k][n] = x[k]; trailY[k][n] = y[k]; trailN[k] = n + 1 }
+                else { System.arraycopy(trailX[k], 1, trailX[k], 0, TRAIL - 1); System.arraycopy(trailY[k], 1, trailY[k], 0, TRAIL - 1); trailX[k][TRAIL - 1] = x[k]; trailY[k][TRAIL - 1] = y[k] }
+            }
             for ((i, t) in things.withIndex()) {
                 if (t.y < before || t.y > y[k]) continue
                 if (i in done[k]) continue
@@ -205,10 +212,30 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
         Hud.topBar(g, env, null, "Sleigh Slalom", if (steeringOnly) "Steering-only mode" else "Lean to steer - tuck for speed", inputs)
     }
 
+    private val TRAIL = 40
+    private val trailX = Array(2) { FloatArray(TRAIL) }
+    private val trailY = Array(2) { FloatArray(TRAIL) }
+    private val trailN = IntArray(2)
+    private val trailLastY = FloatArray(2)
+    private val lanePts = FloatArray(TRAIL * 2)
+
+    /** Top-down pine: soft shadow, layered lit needles, a dusting of snow. */
+    private fun topTree(g: Gfx, xx: Float, yy: Float, s: Float) {
+        Draw.softShadow(g, xx + s * 0.25f, yy + s * 0.3f, s * 1.1f, s * 0.7f, 0.35f)
+        for (a in 0 until 7) {
+            val ang = a * 0.8976f
+            val cx = xx + kotlin.math.cos(ang) * s * 0.5f; val cy = yy + kotlin.math.sin(ang) * s * 0.5f
+            g.fillCircleRadial(cx, cy, s * 0.52f, cx - s * 0.2f, cy - s * 0.25f, s * 0.8f, 0xFF2E7D4F.toInt(), 0xFF123D26.toInt())
+        }
+        g.fillCircleRadial(xx, yy, s * 0.6f, xx - s * 0.2f, yy - s * 0.25f, s * 0.85f, 0xFF3FA36A.toInt(), 0xFF1B5E3A.toInt())
+        g.fillCircle(xx - s * 0.22f, yy - s * 0.22f, s * 0.24f, 0xCCF4F8FF.toInt())
+        g.fillCircle(xx + s * 0.25f, yy - s * 0.05f, s * 0.13f, 0x99F4F8FF.toInt())
+    }
+
     private fun renderLane(g: Gfx, k: Int, time: Double) {
         val r = Rect(if (k == 0) 0f else screenW / 2f, 120f, if (k == 0) screenW / 2f else screenW, 1080f)
         g.save(); g.clipRect(r.left, r.top, r.right, r.bottom)
-        g.fillRect(r.left, r.top, r.right, r.bottom, 0xFFEAF2FC.toInt())
+        g.gradientRect(r.left, r.top, r.right, r.bottom, 0xFFF8FBFF.toInt(), 0xFFD2E1F4.toInt())
         val half = r.width * 0.42f
         val pxPerM = 26f
         fun sx(xx: Float) = r.cx + xx * half
@@ -217,11 +244,23 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
         var ry = (kotlin.math.floor((y[k] - 20f) / 8f) * 8f)
         while (sy(ry) < r.bottom + 40f) {
             val yy = sy(ry)
-            if (yy > r.top - 20f) g.line(r.left, yy, r.right, yy + 30f, 3f, 0x11003366)
+            if (yy > r.top - 20f) {
+                g.line(r.left, yy, r.right, yy + 30f, 3f, 0x14003366)
+                g.line(r.left, yy + 3f, r.right, yy + 33f, 2f, 0x22FFFFFF)
+            }
             ry += 8f
         }
-        g.fillRect(r.left, r.top, sx(-1.08f), r.bottom, 0xFFD5E3F5.toInt())
-        g.fillRect(sx(1.08f), r.top, r.right, r.bottom, 0xFFD5E3F5.toInt())
+        g.gradientRect(r.left, r.top, sx(-1.08f), r.bottom, 0xFFC9DAF0.toInt(), 0xFFA9C1E1.toInt())
+        g.gradientRect(sx(1.08f), r.top, r.right, r.bottom, 0xFFC9DAF0.toInt(), 0xFFA9C1E1.toInt())
+        g.line(sx(-1.08f), r.top, sx(-1.08f), r.bottom, 4f, 0x55FFFFFF)
+        g.line(sx(1.08f), r.top, sx(1.08f), r.bottom, 4f, 0x55FFFFFF)
+        // ski tracks
+        val n = trailN[k]
+        if (n >= 2) for (off in floatArrayOf(-0.06f, 0.06f)) {
+            var m = 0
+            for (i in 0 until n) { val ty = sy(trailY[k][i]); if (ty < r.top - 40f) continue; lanePts[m * 2] = sx(trailX[k][i] + off); lanePts[m * 2 + 1] = ty; m++ }
+            if (m >= 2) g.polyline(lanePts, m, 5f, 0x2A3A6FA8)
+        }
         // finish line
         val fy = sy(LENGTH)
         if (fy in r.top..r.bottom) {
@@ -239,19 +278,33 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
                     val c2 = if (passed) 0x8864B5F6.toInt() else 0xFF1E88E5.toInt()
                     for ((side, c) in listOf(-1 to c1, 1 to c2)) {
                         val px = sx(t.x + side * t.halfWidth)
-                        g.line(px, yy, px, yy - 100f, 9f, 0xFF455A64.toInt())
-                        Draw.tri(g, px, yy - 100f, px, yy - 55f, px - side * 62f, yy - 78f, c)
+                        Draw.softShadow(g, px + 14f, yy + 4f, 26f, 8f, 0.4f)
+                        g.line(px, yy, px, yy - 100f, 10f, 0xFF263238.toInt())
+                        g.line(px - 1.5f, yy, px - 1.5f, yy - 100f, 4f, 0xFF90A4AE.toInt())
+                        val flap = sin(time * 5 + i + side).toFloat() * 6f
+                        lanePts[0] = px; lanePts[1] = yy - 100f; lanePts[2] = px; lanePts[3] = yy - 55f; lanePts[4] = px - side * 62f; lanePts[5] = yy - 78f + flap
+                        g.fillPolygonGradient(lanePts, 3, yy - 100f, yy - 55f, Colors.lighter(c, 0.35f), Colors.darker(c, 0.7f))
                     }
                     g.line(sx(t.x - t.halfWidth), yy, sx(t.x + t.halfWidth), yy, 3f, 0x33000000)
                 }
                 Kind.PRESENT -> if (i !in done[k]) Draw.present(g, xx, yy - 20f, 46f, Colors.CANDY, Colors.GOLD, sin(time * 3 + i).toFloat() * 0.2f)
-                Kind.TREE -> { g.fillCircle(xx + 8f, yy + 8f, 46f, 0x33000000); for (a in 0 until 6) { val ang = a * 1.047f; g.fillCircle(xx + kotlin.math.cos(ang) * 24f, yy + kotlin.math.sin(ang) * 24f, 26f, Colors.PINE_DARK) }; g.fillCircle(xx, yy, 30f, Colors.PINE); g.fillCircle(xx - 8f, yy - 8f, 12f, Colors.withAlpha(Colors.SNOW, 0.8f)) }
-                Kind.ROCK -> { g.fillOval(xx - 34f, yy - 22f, xx + 34f, yy + 22f, 0xFF78909C.toInt()); g.fillOval(xx - 22f, yy - 22f, xx + 14f, yy - 2f, 0xFFCFD8DC.toInt()) }
+                Kind.TREE -> topTree(g, xx, yy, 48f)
+                Kind.ROCK -> {
+                    Draw.softShadow(g, xx + 10f, yy + 14f, 44f, 18f, 0.35f)
+                    g.save(); g.translate(xx, yy); g.scale(1f, 0.66f)
+                    g.fillCircleRadial(0f, 0f, 34f, -12f, -14f, 50f, 0xFFB0BEC5.toInt(), 0xFF455A64.toInt())
+                    g.restore()
+                    g.fillOval(xx - 22f, yy - 22f, xx + 14f, yy - 4f, 0xEEF4F8FF.toInt())
+                }
             }
         }
-        // sleigh with trail
+        // sleigh, snow spray on hard turns
         val shx = sx(x[k])
-        for (i in 1..10) g.fillCircle(shx, sleighY - i * 18f, 7f, 0x22003366)
+        val st = steer[k]
+        if (kotlin.math.abs(st) > 0.35f && crash[k] <= 0f) for (i in 0 until 5) {
+            val ph = ((time * 3 + i / 5.0) % 1.0).toFloat()
+            g.glow(shx + (if (st > 0) -1f else 1f) * (40f + 50f * ph), sleighY - 30f - 60f * ph, 16f + 22f * ph, Colors.withAlpha(Colors.WHITE, (kotlin.math.abs(st) - 0.3f) * (1f - ph)))
+        }
         if (tucking[k] || (steeringOnly && speed[k] > 10f)) for (i in 0..2) g.line(shx - 30f + i * 30f, sleighY - 60f, shx - 30f + i * 30f, sleighY - 120f - speed[k] * 3f, 3f, 0x5590CAF9)
         Draw.sleighTop(g, shx, sleighY, 110f, env.color(k), -steer[k] * 0.35f)
         if (crash[k] > 0f) Draw.star(g, shx + 30f, sleighY - 60f, 20f, Colors.GOLD, time.toFloat() * 5f)

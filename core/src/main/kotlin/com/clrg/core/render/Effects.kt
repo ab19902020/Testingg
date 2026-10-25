@@ -11,7 +11,7 @@ import kotlin.math.sin
  * "reduced effects" accessibility setting lowers the count and disables screen flashes.
  */
 class Particles(private val maxParticles: Int = 400) {
-    enum class Kind { SPARK, CONFETTI, PUFF, STAR }
+    enum class Kind { SPARK, CONFETTI, PUFF, STAR, RING }
 
     private class P(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float, var maxLife: Float,
                     var size: Float, var color: Int, var kind: Kind, var rot: Float, var vr: Float, var gravity: Float)
@@ -32,6 +32,12 @@ class Particles(private val maxParticles: Int = 400) {
             val life = rng.range(0.5f, 1.1f)
             list.add(P(x, y, cos(a) * s, sin(a) * s - speed * 0.3f, life, life, size * rng.range(0.6f, 1.3f), color, kind, rng.range(0f, 6f), rng.range(-8f, 8f), gravity))
         }
+    }
+
+    /** Expanding impact ring (hits, catches, saves). */
+    fun ring(x: Float, y: Float, color: Int, size: Float = 90f) {
+        if (list.size >= maxParticles) list.removeAt(0)
+        list.add(P(x, y, 0f, 0f, 0.45f, 0.45f, size, color, Kind.RING, 0f, 0f, 0f))
     }
 
     fun confetti(x0: Float, x1: Float, y: Float, n: Int = 80) {
@@ -64,13 +70,26 @@ class Particles(private val maxParticles: Int = 400) {
             val a = clamp01(p.life / p.maxLife * 1.5f)
             val c = Colors.withAlpha(p.color, a)
             when (p.kind) {
-                Kind.SPARK -> g.fillCircle(p.x, p.y, p.size * (0.4f + 0.6f * a), c)
-                Kind.PUFF -> g.fillCircle(p.x, p.y, p.size * (1.6f - 0.6f * a), Colors.withAlpha(p.color, a * 0.6f))
-                Kind.STAR -> Draw.star(g, p.x, p.y, p.size, c, p.rot)
+                Kind.SPARK -> {
+                    if (!reduced) g.glow(p.x, p.y, p.size * 2.6f, Colors.withAlpha(p.color, a * 0.45f))
+                    g.fillCircle(p.x, p.y, p.size * (0.4f + 0.6f * a), Colors.lerp(c, Colors.withAlpha(Colors.WHITE, a), 0.35f))
+                }
+                Kind.PUFF -> g.glow(p.x, p.y, p.size * (2.4f - 0.8f * a), Colors.withAlpha(p.color, a * 0.85f))
+                Kind.STAR -> {
+                    if (!reduced) g.glow(p.x, p.y, p.size * 2.2f, Colors.withAlpha(p.color, a * 0.4f))
+                    Draw.star(g, p.x, p.y, p.size, c, p.rot)
+                }
                 Kind.CONFETTI -> {
                     g.save(); g.translate(p.x, p.y); g.rotate(p.rot)
-                    g.fillRect(-p.size / 2, -p.size / 4 * (0.4f + 0.6f * kotlin.math.abs(sin(p.rot * 2))), p.size / 2, p.size / 4, c)
+                    val flip = kotlin.math.abs(sin(p.rot * 2))
+                    g.fillRect(-p.size / 2, -p.size / 4 * (0.4f + 0.6f * flip), p.size / 2, p.size / 4, Colors.lerp(Colors.darker(c, 0.7f), c, flip))
                     g.restore()
+                }
+                Kind.RING -> {
+                    val k = 1f - p.life / p.maxLife
+                    val rr = p.size * (0.25f + 0.75f * com.clrg.core.math.easeOutCubic(k))
+                    g.strokeCircle(p.x, p.y, rr, 10f * (1f - k) + 2f, Colors.withAlpha(p.color, (1f - k) * 0.9f))
+                    if (!reduced) g.glow(p.x, p.y, rr * 1.1f, Colors.withAlpha(p.color, (1f - k) * 0.25f))
                 }
             }
         }

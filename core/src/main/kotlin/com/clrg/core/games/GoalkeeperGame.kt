@@ -114,6 +114,7 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
                             env.sfx(Sfx.SAVE, 1f, pan(k))
                             env.popups.add(if (streak[k] >= 3) "SAVE! x${streak[k]}" else "SAVE!", px, py - 70f, Colors.GOOD, 60f)
                             env.particles.burst(px, py, env.color(k), 20, kind = Particles.Kind.STAR, size = 12f)
+                            env.particles.ring(px, py, Colors.GOOD, 120f)
                         } else {
                             goals[k]++; streak[k] = 0; goalFlash[k] = 0f
                             env.sfx(Sfx.MISS, 0.8f, pan(k))
@@ -185,13 +186,25 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
         val lane = Rect(if (k == 0) 0f else screenW / 2f, 0f, if (k == 0) screenW / 2f else screenW, 1080f)
         g.save(); g.clipRect(lane.left, lane.top, lane.right, lane.bottom)
         Draw.nightSky(g, lane, time + k)
+        Draw.aurora(g, Rect(lane.left, 0f, lane.right, 460f), time + k * 3, 0.8f)
+        // stadium stand silhouette with twinkling crowd lights
+        g.gradientRect(lane.left, 560f, lane.right, 700f, 0xFF1A2335.toInt(), 0xFF0E1420.toInt())
+        for (i in 0 until 26) {
+            val cx = lane.left + (i + 0.5f) * lane.width / 26f
+            val on = sin(time * 1.3 + i * 2.1 + k).toFloat() > 0.2f
+            g.fillCircle(cx, 600f + (i % 3) * 30f, 5f, if (on) 0xCCFFE082.toInt() else 0x44FFFFFF)
+        }
+        Draw.floodlight(g, lane.left + 70f, 700f, 330f, lane.cx - 60f, 1000f, 240f)
+        Draw.floodlight(g, lane.right - 70f, 700f, 330f, lane.cx + 60f, 1000f, 240f)
         Draw.stringLights(g, lane.left, lane.right, 130f, time)
-        g.gradientRect(lane.left, 700f, lane.right, 1080f, 0xFF2E7D4F.toInt(), 0xFF1B5E35.toInt())
-        for (i in 0 until 8) g.fillRect(lane.left, 700f + i * 50f, lane.right, 725f + i * 50f, 0x11FFFFFF)
-        g.fillRect(lane.left, 700f, lane.right, 712f, Colors.withAlpha(Colors.SNOW, 0.6f))
+        g.gradientRect(lane.left, 700f, lane.right, 1080f, 0xFF2E8B55.toInt(), 0xFF145030.toInt())
+        for (i in 0 until 8) g.fillRect(lane.left, 700f + i * 50f, lane.right, 725f + i * 50f, 0x14FFFFFF)
+        Draw.lightPool(g, lane.cx, 900f, lane.width * 0.5f, 110f, 0x30FFF6D8)
+        // snow along the edge of the pitch
+        g.fillRoundRectGradient(lane.left, 694f, lane.right, 716f, 10f, Colors.SNOW, 0xFFB0C4DE.toInt())
         val gr = goalRect(k)
         // net
-        g.fillRect(gr.left, gr.top, gr.right, gr.bottom, 0x22FFFFFF)
+        g.fillRectRadial(gr.left, gr.top, gr.right, gr.bottom, gr.cx, gr.cy, gr.width * 0.7f, 0x1AFFFFFF, 0x40000814)
         var nx = gr.left
         while (nx <= gr.right) { g.line(nx, gr.top, nx, gr.bottom, 2f, 0x33FFFFFF); nx += 36f }
         var ny = gr.top

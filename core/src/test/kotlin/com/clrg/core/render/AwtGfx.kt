@@ -103,6 +103,36 @@ class AwtGfx(val pixelWidth: Int, val pixelHeight: Int) : Gfx {
         g2.fill(Ellipse2D.Float(cx - r, cy - r, r * 2, r * 2))
     }
 
+    private fun radialPaint(gx: Float, gy: Float, gr: Float, inner: Int, outer: Int) =
+        RadialGradientPaint(gx, gy, gr.coerceAtLeast(0.01f), floatArrayOf(0f, 1f), arrayOf(col(inner), col(outer)))
+
+    override fun fillCircleRadial(cx: Float, cy: Float, r: Float, gx: Float, gy: Float, gr: Float, inner: Int, outer: Int) {
+        chk(cx, cy, r, gx, gy, gr)
+        if (r <= 0f) return
+        g2.paint = radialPaint(gx, gy, gr, inner, outer)
+        g2.fill(Ellipse2D.Float(cx - r, cy - r, r * 2, r * 2))
+    }
+
+    override fun fillRectRadial(l: Float, t: Float, r: Float, b: Float, gx: Float, gy: Float, gr: Float, inner: Int, outer: Int) {
+        chk(l, t, r, b, gx, gy, gr)
+        if (r <= l || b <= t) return
+        g2.paint = radialPaint(gx, gy, gr, inner, outer)
+        g2.fill(Rectangle2D.Float(l, t, r - l, b - t))
+    }
+
+    override fun fillRoundRectGradient(l: Float, t: Float, r: Float, b: Float, radius: Float, top: Int, bottom: Int) {
+        chk(l, t, r, b, radius)
+        if (r <= l || b <= t) return
+        g2.paint = GradientPaint(0f, t, col(top), 0f, b, col(bottom))
+        g2.fill(RoundRectangle2D.Float(l, t, r - l, b - t, radius * 2, radius * 2))
+    }
+
+    override fun fillPolygonGradient(pts: FloatArray, n: Int, y0: Float, y1: Float, top: Int, bottom: Int) {
+        chk(y0, y1)
+        g2.paint = GradientPaint(0f, y0, col(top), 0f, if (y1 > y0) y1 else y0 + 0.01f, col(bottom))
+        g2.fill(path(pts, n, true))
+    }
+
     private fun font(size: Float, bold: Boolean) = Font("SansSerif", if (bold) Font.BOLD else Font.PLAIN, 1).deriveFont(size)
 
     override fun text(s: String, x: Float, y: Float, size: Float, color: Int, align: Align, bold: Boolean, outline: Int, outlineWidth: Float) {

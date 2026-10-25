@@ -17,7 +17,11 @@ object Hud {
 
     /** Top bar: P1 name/score left, P2 right, [center] text (timer/target) in the middle. */
     fun topBar(g: Gfx, env: GameEnv, scores: IntArray?, center: String?, sub: String? = null, inputs: Array<PlayerInput>? = null) {
-        g.gradientRect(0f, 0f, g.width, BAR_H, 0xE6061226.toInt(), 0x99061226.toInt())
+        // every game draws its HUD last: darken the scene's edges first (cinematic framing), under the HUD
+        Draw.vignette(g, if (env.settings.reducedEffects) 0.25f else 0.42f)
+        g.gradientRect(0f, 0f, g.width, BAR_H, 0xF0040C1E.toInt(), 0xA0061226.toInt())
+        g.fillRect(0f, BAR_H - 2f, g.width, BAR_H, 0x33FFFFFF)
+        g.gradientRect(0f, BAR_H, g.width, BAR_H + 24f, 0x55000000, 0x00000000)
         for (i in 0..1) {
             val left = i == 0
             val c = env.color(i)
@@ -27,7 +31,9 @@ object Hud {
             Draw.badge(g, nameX + (if (left) 22f else -22f), 42f, "P${i + 1}", c, 24f)
             if (scores != null) {
                 val bx = if (left) 40f else g.width - 40f - 150f
-                g.fillRoundRect(bx, 66f, bx + 150f, 114f, 16f, c)
+                g.fillRoundRect(bx + 2f, 70f, bx + 152f, 118f, 16f, 0x55000000)
+                g.fillRoundRectGradient(bx, 66f, bx + 150f, 114f, 16f, Colors.lighter(c, 0.3f), Colors.darker(c, 0.75f))
+                g.fillRoundRectGradient(bx + 3f, 68f, bx + 147f, 90f, 13f, 0x40FFFFFF, 0x00FFFFFF)
                 g.text(scores[i].toString(), bx + 75f, 90f, 44f, Colors.BLACK)
             }
             if (env.players[i].cpu) {

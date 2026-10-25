@@ -113,11 +113,13 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
                 if (abs(px[target] - hitX) < HIT_RADIUS) {
                     if (shieldTime[target] > 0f) {
                         env.popups.add("BLOCKED!", sx(px[target]), 380f, Colors.ICE, 56f)
+                        env.particles.ring(sx(px[target]), 560f, Colors.ICE, 200f)
                         env.particles.burst(sx(px[target]), 560f, Colors.ICE, 18, kind = Particles.Kind.PUFF)
                         env.sfx(Sfx.SHIELD, 0.6f, pan(target))
                     } else {
                         scores[b.owner]++
                         stun[target] = 0.6f
+                        env.particles.ring(sx(px[target]), 560f, env.color(b.owner), 150f)
                         env.popups.add("SPLAT! +1", sx(px[target]), 380f, env.color(b.owner), 60f)
                         env.particles.burst(sx(px[target]), 640f, Colors.SNOW, 30, kind = Particles.Kind.PUFF, size = 14f)
                         env.sfx(Sfx.SPLAT, 1f, pan(target))
@@ -187,15 +189,36 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
         screenW = g.width
         val w = g.width
         Draw.nightSky(g, Rect(0f, 0f, w, g.height), time)
-        // house in the background
-        g.fillRect(w * 0.38f, 360f, w * 0.62f, 640f, 0xFF4E342E.toInt())
-        Draw.tri(g, w * 0.35f, 370f, w * 0.65f, 370f, w * 0.5f, 230f, 0xFF3E2723.toInt())
-        Draw.tri(g, w * 0.36f, 372f, w * 0.64f, 372f, w * 0.5f, 245f, Colors.SNOW)
+        Draw.aurora(g, Rect(0f, 0f, w, 520f), time, 0.7f)
+        Draw.moon(g, w * 0.83f, 190f, 46f)
+        Draw.pineRow(g, -20f, w, 610f, 0xFF0F2E25.toInt(), 110f, 4)
+        // log cabin in the background: chimney smoke, glowing windows, light spilling onto the snow
+        val hx0 = w * 0.38f; val hx1 = w * 0.62f
+        g.fillRect(w * 0.555f, 250f, w * 0.585f, 330f, 0xFF5D4037.toInt())
+        for (i in 0 until 6) {
+            val k = ((time * 0.25 + i / 6.0) % 1.0).toFloat()
+            g.glow(w * 0.57f + kotlin.math.sin(k * 6f + i) * 30f * k, 240f - k * 190f, 26f + 50f * k, Colors.withAlpha(0xFFB0BEC5.toInt(), 0.35f * (1f - k)))
+        }
+        g.fillRoundRectGradient(hx0, 360f, hx1, 640f, 6f, 0xFF7B5446.toInt(), 0xFF3E2723.toInt())
+        for (i in 0 until 7) g.line(hx0 + 4f, 380f + i * 38f, hx1 - 4f, 380f + i * 38f, 4f, 0x33000000)
+        pts4[0] = w * 0.35f; pts4[1] = 370f; pts4[2] = w * 0.65f; pts4[3] = 370f; pts4[4] = w * 0.5f; pts4[5] = 230f
+        g.fillPolygonGradient(pts4, 3, 230f, 370f, 0xFF5D4037.toInt(), 0xFF2B1B16.toInt())
+        pts4[0] = w * 0.36f; pts4[1] = 372f; pts4[2] = w * 0.64f; pts4[3] = 372f; pts4[4] = w * 0.5f; pts4[5] = 245f
+        g.fillPolygonGradient(pts4, 3, 245f, 372f, Colors.WHITE, 0xFFC5D8F0.toInt())
+        Draw.lightPool(g, w * 0.5f, 660f, w * 0.2f, 40f, 0x55FFB74D)
         for (i in 0..2) {
             val wx = w * (0.42f + i * 0.08f)
-            g.glow(wx, 470f, 70f, 0x55FFB74D)
-            g.fillRoundRect(wx - 35f, 430f, wx + 35f, 510f, 6f, 0xFFFFCC80.toInt())
+            if (i == 1) {
+                g.glow(wx, 560f, 90f, 0x44FFB74D)
+                g.fillRoundRectGradient(wx - 34f, 500f, wx + 34f, 640f, 6f, 0xFFFFE0A3.toInt(), 0xFFFFA94D.toInt())
+                g.fillRoundRect(wx - 30f, 504f, wx + 30f, 640f, 6f, 0x88542E1F.toInt())
+                g.fillCircle(wx + 18f, 575f, 5f, Colors.GOLD)
+                continue
+            }
+            g.glow(wx, 470f, 85f, 0x66FFB74D)
+            g.fillRoundRectGradient(wx - 35f, 430f, wx + 35f, 510f, 6f, 0xFFFFE6B0.toInt(), 0xFFFFA94D.toInt())
             g.line(wx, 430f, wx, 510f, 4f, 0xFF4E342E.toInt()); g.line(wx - 35f, 470f, wx + 35f, 470f, 4f, 0xFF4E342E.toInt())
+            g.fillRoundRect(wx - 40f, 508f, wx + 40f, 518f, 4f, Colors.SNOW)
         }
         Draw.stringLights(g, w * 0.36f, w * 0.64f, 378f, time, sag = 18f, spacing = 50f)
         Draw.pineRow(g, 0f, w * 0.33f, 640f, 0xFF173F33.toInt(), 160f, 7)
@@ -222,15 +245,36 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
             for (s in 0 until SHIELDS) {
                 val sxp = x - 50f + s * 50f
                 val on = s < shieldLeft[k]
-                g.fillRoundRect(sxp - 16f, groundY + 60f, sxp + 16f, groundY + 100f, 10f, if (on) Colors.ICE else 0x44FFFFFF)
+                if (on) {
+                    g.glow(sxp, groundY + 80f, 30f, 0x5580D8FF)
+                    g.fillRoundRectGradient(sxp - 16f, groundY + 60f, sxp + 16f, groundY + 100f, 10f, 0xFFDDF4FF.toInt(), 0xFF4FB3E8.toInt())
+                } else g.fillRoundRect(sxp - 16f, groundY + 60f, sxp + 16f, groundY + 100f, 10f, 0x44FFFFFF)
             }
         }
         // fort walls in front of the players
         for (k in 0..1) {
             val cx = sx(ZONE_CENTER[k])
             val ww = screenW * (ZONE_HALF + 0.07f)
-            g.fillRoundRect(cx - ww, groundY - 110f, cx + ww, groundY + 40f, 30f, 0xFFDDE9F7.toInt())
-            for (i in 0 until 6) g.fillCircle(cx - ww + 30f + i * (ww * 2 - 60f) / 5f, groundY - 110f, 30f, Colors.SNOW)
+            Draw.softShadow(g, cx, groundY + 40f, ww * 1.1f, 26f, 0.4f)
+            g.fillRoundRectGradient(cx - ww, groundY - 110f, cx + ww, groundY + 40f, 30f, 0xFFF4F9FF.toInt(), 0xFFA9C2E2.toInt())
+            // packed-snow bricks
+            for (row in 0 until 3) {
+                val ry = groundY - 70f + row * 38f
+                g.line(cx - ww + 12f, ry, cx + ww - 12f, ry, 3f, 0x337A9CC6)
+                var bx = cx - ww + (if (row % 2 == 0) 70f else 30f)
+                while (bx < cx + ww - 20f) { g.line(bx, ry, bx, ry + 38f, 3f, 0x2E7A9CC6); bx += 80f }
+            }
+            for (i in 0 until 6) {
+                val bxx = cx - ww + 30f + i * (ww * 2 - 60f) / 5f
+                g.fillCircleRadial(bxx, groundY - 110f, 30f, bxx - 10f, groundY - 122f, 42f, Colors.WHITE, 0xFFBACFEA.toInt())
+            }
+            // team pennant
+            val px0 = if (k == 0) cx - ww + 20f else cx + ww - 20f
+            g.line(px0, groundY - 140f, px0, groundY - 290f, 6f, 0xFF8D6E63.toInt())
+            val dir = if (k == 0) 1f else -1f
+            val flap = kotlin.math.sin((time * 4 + k).toFloat()) * 8f
+            pts4[0] = px0; pts4[1] = groundY - 290f; pts4[2] = px0 + dir * 80f; pts4[3] = groundY - 265f + flap; pts4[4] = px0; pts4[5] = groundY - 240f
+            g.fillPolygonGradient(pts4, 3, groundY - 290f, groundY - 240f, com.clrg.core.render.Colors.lighter(env.color(k), 0.3f), com.clrg.core.render.Colors.darker(env.color(k), 0.7f))
         }
         // snowballs in flight
         for (b in balls) {
@@ -239,14 +283,18 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
             val x = sx(lerp(b.x0, b.x1, u))
             val y = groundY - 330f - 380f * 4f * u * (1f - u) + 150f * u
             g.fillOval(x - 14f, groundY + 6f, x + 14f, groundY + 16f, Colors.SHADOW)
-            g.fillCircle(x, y, 18f, Colors.SNOW)
-            g.fillCircle(x - 5f, y - 5f, 6f, Colors.WHITE)
+            for (i in 1..4) {
+                val uu = (u - i * 0.035f).coerceAtLeast(0f)
+                g.fillCircle(sx(lerp(b.x0, b.x1, uu)), groundY - 330f - 380f * 4f * uu * (1f - uu) + 150f * uu, 16f - i * 3f, Colors.withAlpha(Colors.SNOW, 0.35f - i * 0.07f))
+            }
+            g.fillCircleRadial(x, y, 18f, x - 6f, y - 7f, 26f, Colors.WHITE, 0xFFAFC6E4.toInt())
             // landing marker so the target can see where to dodge from
             g.strokeCircle(sx(b.x1), groundY + 10f, 40f * (1f - u * 0.5f), 4f, Colors.withAlpha(env.color(b.owner), 0.5f + 0.5f * u))
         }
         Hud.topBar(g, env, scores, Hud.formatTime(timeLeft), "Most hits wins", inputs)
     }
 
+    private val pts4 = FloatArray(8)
     private val idle = AvatarPose().apply { upper[0] = -2.3f; fore[0] = -2.0f; upper[1] = 0.4f; fore[1] = 1.6f; valid = true }
 
     override fun demo(g: Gfx, r: Rect, t: Double) {

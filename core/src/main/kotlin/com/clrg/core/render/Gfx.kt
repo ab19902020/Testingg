@@ -48,6 +48,23 @@ interface Gfx {
     fun text(s: String, x: Float, y: Float, size: Float, color: Int, align: Align = Align.CENTER, bold: Boolean = true, outline: Int = 0, outlineWidth: Float = 0f)
     fun measureText(s: String, size: Float, bold: Boolean = true): Float
     fun image(img: ImageRef, l: Float, t: Float, r: Float, b: Float, mirror: Boolean = false)
+
+    // ---- gradient fills (lighting). Defaults fall back to flat colours for renderers without gradients.
+
+    /** Circle lit by a radial gradient centred at (gx, gy) with radius [gr]: [inner] at the centre to [outer]. */
+    fun fillCircleRadial(cx: Float, cy: Float, r: Float, gx: Float, gy: Float, gr: Float, inner: Int, outer: Int) =
+        fillCircle(cx, cy, r, Colors.lerp(inner, outer, 0.5f))
+
+    /** Rectangle filled with a radial gradient (vignettes, spotlights, floor light pools). */
+    fun fillRectRadial(l: Float, t: Float, r: Float, b: Float, gx: Float, gy: Float, gr: Float, inner: Int, outer: Int) = Unit
+
+    /** Rounded rectangle with a vertical gradient. */
+    fun fillRoundRectGradient(l: Float, t: Float, r: Float, b: Float, radius: Float, top: Int, bottom: Int) =
+        fillRoundRect(l, t, r, b, radius, Colors.lerp(top, bottom, 0.5f))
+
+    /** Polygon with a vertical gradient from [top] at y = [y0] to [bottom] at y = [y1]. */
+    fun fillPolygonGradient(pts: FloatArray, n: Int, y0: Float, y1: Float, top: Int, bottom: Int) =
+        fillPolygon(pts, n, Colors.lerp(top, bottom, 0.5f))
 }
 
 object Colors {

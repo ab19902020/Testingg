@@ -267,7 +267,7 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
     // ---------------------------------------------------------------- rendering
     override fun render(g: Gfx, inputs: Array<PlayerInput>, time: Double) {
         screenW = g.width
-        g.gradientRect(0f, 0f, g.width, g.height, 0xFF2A1430.toInt(), 0xFF120A1E.toInt())
+        g.gradientRect(0f, 0f, g.width, g.height, 0xFF2E1636.toInt(), 0xFF0E0818.toInt())
         Draw.stringLights(g, 0f, g.width, 130f, time, sag = 30f)
         for (k in 0..1) renderLane(g, lanes[k], inputs[k], time)
         Hud.divider(g)
@@ -288,17 +288,30 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
         // lane and gutters
         val near = 0f; val far = PIT_Y + 0.6f
         val gut = floatArrayOf(sx(-LANE_HALF - 0.12f, near), sy(near), sx(LANE_HALF + 0.12f, near), sy(near), sx(LANE_HALF + 0.12f, far), sy(far), sx(-LANE_HALF - 0.12f, far), sy(far))
-        g.fillPolygon(gut, 4, 0xFF37474F.toInt())
+        g.fillPolygonGradient(gut, 4, sy(far), sy(near), 0xFF1E272C.toInt(), 0xFF4A5A63.toInt())
         val lanePts = floatArrayOf(sx(-LANE_HALF, near), sy(near), sx(LANE_HALF, near), sy(near), sx(LANE_HALF, far), sy(far), sx(-LANE_HALF, far), sy(far))
-        g.fillPolygon(lanePts, 4, 0xFFD7B98E.toInt())
+        g.fillPolygonGradient(lanePts, 4, sy(far), sy(near), 0xFFB98E5C.toInt(), 0xFFE8CB9C.toInt())
+        // alternating board tones and the glossy oil reflection down the middle
+        for (i in 0 until 8) {
+            if (i % 2 == 1) continue
+            val x0 = -LANE_HALF + i * LANE_HALF * 2 / 8; val x1 = x0 + LANE_HALF * 2 / 8
+            pinPts[0] = sx(x0, near); pinPts[1] = sy(near); pinPts[2] = sx(x1, near); pinPts[3] = sy(near); pinPts[4] = sx(x1, far); pinPts[5] = sy(far); pinPts[6] = sx(x0, far); pinPts[7] = sy(far)
+            g.fillPolygon(pinPts, 4, 0x10000000)
+        }
         for (i in 1 until 8) {
             val x = -LANE_HALF + i * LANE_HALF * 2 / 8
             g.line(sx(x, near), sy(near), sx(x, far), sy(far), 1.5f, 0x22000000)
         }
+        pinPts[0] = sx(-0.12f, near); pinPts[1] = sy(near); pinPts[2] = sx(0.12f, near); pinPts[3] = sy(near); pinPts[4] = sx(0.05f, far); pinPts[5] = sy(far); pinPts[6] = sx(-0.05f, far); pinPts[7] = sy(far)
+        g.fillPolygonGradient(pinPts, 4, sy(far), sy(near), 0x40FFFFFF, 0x08FFFFFF)
+        // the pin deck is lit
+        Draw.lightPool(g, cx, sy(HEAD_PIN_Y + 0.4f), scale(HEAD_PIN_Y) * 0.9f, scale(HEAD_PIN_Y) * 0.2f, 0x55FFF3D6)
         // aiming arrows
         for (i in -2..2) Draw.tri(g, sx(i * 0.12f - 0.03f, 4.5f), sy(4.5f), sx(i * 0.12f + 0.03f, 4.5f), sy(4.5f), sx(i * 0.12f, 4.2f), sy(4.2f), 0xAA8D3B3B.toInt())
         g.fillRect(sx(-LANE_HALF, 0.02f), sy(0.02f) - 3f, sx(LANE_HALF, 0.02f), sy(0.02f) + 3f, Colors.CANDY)
-        g.fillRect(r.left, sy(far) - 160f, r.right, sy(far), 0xFF1A1020.toInt())
+        // back wall of the pin deck and the light falling on the pins
+        g.gradientRect(r.left, sy(far) - 160f, r.right, sy(far), 0xFF2A1830.toInt(), 0xFF120A16.toInt())
+        g.glow(cx, sy(far) - 40f, scale(far) * 1.6f, 0x40FFE7B0)
         // pins (far to near) then ball
         val items = ArrayList<Pair<Float, () -> Unit>>()
         for (p in lane.pins) {
@@ -330,6 +343,8 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
         g.restore()
     }
 
+    private val pinPts = FloatArray(8)
+
     private fun drawCard(g: Gfx, lane: Lane, r: Rect) {
         val w = r.width / (FRAMES + 1)
         for (f in 0 until FRAMES) {
@@ -356,17 +371,22 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
             return
         }
         g.fillOval(x - w * 0.7f, y - w * 0.25f, x + w * 0.7f, y + w * 0.25f, Colors.SHADOW)
-        g.fillOval(x - w * 0.62f, y - h * 0.55f, x + w * 0.62f, y, Colors.WHITE)
-        g.fillOval(x - w * 0.36f, y - h * 0.95f, x + w * 0.36f, y - h * 0.45f, Colors.WHITE)
-        g.fillCircle(x, y - h * 0.95f, w * 0.38f, Colors.WHITE)
+        g.save(); g.translate(x, y - h * 0.27f); g.scale(1f, h * 0.55f / (w * 1.24f))
+        g.fillCircleRadial(0f, 0f, w * 0.62f, -w * 0.25f, -w * 0.3f, w * 0.9f, Colors.WHITE, 0xFFB8C4D0.toInt())
+        g.restore()
+        g.save(); g.translate(x, y - h * 0.7f); g.scale(1f, h * 0.5f / (w * 0.72f))
+        g.fillCircleRadial(0f, 0f, w * 0.36f, -w * 0.12f, -w * 0.15f, w * 0.5f, Colors.WHITE, 0xFFC5CED8.toInt())
+        g.restore()
+        g.fillCircleRadial(x, y - h * 0.95f, w * 0.38f, x - w * 0.12f, y - h * 0.98f, w * 0.5f, Colors.WHITE, 0xFFC5CED8.toInt())
         g.fillRect(x - w * 0.36f, y - h * 0.72f, x + w * 0.36f, y - h * 0.66f, Colors.CANDY)
         g.fillRect(x - w * 0.34f, y - h * 0.62f, x + w * 0.34f, y - h * 0.57f, Colors.CANDY)
+        g.fillCircle(x - w * 0.25f, y - h * 0.35f, w * 0.1f, 0x99FFFFFF.toInt())
     }
 
     private fun drawBall(g: Gfx, x: Float, y: Float, r: Float, color: Int, spin: Float) {
         g.fillOval(x - r, y - r * 0.25f, x + r, y + r * 0.25f, Colors.SHADOW)
-        g.fillCircle(x, y - r, r, color)
-        g.fillCircle(x - r * 0.35f, y - r * 1.35f, r * 0.3f, Colors.withAlpha(Colors.WHITE, 0.35f))
+        g.fillCircleRadial(x, y - r, r, x - r * 0.35f, y - r * 1.4f, r * 1.7f, Colors.lighter(color, 0.4f), Colors.darker(color, 0.45f))
+        g.fillCircle(x - r * 0.35f, y - r * 1.38f, r * 0.24f, Colors.withAlpha(Colors.WHITE, 0.6f))
         // holly pattern rotating as it rolls
         for (i in 0..2) {
             val a = spin + i * 2.1f

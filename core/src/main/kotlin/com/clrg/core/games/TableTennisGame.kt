@@ -93,26 +93,45 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
         screenW = g.width
         val w = g.width
         // cosy hall: warm wall, windows with snow, garlands
-        g.gradientRect(0f, 0f, w, g.height, 0xFF3B1F2B.toInt(), 0xFF1E0F1A.toInt())
+        g.gradientRect(0f, 0f, w, 860f, 0xFF4A2433.toInt(), 0xFF26121F.toInt())
+        // wainscot panels along the wall
+        g.gradientRect(0f, 640f, w, 860f, 0xFF3A1A12.toInt(), 0xFF2A120C.toInt())
+        g.line(0f, 640f, w, 640f, 6f, 0xFF7A4A2A.toInt())
+        for (i in 0 until 10) { val x = i * w / 10f + w / 20f; g.strokeRoundRect(x - w / 26f, 670f, x + w / 26f, 830f, 8f, 3f, 0x33FFD9A0) }
         for (i in 0 until 4) {
             val wx = w * (0.14f + i * 0.24f)
-            g.fillRoundRect(wx - 120f, 170f, wx + 120f, 430f, 20f, 0xFF0D1B33.toInt())
+            g.fillRectRadial(wx - 120f, 170f, wx + 120f, 430f, wx, 430f, 300f, 0xFF1E3A66.toInt(), 0xFF0A1428.toInt())
             Draw.snowfall(g, Rect(wx - 120f, 170f, wx + 120f, 430f), time + i, 12)
+            g.fillRect(wx - 120f, 400f, wx + 120f, 430f, 0xFFE8F1FA.toInt())
             g.strokeRoundRect(wx - 120f, 170f, wx + 120f, 430f, 20f, 10f, 0xFF6D4C41.toInt())
             g.line(wx, 170f, wx, 430f, 6f, 0xFF6D4C41.toInt())
+            g.line(wx - 120f, 300f, wx + 120f, 300f, 6f, 0xFF6D4C41.toInt())
+            Draw.wreathSmall(g, wx, 160f, 30f, time + i)
         }
         Draw.stringLights(g, 0f, w, 120f, time, sag = 40f)
-        g.fillRect(0f, 860f, w, g.height, 0xFF5D4037.toInt())
+        g.gradientRect(0f, 860f, w, g.height, 0xFF6D4C41.toInt(), 0xFF3E2723.toInt())
         for (i in 0 until 16) g.line(i * w / 16f, 860f, i * w / 16f - 60f, g.height, 3f, 0x33000000)
+        // the lamp over the table
+        val lampX = w / 2f
+        g.line(lampX, 0f, lampX, 170f, 4f, 0xFF2A1A20.toInt())
+        Draw.spotBeam(g, lampX, 220f, lampX, tableY, (toScreenX(1f) - toScreenX(-1f)) * 1.1f, 0x22FFE7B0)
+        lampShade[0] = lampX - 110f; lampShade[1] = 225f; lampShade[2] = lampX + 110f; lampShade[3] = 225f; lampShade[4] = lampX + 40f; lampShade[5] = 170f; lampShade[6] = lampX - 40f; lampShade[7] = 170f
+        g.fillPolygonGradient(lampShade, 4, 170f, 225f, 0xFF2E7D32.toInt(), 0xFF1B4D20.toInt())
+        g.fillOval(lampX - 60f, 215f, lampX + 60f, 240f, 0xFFFFF3D6.toInt())
+        g.glow(lampX, 235f, 120f, 0x55FFE7B0)
+        Draw.lightPool(g, lampX, 905f, (toScreenX(1f) - toScreenX(-1f)) * 0.75f, 70f, 0x44FFE7B0)
         // table
         val l = toScreenX(-1f); val r = toScreenX(1f)
         for (lx in floatArrayOf(l + 60f, r - 60f)) g.fillRect(lx - 10f, tableY, lx + 10f, 880f, 0xFF263238.toInt())
         // table top seen slightly from above so it reads as a table, not a plank
+        g.fillOval(l - 20f, 870f, r + 20f, 905f, 0x55000000)
         val top = floatArrayOf(l + 40f, tableY - 70f, r - 40f, tableY - 70f, r, tableY, l, tableY)
-        g.fillPolygon(top, 4, 0xFF1565C0.toInt())
+        g.fillPolygonGradient(top, 4, tableY - 70f, tableY, 0xFF1E88E5.toInt(), 0xFF1257A8.toInt())
+        // lamp highlight on the table surface
+        g.fillCircleRadial(w / 2f, tableY - 40f, (r - l) * 0.32f, w / 2f, tableY - 40f, (r - l) * 0.32f, 0x30FFFFFF, 0x00FFFFFF)
         g.polyline(top, 4, 5f, Colors.WHITE, closed = true)
         g.line(l + 20f, tableY - 35f, r - 20f, tableY - 35f, 3f, 0x99FFFFFF.toInt())
-        g.fillRect(l, tableY, r, tableY + 24f, 0xFF0D47A1.toInt())
+        g.fillRoundRectGradient(l, tableY, r, tableY + 24f, 4f, 0xFF0D47A1.toInt(), 0xFF08306B.toInt())
         val nh = cfg.netH * unit() * 1.3f
         val net = floatArrayOf(w / 2f + 20f, tableY - 70f, w / 2f - 20f, tableY, w / 2f - 20f, tableY - nh, w / 2f + 20f, tableY - 70f - nh)
         g.fillPolygon(net, 4, 0x66FFFFFF)
@@ -166,6 +185,8 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
             g.strokeCircle(x + (if (k == 0) 70f else -70f), 640f, 60f + 40f * (1f - a), 6f, Colors.withAlpha(Colors.WHITE, 0.6f * a))
         }
     }
+
+    private val lampShade = FloatArray(8)
 
     private val idle = AvatarPose().apply { upper[0] = -2.2f; fore[0] = -1.6f; upper[1] = -0.8f; fore[1] = 0.2f; valid = true }
 

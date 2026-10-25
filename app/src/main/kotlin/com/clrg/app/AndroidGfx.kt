@@ -3,6 +3,7 @@ package com.clrg.app
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RadialGradient
@@ -48,6 +49,57 @@ class AndroidGfx : Gfx {
     }
     private val gradCache = object : LinkedHashMap<Long, LinearGradient>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, LinearGradient>?) = size > 96
+    }
+    private val radialCache = object : LinkedHashMap<Long, RadialGradient>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, RadialGradient>?) = size > 160
+    }
+    private val shaderMatrix = Matrix()
+
+    private fun key(a: Int, b: Int) = (a.toLong() shl 32) or (b.toLong() and 0xFFFFFFFFL)
+
+    /** Unit radial gradient (centre 0,0, radius 1) placed at (gx, gy) with radius gr. */
+    private fun radial(gx: Float, gy: Float, gr: Float, inner: Int, outer: Int): RadialGradient {
+        val sh = radialCache.getOrPut(key(inner, outer)) { RadialGradient(0f, 0f, 1f, inner, outer, Shader.TileMode.CLAMP) }
+        shaderMatrix.setScale(gr.coerceAtLeast(0.01f), gr.coerceAtLeast(0.01f))
+        shaderMatrix.postTranslate(gx, gy)
+        sh.setLocalMatrix(shaderMatrix)
+        return sh
+    }
+
+    /** Unit vertical gradient (y 0..1) placed between y0 and y1. */
+    private fun vertical(y0: Float, y1: Float, top: Int, bottom: Int): LinearGradient {
+        val sh = gradCache.getOrPut(key(top, bottom)) { LinearGradient(0f, 0f, 0f, 1f, top, bottom, Shader.TileMode.CLAMP) }
+        shaderMatrix.setScale(1f, (y1 - y0).coerceAtLeast(0.01f))
+        shaderMatrix.postTranslate(0f, y0)
+        sh.setLocalMatrix(shaderMatrix)
+        return sh
+    }
+
+    private inline fun withShader(sh: Shader, draw: (Paint) -> Unit) {
+        shaderPaint.shader = sh
+        shaderPaint.alpha = (alpha * 255).toInt()
+        draw(shaderPaint)
+        shaderPaint.shader = null
+    }
+
+    override fun fillCircleRadial(cx: Float, cy: Float, r: Float, gx: Float, gy: Float, gr: Float, inner: Int, outer: Int) {
+        if (r <= 0f) return
+        withShader(radial(gx, gy, gr, inner, outer)) { canvas.drawCircle(cx, cy, r, it) }
+    }
+
+    override fun fillRectRadial(l: Float, t: Float, r: Float, b: Float, gx: Float, gy: Float, gr: Float, inner: Int, outer: Int) {
+        if (r <= l || b <= t) return
+        withShader(radial(gx, gy, gr, inner, outer)) { canvas.drawRect(l, t, r, b, it) }
+    }
+
+    override fun fillRoundRectGradient(l: Float, t: Float, r: Float, b: Float, radius: Float, top: Int, bottom: Int) {
+        if (r <= l || b <= t) return
+        withShader(vertical(t, b, top, bottom)) { canvas.drawRoundRect(l, t, r, b, radius, radius, it) }
+    }
+
+    override fun fillPolygonGradient(pts: FloatArray, n: Int, y0: Float, y1: Float, top: Int, bottom: Int) {
+        buildPath(pts, n, true)
+        withShader(vertical(y0, y1, top, bottom)) { canvas.drawPath(path, it) }
     }
 
     fun begin(c: Canvas, virtualWidth: Float, virtualHeight: Float) {
@@ -141,16 +193,7 @@ class AndroidGfx : Gfx {
 
     override fun gradientRect(l: Float, t: Float, r: Float, b: Float, top: Int, bottom: Int) {
         if (r <= l || b <= t) return
-        val key = (top.toLong() shl 32) or (bottom.toLong() and 0xFFFFFFFFL)
-        val sh = gradCache.getOrPut(key) { LinearGradient(0f, 0f, 0f, 1f, top, bottom, Shader.TileMode.CLAMP) }
-        shaderPaint.shader = sh
-        shaderPaint.alpha = (alpha * 255).toInt()
-        canvas.save()
-        canvas.translate(l, t)
-        canvas.scale(r - l, b - t)
-        canvas.drawRect(0f, 0f, 1f, 1f, shaderPaint)
-        canvas.restore()
-        shaderPaint.shader = null
+        withShader(vertical(t, b, top, bottom)) { canvas.drawRect(l, t, r, b, it) }
     }
 
     override fun glow(cx: Float, cy: Float, r: Float, color: Int) {

@@ -114,6 +114,7 @@ class DecorateTreeGame(env: GameEnv) : MiniGame(env) {
                 dwell[k] = 0f; dwellTarget[k] = -2
                 val (px, py) = toScreen(k, sequence[placed[k] - 1].x, spotY(k, sequence[placed[k] - 1]))
                 env.particles.burst(px, py, Colors.GOLD, 20, kind = Particles.Kind.STAR, size = 12f)
+                env.particles.ring(px, py, Colors.GOLD, 80f)
                 env.popups.add("${placed[k]}/$SPOTS", px, py - 60f, env.color(k), 46f)
                 env.sfx(Sfx.PLACE, 0.9f, pan(k))
                 if (placed[k] >= SPOTS) {
@@ -197,12 +198,34 @@ class DecorateTreeGame(env: GameEnv) : MiniGame(env) {
         val r = laneRect(k)
         g.save(); g.clipRect(r.left, r.top, r.right, r.bottom)
         // cosy living room: wall, window, fireplace glow, floor
-        g.gradientRect(r.left, r.top, r.right, r.bottom, 0xFF4A2C2A.toInt(), 0xFF2B1716.toInt())
+        g.gradientRect(r.left, r.top, r.right, 900f, 0xFF5A3230.toInt(), 0xFF2E1817.toInt())
         for (i in 0 until 8) g.fillRect(r.left + i * r.width / 8f, r.top, r.left + i * r.width / 8f + 6f, 900f, 0x14000000)
-        g.fillRect(r.left, 900f, r.right, r.bottom, 0xFF6D4C41.toInt())
-        g.glow(r.cx, 900f, r.width * 0.6f, 0x33FFB74D)
+        // frosty windows in the top corners
+        for (side in 0..1) {
+            val wx = if (side == 0) r.left + 110f else r.right - 110f
+            g.fillRectRadial(wx - 80f, 150f, wx + 80f, 330f, wx, 330f, 220f, 0xFF1E3A66.toInt(), 0xFF0A1428.toInt())
+            Draw.snowfall(g, Rect(wx - 80f, 150f, wx + 80f, 330f), time + side * 2 + k, 8)
+            g.fillRect(wx - 80f, 305f, wx + 80f, 330f, 0xFFE8F1FA.toInt())
+            g.strokeRoundRect(wx - 80f, 150f, wx + 80f, 330f, 10f, 8f, 0xFF6D4C41.toInt())
+            g.line(wx, 150f, wx, 330f, 5f, 0xFF6D4C41.toInt())
+        }
+        // floor, skirting board and the warm flicker of a fire off to one side
+        g.gradientRect(r.left, 900f, r.right, r.bottom, 0xFF7A5446.toInt(), 0xFF3E2723.toInt())
+        for (i in 0 until 10) g.line(r.left + i * r.width / 10f, 900f, r.left + i * r.width / 10f - 40f, r.bottom, 3f, 0x26000000)
+        g.gradientRect(r.left, 885f, r.right, 905f, 0xFF8D6E63.toInt(), 0xFF4E342E.toInt())
+        val flicker = if (env.settings.reducedEffects) 0.8f else 0.75f + 0.25f * sin(time * 9.0 + k).toFloat() * sin(time * 3.7).toFloat()
+        g.glow(if (k == 0) r.left else r.right, 950f, r.width * 0.75f, Colors.withAlpha(0xFFFF9800.toInt(), 0.22f * flicker))
         val (treeX, _) = toScreen(k, 0f, 0f)
+        g.glow(treeX, 640f, r.width * 0.55f, 0x22FFE082)
+        // rug under the tree
+        g.fillOval(treeX - 260f, 925f, treeX + 260f, 1015f, 0xFF8E1B2E.toInt())
+        g.save(); g.translate(treeX, 970f); g.scale(1f, 35f / 230f)
+        g.strokeCircle(0f, 0f, 230f, 14f, 0xFFD4A62A.toInt())
+        g.restore()
         Draw.christmasTree(g, treeX, 960f, 760f, placed[k] >= SPOTS, time)
+        Draw.present(g, treeX - 150f, 975f, 70f, 0xFF1E88E5.toInt(), Colors.GOLD)
+        Draw.present(g, treeX + 160f, 985f, 56f, 0xFF43A047.toInt(), Colors.CANDY)
+        Draw.present(g, treeX + 100f, 1000f, 44f, Colors.CANDY, Colors.WHITE)
         // placed ornaments
         for (i in 0 until placed[k]) {
             val sp = sequence[i]
@@ -233,7 +256,8 @@ class DecorateTreeGame(env: GameEnv) : MiniGame(env) {
         for (h in 0..1) {
             if (!inp.handVisible[h]) continue
             val (hx, hy) = toScreen(k, inp.handX[h], inp.handY[h])
-            g.fillCircle(hx, hy, 34f, Colors.withAlpha(env.color(k), 0.9f))
+            g.glow(hx, hy, 60f, Colors.withAlpha(env.color(k), 0.35f))
+            g.fillCircleRadial(hx, hy, 34f, hx - 10f, hy - 12f, 44f, Colors.lighter(env.color(k), 0.35f), Colors.darker(env.color(k), 0.6f))
             g.strokeCircle(hx, hy, 34f, 4f, Colors.WHITE)
             if (holding[k] >= 0 && holdingHand[k] == h) {
                 if (placed[k] == SPOTS - 1) Draw.star(g, hx, hy - 10f, 30f, Colors.GOLD) else Draw.ornament(g, hx, hy - 10f, 24f, COLORS[holding[k]])

@@ -44,8 +44,13 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
         screenW = g.width
         val w = g.width
         Draw.nightSky(g, Rect(0f, 0f, w, g.height), time)
+        Draw.aurora(g, Rect(0f, 0f, w, 600f), time, 0.8f)
+        Draw.moon(g, w * 0.5f, 210f, 44f)
+        Draw.pineRow(g, -30f, w, 610f, 0xFF0F2E25.toInt(), 110f, 5)
         Draw.pineRow(g, 0f, w, 640f, 0xFF143A2E.toInt(), 150f, 3)
         Draw.snowHills(g, Rect(0f, 0f, w, g.height), 700f)
+        Draw.floodlight(g, w * 0.04f, 760f, 260f, toScreenX(-0.45f), groundY + 40f)
+        Draw.floodlight(g, w * 0.96f, 760f, 260f, toScreenX(0.45f), groundY + 40f)
         // crowd of snowmen behind the court
         for (i in 0 until 9) {
             val cx = w * (0.08f + i * 0.105f)
@@ -55,9 +60,14 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
         Draw.stringLights(g, 0f, w, 10f, time)
         // court
         val l = toScreenX(-1f); val r = toScreenX(1f)
+        val apron = floatArrayOf(l - 130f, groundY + 95f, r + 130f, groundY + 95f, r + 10f, groundY - 95f, l - 10f, groundY - 95f)
+        g.fillPolygonGradient(apron, 4, groundY - 95f, groundY + 95f, 0xFF2E6F8E.toInt(), 0xFF1B4F6B.toInt())
         val pts = floatArrayOf(l - 70f, groundY + 60f, r + 70f, groundY + 60f, r - 30f, groundY - 70f, l + 30f, groundY - 70f)
-        g.fillPolygon(pts, 4, 0xFFB23A3A.toInt())
+        g.fillPolygonGradient(pts, 4, groundY - 70f, groundY + 60f, 0xFFD24B43.toInt(), 0xFF962A2A.toInt())
+        Draw.lightPool(g, w / 2f, groundY - 5f, (r - l) * 0.55f, 70f, 0x33FFF6D8)
         g.polyline(pts, 4, 6f, Colors.WHITE, closed = true)
+        g.line(l - 30f, groundY - 40f, r + 30f, groundY - 40f, 3f, 0x66FFFFFF)
+        g.line(l - 52f, groundY + 34f, r + 52f, groundY + 34f, 3f, 0x66FFFFFF)
         g.line(w / 2f, groundY - 70f, w / 2f, groundY + 60f, 4f, 0x99FFFFFF.toInt())
         for (x in floatArrayOf(-0.55f, 0.55f)) g.line(toScreenX(x) - 10f, groundY - 70f, toScreenX(x) + 10f, groundY + 60f, 4f, 0x88FFFFFF.toInt())
         // highlight the side that must hit next
@@ -99,8 +109,9 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
                 val c = if (inWindow()) Colors.GOOD else env.color(rcv)
                 g.strokeCircle(sx, sy, ringR, 7f, Colors.withAlpha(c, 0.9f))
             }
-            g.glow(sx, sy, 46f, 0x55FFF59D)
-            g.fillCircle(sx, sy, 17f, 0xFFE6FF5C.toInt())
+            for (i in 1..5) g.fillCircle(sx - vx * unit() * 0.018f * i, sy + vh * unit() * 0.018f * i, 16f - i * 2.2f, Colors.withAlpha(0xFFE6FF5C.toInt(), 0.32f - i * 0.05f))
+            g.glow(sx, sy, 52f, 0x66FFF59D)
+            g.fillCircleRadial(sx, sy, 17f, sx - 5f, sy - 6f, 22f, 0xFFF7FFB0.toInt(), 0xFFB5CC2E.toInt())
             g.arc(sx, sy, 12f, 0.6f, 1.9f, 3f, 0x99FFFFFF.toInt())
         }
         Hud.topBar(g, env, scores, "First to ${cfg.pointsToWin}", status(), inputs)

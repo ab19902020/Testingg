@@ -131,7 +131,7 @@ class DanceOffGame(env: GameEnv) : MiniGame(env) {
                 lastGradeTime[k] = 0f
                 val x = if (k == 0) screenW * 0.2f else screenW * 0.8f
                 env.popups.add(g.label, x, 420f, g.color, if (g == Grade.PERFECT) 64f else 52f)
-                if (g == Grade.PERFECT) env.particles.burst(x, 520f, g.color, 18, kind = Particles.Kind.STAR, size = 12f)
+                if (g == Grade.PERFECT) { env.particles.burst(x, 520f, g.color, 18, kind = Particles.Kind.STAR, size = 12f); env.particles.ring(x, 520f, g.color, 130f) }
                 best[k] = 0f
             }
             val any = (0..1).any { lastGrade[it] != Grade.MISS }
@@ -217,31 +217,62 @@ class DanceOffGame(env: GameEnv) : MiniGame(env) {
         val beat = if (playTime > 0) beat() else 0f
         val frac = beat - floor(beat)
         val pulse = if (env.settings.reducedEffects) 0.2f else (1f - frac).coerceIn(0f, 1f)
-        g.gradientRect(0f, 0f, w, g.height, 0xFF24103A.toInt(), 0xFF0B0716.toInt())
-        // spotlights
-        for (i in 0..2) {
-            val x = w * (0.2f + i * 0.3f)
-            g.glow(x, 160f, 320f + 60f * pulse, Colors.withAlpha(intArrayOf(0xFFFF5252.toInt(), 0xFFFFD740.toInt(), 0xFF40C4FF.toInt())[(i + floor(beat).toInt()) % 3], 0.25f + 0.15f * pulse))
+        g.gradientRect(0f, 0f, w, g.height, 0xFF2C1248.toInt(), 0xFF0B0716.toInt())
+        // stage curtains
+        for (side in 0..1) {
+            val x0 = if (side == 0) 0f else w - 150f
+            g.fillRectRadial(x0, 0f, x0 + 150f, 900f, if (side == 0) x0 + 150f else x0, 450f, 500f, 0xFFB71C1C.toInt(), 0xFF3E0710.toInt())
+            for (f in 0..4) g.line(x0 + 15f + f * 30f, 0f, x0 + 15f + f * 30f, 900f, 4f, 0x33000000)
+        }
+        // mirror ball
+        g.line(w / 2f, 0f, w / 2f, 60f, 3f, 0xFF90A4AE.toInt())
+        g.fillCircleRadial(w / 2f, 92f, 34f, w / 2f - 10f, 80f, 48f, 0xFFECEFF1.toInt(), 0xFF546E7A.toInt())
+        for (i in 0 until 6) {
+            val a = (time * 1.4 + i * 1.05).toFloat()
+            if (cos(a) > 0f) Draw.sparkle(g, w / 2f + sin(a) * 26f, 92f + (i - 2.5f) * 9f, 10f, 0xFFFFFFFF.toInt())
         }
         Draw.stringLights(g, 0f, w, 120f, time)
-        // disco floor
-        val cols = 16
-        for (i in 0 until cols) for (j in 0..2) {
+        // moving coloured spotlights that sweep with the beat
+        if (!env.settings.reducedEffects) {
+            val beamCols = intArrayOf(0xFFFF5252.toInt(), 0xFFFFD740.toInt(), 0xFF40C4FF.toInt(), 0xFFE040FB.toInt())
+            for (i in 0..3) {
+                val x = w * (0.12f + i * 0.253f)
+                val sweep = sin(time * 0.9 + i * 1.7).toFloat()
+                val col = beamCols[(i + floor(beat).toInt()) % 4]
+                Draw.spotBeam(g, x, 150f, x + sweep * w * 0.12f, 960f, 150f + 30f * pulse, Colors.withAlpha(col, 0.55f + 0.35f * pulse))
+                g.fillCircleRadial(x, 150f, 18f, x, 154f, 22f, Colors.WHITE, col)
+            }
+        }
+        // disco floor in perspective, tiles glow on the beat
+        val rows = 4; val cols = 16
+        val fy0 = 880f; val fy1 = 1080f
+        g.gradientRect(0f, fy0, w, fy1, 0xFF1A0B2A.toInt(), 0xFF07040E.toInt())
+        for (j in 0 until rows) for (i in 0 until cols) {
             val on = (i + j + floor(beat).toInt()) % 2 == 0
             val c = intArrayOf(0xFF7C4DFF.toInt(), 0xFFFF4081.toInt(), 0xFF00E5FF.toInt(), 0xFFFFD740.toInt())[(i + j) % 4]
-            val x0 = i * w / cols
-            g.fillRect(x0 + 2f, 900f + j * 60f, x0 + w / cols - 2f, 958f + j * 60f, if (on) Colors.withAlpha(c, 0.35f + 0.4f * pulse) else 0x33FFFFFF)
+            val y0 = fy0 + (fy1 - fy0) * j / rows; val y1 = fy0 + (fy1 - fy0) * (j + 1) / rows
+            val s0 = 0.86f + 0.14f * j / rows; val s1 = 0.86f + 0.14f * (j + 1) / rows
+            fun fx(t: Float, s: Float) = w / 2f + (t * w - w / 2f) * s
+            val t0 = i.toFloat() / cols; val t1 = (i + 1f) / cols
+            floorPts[0] = fx(t0, s0) + 2f; floorPts[1] = y0 + 2f; floorPts[2] = fx(t1, s0) - 2f; floorPts[3] = y0 + 2f
+            floorPts[4] = fx(t1, s1) - 2f; floorPts[5] = y1 - 2f; floorPts[6] = fx(t0, s1) + 2f; floorPts[7] = y1 - 2f
+            if (on) g.fillPolygonGradient(floorPts, 4, y0, y1, Colors.withAlpha(Colors.lighter(c, 0.3f), 0.45f + 0.4f * pulse), Colors.withAlpha(c, 0.25f + 0.3f * pulse))
+            else g.fillPolygon(floorPts, 4, 0x26FFFFFF)
         }
+        g.line(0f, fy0, w, fy0, 4f, 0x66FFD740)
         // timeline of upcoming poses
         val nowX = w / 2f
         val pxPerBeat = 125f
-        g.fillRoundRect(40f, 170f, w - 40f, 330f, 26f, 0x88000000.toInt())
+        g.fillRoundRect(40f, 170f, w - 40f, 330f, 26f, 0xAA0B0716.toInt())
+        g.strokeRoundRect(40f, 170f, w - 40f, 330f, 26f, 2f, 0x44FFFFFF)
         for (c in cues) {
             val x = nowX + (c.beat - beat) * pxPerBeat
             if (x < -80f || x > w + 80f) continue
             val active = abs(c.beat - beat) <= WINDOW_BEATS
             val done = c.beat < beat - WINDOW_BEATS
-            g.fillRoundRect(x - 62f, 186f, x + 62f, 314f, 18f, if (active) 0xFF4A2B7A.toInt() else if (done) 0x44333333 else 0xFF2B1B46.toInt())
+            if (active) g.glow(x, 250f, 120f, 0x66B388FF)
+            if (done) g.fillRoundRect(x - 62f, 186f, x + 62f, 314f, 18f, 0x44333333)
+            else g.fillRoundRectGradient(x - 62f, 186f, x + 62f, 314f, 18f, if (active) 0xFF6A3FB0.toInt() else 0xFF3A2560.toInt(), if (active) 0xFF3A1F66.toInt() else 0xFF1E1236.toInt())
             drawShapeIcon(g, x, 262f, 100f, c.shape, if (done) 0x66FFFFFF else Colors.WHITE)
         }
         g.strokeRoundRect(nowX - 70f, 178f, nowX + 70f, 322f, 22f, 6f, Colors.withAlpha(Colors.GOLD, 0.6f + 0.4f * pulse))
@@ -271,6 +302,8 @@ class DanceOffGame(env: GameEnv) : MiniGame(env) {
         }
         Hud.topBar(g, env, scores, "Elf Dance-Off", if (gentle) "Gentle pose set" else null, inputs)
     }
+
+    private val floorPts = FloatArray(8)
 
     /** Small stick figure of a pose shape (for the cards). */
     fun drawShapeIcon(g: Gfx, cx: Float, cy: Float, size: Float, s: PoseShape, color: Int) {
