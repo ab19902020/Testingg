@@ -1,6 +1,6 @@
 # Build test scenes resembling the game set-up: 16:9 landscape frame, two people side by side.
-import cv2, numpy as np
-I='/tmp/claude-0/imgs/'
+import os, cv2, numpy as np
+I=os.environ.get('CLRG_IMGS', 'imgs').rstrip('/')+'/'
 room=cv2.imread(I+'living_room.jpg')
 man=cv2.imread(I+'male_full_height_hands.jpg')     # 638x1000 full body
 yoga=cv2.imread(I+'pose.jpg')                       # 1000x667

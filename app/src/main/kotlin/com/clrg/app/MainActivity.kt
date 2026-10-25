@@ -50,7 +50,7 @@ class MainActivity : Activity() {
         platform = AndroidPlatform(this, store, camera, pose, router)
         if (!platform.hasCameraPermission()) camera.setPermissionMissing(denied = false)
         app = GameApp(platform, audioEngine)
-        renderer = GameRenderer(app, router)
+        renderer = GameRenderer(app, router, getSystemService(POWER_SERVICE) as android.os.PowerManager)
         val surface = SurfaceView(this)
         surface.holder.addCallback(renderer.phoneCallback)
         surface.setOnTouchListener { _, e -> renderer.onPhoneTouch(e) }

@@ -19,10 +19,9 @@ for m in lite full; do
   mkdir -p "$WORK/models/$m" && (cd "$WORK/models/$m" && unzip -o -q "../pose_landmarker_$m.task")
 done
 cd "$WORK"
-sed "s#/tmp/claude-0/imgs/#$WORK/imgs/#g" "$HERE/make_scenes.py" > make_scenes_local.py
-sed "s#/opt/models/#$WORK/models/#g" "$HERE/mp_reference.py" > mp_reference_local.py
-"$WORK/venv/bin/python" make_scenes_local.py
-"$WORK/venv/bin/python" mp_reference_local.py
+export CLRG_IMGS="$WORK/imgs" CLRG_MODELS="$WORK/models"
+"$WORK/venv/bin/python" "$HERE/make_scenes.py"
+"$WORK/venv/bin/python" "$HERE/mp_reference.py"
 cd "$ROOT"
 ./gradlew :core:test --tests '*RealModelPipelineTest*' \
   -Pclrg.validation.python="$WORK/venv/bin/python" -Pclrg.validation.models="$WORK/models" -Pclrg.validation.scenes="$WORK"

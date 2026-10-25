@@ -1,7 +1,8 @@
 import numpy as np, cv2, sys
 sys.path.insert(0,'.')
 from mypipe import *
-I='/tmp/claude-0/imgs/'
+import os
+I=os.environ.get('CLRG_IMGS', 'imgs').rstrip('/')+'/'
 room=cv2.resize(cv2.imread(I+'living_room.jpg'),(1280,720))
 man=cv2.imread(I+'male_full_height_hands.jpg')[0:1000,60:600]
 yoga=cv2.imread(I+'pose.jpg')[60:667,250:850]

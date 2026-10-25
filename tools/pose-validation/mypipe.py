@@ -1,5 +1,6 @@
 """Reference port of the BlazePose two-stage pipeline (mirrors the Kotlin implementation)."""
-import math, numpy as np, cv2
+import math, os, numpy as np, cv2
+MODELS=os.environ.get('CLRG_MODELS', 'models')
 from ai_edge_litert.interpreter import Interpreter
 
 def sigmoid(x): return 1.0/(1.0+np.exp(-x))
@@ -32,8 +33,8 @@ def sample_affine(img, M, size, border):
 
 class Pipe:
     def __init__(self, variant):
-        self.det=Interpreter(model_path=f'/opt/models/{variant}/pose_detector.tflite'); self.det.allocate_tensors()
-        self.lm=Interpreter(model_path=f'/opt/models/{variant}/pose_landmarks_detector.tflite'); self.lm.allocate_tensors()
+        self.det=Interpreter(model_path=f'{MODELS}/{variant}/pose_detector.tflite'); self.det.allocate_tensors()
+        self.lm=Interpreter(model_path=f'{MODELS}/{variant}/pose_landmarks_detector.tflite'); self.lm.allocate_tensors()
         o={d['name']:d['index'] for d in self.lm.get_output_details()}
         self.lm_out=(o['Identity'],o['Identity_1'],o['Identity_3'])
         od={d['name']:d['index'] for d in self.det.get_output_details()}

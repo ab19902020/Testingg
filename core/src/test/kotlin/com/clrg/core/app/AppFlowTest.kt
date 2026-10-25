@@ -114,6 +114,46 @@ class AppFlowTest {
     }
 
     @Test
+    fun tvUnplugAndBackgroundingPauseTheMatchFairly() {
+        platform.display = DisplayStatus(externalConnected = true, externalName = "HDMI", externalWidth = 1920, externalHeight = 1080, externalRefreshHz = 60f)
+        app.submitLifecycle("display")
+        frames(5)
+        tap("quick"); tap("game_tennis"); tap("play")
+        seconds(3f); tap("skip0"); tap("skip1"); seconds(1.2f)
+        app.sim.trigger(0, SimAction.RAISE); app.sim.trigger(1, SimAction.RAISE); seconds(1.6f)
+        val gs = app.current as GameScreen
+        app.sim.autoplay = true
+        seconds(5f)
+        assertEquals(Phase.PLAYING, gs.session.phase)
+
+        // HDMI cable pulled out mid-match
+        platform.display = DisplayStatus()
+        app.submitLifecycle("display")
+        frames(3)
+        assertTrue(app.displayLost, "TV-disconnected notice shown")
+        assertEquals(Phase.PAUSED, gs.session.phase)
+        val t0 = gs.session.game.playTime
+        seconds(2f)
+        assertEquals(t0, gs.session.game.playTime, "nothing moves while the TV is gone")
+        tap("displayOk") // carry on on the phone screen
+        assertTrue(!app.displayLost)
+        tap("resume")
+        seconds(3.5f)
+        assertEquals(Phase.PLAYING, gs.session.phase)
+
+        // app sent to the background (home button, phone call) and back
+        app.submitLifecycle("pause")
+        frames(3)
+        assertEquals(Phase.PAUSED, gs.session.phase)
+        app.submitLifecycle("resume")
+        seconds(2f)
+        assertEquals(Phase.PAUSED, gs.session.phase, "returning to the app does not restart play by itself")
+        tap("resume")
+        seconds(3.5f)
+        assertEquals(Phase.PLAYING, gs.session.phase)
+    }
+
+    @Test
     fun trackingLossPausesTheMatchAndResumes() {
         frames(5)
         tap("quick"); tap("game_catch"); tap("play")

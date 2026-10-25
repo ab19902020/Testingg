@@ -2,7 +2,8 @@ import json, gzip, numpy as np, cv2, sys, math
 sys.path.insert(0,'.')
 import mypipe
 from mypipe import *
-OUT='/home/user/Testingg/core/src/test/resources/pose/'
+import os
+OUT=os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../core/src/test/resources/pose/')
 def rep(img,M,size,border):
     if size==256:
         return cv2.warpAffine(img.astype(np.float32), M, (size,size), flags=cv2.INTER_LINEAR|cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_REPLICATE)

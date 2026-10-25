@@ -173,6 +173,7 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     private var slowSince = 0L
     private var fastSince = 0L
     private var frameCount = 0L
+    private var skipToggle = 0L
     @Volatile var dropped = 0L
         private set
     private val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -204,6 +205,8 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
             }
             if (!running) break
             if (!enabled) continue
+            // critical heat: process every other camera frame (the tracker copes with 15 Hz)
+            if (power.currentThermalStatus >= PowerManager.THERMAL_STATUS_CRITICAL && (skipToggle++ % 2L == 0L)) continue
             try {
                 processLatest()
             } catch (t: Throwable) {

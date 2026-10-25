@@ -21,7 +21,7 @@ object SurfaceLock
  * screen, otherwise on the phone surface (which is mirrored to the TV). Rendering is paced to the display and capped
  * at 60 fps; game simulation inside GameApp uses its own fixed time step.
  */
-class GameRenderer(private val app: GameApp, private val router: DisplayRouter) {
+class GameRenderer(private val app: GameApp, private val router: DisplayRouter, private val power: android.os.PowerManager) {
     @Volatile private var phoneHolder: SurfaceHolder? = null
     @Volatile private var running = false
     @Volatile private var active = false
@@ -75,9 +75,10 @@ class GameRenderer(private val app: GameApp, private val router: DisplayRouter) 
             }
             if (!drew) { Thread.sleep(16); continue }
             frame++
-            // cap at ~60 fps (TVs run at 60 Hz; saves power and heat on 120 Hz phones)
+            // cap at ~60 fps (TVs run at 60 Hz; saves power and heat on 120 Hz phones); 30 fps when the phone is hot
+            val hot = power.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_SEVERE
             val now = System.nanoTime()
-            val wait = 16_000_000L - (now - last)
+            val wait = (if (hot) 33_000_000L else 16_000_000L) - (now - last)
             if (wait > 1_000_000L) Thread.sleep(wait / 1_000_000L)
             last = System.nanoTime()
         }

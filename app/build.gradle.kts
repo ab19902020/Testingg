@@ -313,9 +313,29 @@ val verifyApk by tasks.registering(Exec::class) {
     args("verify", "--verbose", "--min-sdk-version", minSdk.toString(), finalApk.get().asFile.absolutePath)
 }
 
+/** Offline/privacy checks on the final APK: bundled models and native libraries present, no network permission. */
+val verifyApkContents by tasks.registering {
+    dependsOn(signApk)
+    doLast {
+        val apk = finalApk.get().asFile
+        val names = ZipFile(apk).use { z -> z.entries().toList().map { it.name } }
+        val required = listOf("classes.dex", "AndroidManifest.xml", "resources.arsc") +
+            modelSpecs.flatMap { listOf("assets/models/${it.variant}_pose_detector.tflite", "assets/models/${it.variant}_pose_landmarks_detector.tflite") } +
+            listOf("lib/arm64-v8a/libtensorflowlite_jni.so", "lib/arm64-v8a/libtensorflowlite_gpu_jni.so")
+        val missing = required.filter { it !in names }
+        if (missing.isNotEmpty()) throw GradleException("APK is missing: $missing")
+        val proc = ProcessBuilder(requiredTool("clrg.aapt2").absolutePath, "dump", "badging", apk.absolutePath).redirectErrorStream(true).start()
+        val badging = proc.inputStream.bufferedReader().readText()
+        if (proc.waitFor() != 0) throw GradleException("aapt2 dump badging failed: $badging")
+        val perms = badging.lines().filter { it.startsWith("uses-permission:") }
+        if (perms.any { it.contains("INTERNET") }) throw GradleException("APK must not request INTERNET: $perms")
+        logger.lifecycle("APK contents OK: models + native libs bundled; permissions: ${perms.joinToString { it.substringAfter("name='").substringBefore("'") }}")
+    }
+}
+
 tasks.register("assembleDebugApk") {
     group = "build"
     description = "Builds, aligns, signs (debug key) and verifies the installable APK."
-    dependsOn(verifyApk)
+    dependsOn(verifyApk, verifyApkContents)
     doLast { logger.lifecycle("APK: ${finalApk.get().asFile}") }
 }
