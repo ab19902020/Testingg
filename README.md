@@ -2,15 +2,15 @@
 
 An Android party game for families. The phone runs the game, its camera follows two players' bodies (no
 controllers or wearables) and the picture goes to the TV through a wired USB-C to HDMI adapter. Ten two-player
-minigames, a party tournament with pair rotation and a persistent scoreboard - and **Play Solo**: one person
-against a computer opponent (Easy, Medium or Hard) in any of the ten games.
+minigames, a party tournament with pair rotation and a persistent scoreboard, **Play Solo** (one person against a
+computer opponent in any of the ten games) - and **Christmas Golf**: 1 to 4 players taking turns over three
+courses. Everything can be controlled with your body: raise a hand and hold it over a button.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
-> reports that versions 1.0.1 to 1.2.0 work on their phone, and that in 1.2.0 tennis swings were judged a bit late.
-> The detailed on-device checklist (tracking quality, frame rates, measured latency, TV modes) has not been run yet.
-> The 1.3.0 changes (swings judged by when they were made, the timing test, lower-delay camera and drawing, bigger
-> tennis court) are tested with simulated people and simulated delays only - how they feel on your phone and TV has
-> not been checked yet.
+> reports that versions 1.0.1 to 1.3.0 work on their phone. The detailed on-device checklist (tracking quality,
+> frame rates, measured latency, TV modes) has not been run yet. The 1.4.0 changes (Christmas Golf, hand cursors
+> from the moment you stand in front of the camera, less tracking work in one-player modes) are tested with
+> simulated bodies only - how golf swings feel in front of a real camera has not been checked yet.
 > See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the exact status of every check.
 
 ## What's in the box
@@ -25,6 +25,28 @@ against a computer opponent (Easy, Medium or Hard) in any of the ten games.
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.4.0 - golf, and control everything with your body
+
+* **Christmas Golf** (main menu): 1 to 4 players - family members and/or computer golfers (Sprout, Jingles,
+  Blitz) - take turns, so only the player whose turn it is stands in front of the camera. Each player plays a
+  whole hole, then the next steps up and raises a hand to start. Three courses of three holes (par 12 each):
+  *Candy Cane Links* (wide and gentle), *Frozen Lake Club* (water everywhere), *North Pole Peaks* (narrow,
+  tree-lined, a steep green).
+  * **Drive, approach, putt - three movements:** a full golf swing for the tee shot and the approach (the higher
+    your backswing, the further the ball goes; bring your hands back through where they started to hit it
+    straight), and a small pendulum stroke for putting (draw your hands back sideways - further back, harder putt).
+    A live meter shows the distance while you swing back; coming down slowly is a practice swing.
+  * **Clubs and aim by hand:** raise a hand and hold it over Driver, 3 Wood, 5 Iron, 9 Iron, Wedge or Putter, or
+    over an aim arrow (hold to keep turning). The game suggests a club and aims for you, so you can just swing.
+  * Wind, bunkers, snowy rough, trees, frozen lakes (one penalty stroke), sloping greens with arrows showing the
+    break, and short putts tapped in automatically. A scorecard after each hole; fewest strokes wins.
+* **Hands-free from the start:** a hand cursor now appears for anyone standing in front of the camera - no set-up
+  needed first - so you can open games, pick players and start matches without touching the phone. (The very
+  first camera permission still needs a tap on the phone; Android requires that.)
+* **Less tracking work for one player:** in Play Solo and golf the camera follows one player (plus one spectator),
+  so the person-search runs far less often - 7 instead of 25 times in 24 frames in the test - leaving more time
+  for 60 fps tracking.
 
 ## Changes in 1.3.0 - less lag, fairer timing
 

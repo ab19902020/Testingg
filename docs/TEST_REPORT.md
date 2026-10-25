@@ -1,14 +1,14 @@
 # Test report
 
-Date: 2026-10-25 (version 1.3.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+Date: 2026-10-25 (version 1.4.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
 (no KVM) or TV was available here.** The only real-device evidence is the owner's reports that versions 1.0.1 to
-1.2.0 work on their phone, and that 1.2.0's tennis judged swings late (section 4). Everything else that needs a device is marked **UNVERIFIED**.
+1.3.0 work on their phone (section 4). Everything else that needs a device is marked **UNVERIFIED**.
 
 ## Summary
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **96 passed, 0 failed, 1 skipped** (the skipped one is a developer diagnostic) (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **108 passed, 0 failed, 1 skipped** (the skipped one is a developer diagnostic) (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
 | App launches and runs on Android | **Reported working by the owner** (1.0.1 on their phone, after the camera crash fix); not tested here |
@@ -16,6 +16,7 @@ Date: 2026-10-25 (version 1.3.0). Environment: Linux cloud container, OpenJDK 21
 | Solo mode against the computer (1.1.0) | Passed with simulated input and CPU-vs-CPU matches; owner reports it working |
 | Camera switching, motion smoothing/prediction, 60 fps camera, new graphics (1.2.0) | Passed in JVM tests (simulated input, synthetic motion, test renders); **not yet tried on a phone** |
 | Lag compensation, timing test, lower-delay camera/drawing, bigger tennis court (1.3.0) | Passed in JVM tests with simulated people and simulated camera/TV delays; the Android parts (vsync drawing, camera preview mode, TV game-mode request, preview thread, Auto model choice) build but are **not yet tried on a phone or TV** |
+| Christmas Golf, hand cursors before set-up, one-player tracking load (1.4.0) | Passed in JVM tests with simulated bodies; **not yet tried with a real camera** |
 | On-device performance (fps, latency, thermal) | **UNVERIFIED** - no numbers measured; none are claimed |
 | TV output over USB-C/HDMI, Presentation mode, cable unplug | **UNVERIFIED** |
 | Audio output and latency | **UNVERIFIED** |
@@ -24,19 +25,20 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (97: 96 passed, 1 skipped)
+## 1. Automated tests (109: 108 passed, 1 skipped)
 
-Run: `./gradlew :core:test` (91 tests, one of them the skipped developer diagnostic) plus 6 real-model tests that need the validation environment
+Run: `./gradlew :core:test` (103 tests, one of them the skipped developer diagnostic) plus 6 real-model tests that need the validation environment
 (`tools/pose-validation/run_real_model_tests.sh`).
 
 ### Pose pipeline - fixtures from the real models (`BlazePoseFixtureTest`, 5 passed)
 Decoding checked against raw tensors exported from the real models: anchor count (2254), detector decoding,
 landmark decoding, crop sampler vs OpenCV `warpAffine`, half-frame detections agree with full-frame ones.
 
-### Orientation and pipeline logic (`OrientationAndPipelineTest`, 6 passed)
+### Orientation and pipeline logic (`OrientationAndPipelineTest`, 7 passed)
 Rotation formula for front and back cameras; upright-to-buffer mapping for 0/90/180/270 degrees; mirroring puts the
 person's left hand on screen left; YUV -> RGB conversion; detector runs once then tracking takes over; person who
-leaves is dropped and comes back with a new track.
+leaves is dropped and comes back with a new track; with one person in view, expecting one player runs the
+person-detector 7 times in 24 frames instead of 25 (new in 1.4.0, scripted model).
 
 ### Real models, real images (`RealModelPipelineTest`, 6 passed)
 The app's Kotlin multi-person pipeline running the actual `.tflite` models (inference via a Python TFLite helper)
@@ -68,6 +70,25 @@ tip when a hand is out of the picture and when tracking is slow.
 
 The 6 real-model tests above were re-run after the smoothing changes with the same results (they test the
 landmark pipeline, which smoothing does not change).
+
+### Golf (new in 1.4.0 - simulated bodies)
+
+* `GolfSwingTest` (5 passed): a full backswing (hands ~1.35 body lengths up) gives full power and a half one about
+  half (1.00 and 0.47, at both 30 and 60 fps), from either side; hands coming through 0.45 body lengths to
+  one side send the ball that way; a slow downswing is a practice swing and reaching up to pick a club is not a
+  swing; putts of 0.15 and 0.5 body lengths back give a short and a long putt; reduced-movement mode needs only a
+  chest-high swing; no shot when golf is not active.
+* `GolfMatchTest` (5 passed): every hole has its tee and pin in the right place; on all three courses a skilled
+  computer golfer scores near par and better than a beginner over four rounds (Candy Cane 11.3 vs 12.8, Frozen
+  Lake 12.3 vs 15.3, North Pole 12.3 vs 15.3, par 12); with four golfers each plays a whole hole before the next
+  starts and the best score tees off first on the next hole; water costs one stroke and the ball is replayed from
+  the same spot; a putt aimed straight at the hole on a slope misses while a read putt finishes in or next to it;
+  club distances, half power, off-line swings and the rough behave as described.
+* `GolfFlowTest` (1 passed): without any touch, from the main menu: a simulated person raises a hand to open Golf,
+  chooses the golfers (deselects Player 2, adds Sprout) and tees off by hovering, steps up and raises a hand to
+  start the turn, changes club twice by hovering, swings (address, backswing, downswing) and the ball flies over
+  110 m; the round is then finished by the developer autoplay, the scorecard is complete, and "Main menu" (by
+  hovering) restores two-player tracking.
 
 ### Timing and lag (new in 1.3.0 - simulated people and simulated delays)
 
@@ -167,13 +188,13 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,230,723 bytes, SHA-256 `dcec0eb3d8a98b19ff178faec7e033f52932ba3b703d03182594928e5f0fefb6` |
-| Package / version | `com.clrg.christmasgames`, versionCode 5, versionName 1.3.0 |
+| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,283,971 bytes, SHA-256 `393d150059ed5bd89660f2a8a90df2dbd8db87526031eac312d704b7475ff9eb` |
+| Package / version | `com.clrg.christmasgames`, versionCode 6, versionName 1.4.0 |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
 | Signature | `apksigner verify --min-sdk-version 24`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
 | Reproducibility | A clean rebuild (`./gradlew clean :app:assembleDebugApk`) produced a byte-identical APK with the same debug key |
 | Alignment | `zipalign -p 4` |
-| Code | single `classes.dex`, 1,546 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
+| Code | single `classes.dex`, 1,580 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
 | Models | 4 `.tflite` files, stored uncompressed (memory-mappable) |
 | Native libs | TFLite + GPU delegate for `arm64-v8a` and `x86_64` |
 | Permissions | `CAMERA` only. No `INTERNET` (enforced by the build) |
@@ -210,6 +231,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Report | Version | Status |
 |---|---|---|
+| "It's all good, just keep improving the motion tracking" - owner, after 1.3.0 | 1.3.0 | Runs on the owner's phone. Asked for golf (1.4.0) and for controlling everything with hand gestures (hand cursors before set-up, 1.4.0). |
 | "It works ... the tracking is a bit behind: in tennis it's not catching the swing of your arm and hitting the ball at the same time" - owner | 1.2.0 | Causes found: swings were judged when they reached the game (after camera, tracking and TV delays) and detected 33-75 ms after the swing's fastest point. 1.3.0 judges swings by when they were made, adds the timing test and cuts delay in smoothing, drawing and the camera. **Not yet confirmed on the phone.** |
 | "Okay, it's all working" - owner, after installing 1.1.0 (solo mode) | 1.1.0 | App and solo mode run on the owner's phone. |
 | "This is all working now" - owner, after installing 1.0.1 | 1.0.1 | App starts, camera permission works, game runs on the owner's phone (model not reported). |
@@ -249,7 +271,11 @@ overlay**. Record PASS/FAIL and the overlay numbers. Repeat key items on a secon
 18. [ ] Bowling 19. [ ] Table Tennis 20. [ ] Dance-Off 21. [ ] Sleigh Slalom (also steering-only)
 22. [ ] Goalkeepers 23. [ ] Decorate the Tree
 24. [ ] Standing still for 30 s during a game produces no actions.
-25. [ ] Hands-free menus: dwell selection works; no accidental double selections; touch fallback works.
+25. [ ] Hands-free menus: from launch (nobody set up), raise a hand - a cursor appears; dwell selection works; no
+    accidental double selections; touch fallback works.
+25b. [ ] Golf with 2-4 people: turn changes pick up the next person; full swings at different heights give different
+    distances; straight swings go straight; putting strokes control distance; club and aim buttons work by hovering;
+    no accidental club change during a swing.
 
 **TV**
 26. [ ] HDMI connected before launch: TV detected (name, resolution, Hz shown); game on TV, phone shows camera +

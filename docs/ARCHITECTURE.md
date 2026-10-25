@@ -104,6 +104,26 @@ the gesture-sensitivity setting.
 Games only see `PlayerInput` (continuous values + gesture events), so all ten games share one tracking and
 gesture system.
 
+## Golf (`core/golf`, `core/gesture/GolfSwing.kt`, `core/ui/screens/Golf*.kt`)
+
+* `GolfSwingDetector` (run by `PlayerControls` while `golfStroke` is FULL or PUTT) follows the hands - the midpoint
+  of both wrists weighted by visibility - in body units: address (hands together, low, still), backswing (peak
+  height = power, or sideways distance for putts), downswing (impact at the lowest point; minimum speed, else a
+  practice swing), with thresholds scaled by reach and movement mode.
+* `GolfCourse` holds the holes (tee, pin, green radius and slope, fairway centre line and width, bunkers, water,
+  trees, boundary, wind); `GolfPhysics` turns club, lie, aim, power and offset into a carry with wind and spread, a
+  roll that can find hazards or the hole, and simulates putts on the sloping green. `GolfMatch` runs stroke play
+  for 1-4 players (whole hole per turn, honour order, penalties, pick-up at par + 4, gimme putts, computer golfers
+  that read putts by trying lines on the real green).
+* `GolfScreen` handles turns: `GameApp.startTurnTracking()` uses single-player tracking; for each new golfer
+  `nextTurnPerson()` forgets the last one, the closest person is picked up, `calibrateTurnPerson()` measures them
+  quickly and locks on, and a raised hand starts the turn. Club and aim buttons use the ordinary hand cursors, which
+  are switched off while the swing detector sees an address or backswing.
+
+**Hand cursors** are shown for every tracked person (calibrated or not; uncalibrated players use a typical reach).
+**Expected people:** `Platform.setExpectedPeople` (1 in solo/golf, 2 otherwise) sets the pipeline's
+`desiredPoses`/`maxPoses` live, so with one player the person-detector runs every few frames instead of every frame.
+
 ## Game framework (`core/game`, `core/games`)
 
 * `MiniGame` - `start`, fixed-step `update(dt, inputs)`, `render`, `result`, instruction `demo`, and

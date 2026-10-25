@@ -15,7 +15,7 @@ Nothing in any game asks you to run, jump, cross over to the other player, crouc
 | Action | How |
 |---|---|
 | Start a match | On the instructions card, **both players raise a hand and hold it up** until their ring fills. |
-| Hands-free menus | After calibration, raise a hand above your waist: your coloured cursor appears. Move it onto a button and **hold still** until the ring fills (1.5 s, adjustable 0.8-3 s). After a selection, cursors lock briefly and must leave the button before it can be chosen again, to stop accidental double selections. |
+| Hands-free menus | Stand in front of the camera (no set-up needed) and raise a hand above your waist: your coloured cursor appears. Move it onto a button and **hold still** until the ring fills (1.5 s, adjustable 0.8-3 s). After a selection, cursors lock briefly and must leave the button before it can be chosen again, to stop accidental double selections. |
 | Touch / remote | Every menu also works by touch on the phone, a TV remote / game controller D-pad (if connected) or a keyboard. When the game is on the TV as a second screen, the phone shows large arrow / OK / Back buttons. |
 | Pause | Back (phone gesture/button, remote), the **II** button, or the phone's **Back / Pause** button. Hands-free: one player steps out of view - the game pauses automatically. |
 | Someone steps out of view | The game pauses and names the missing player. When they are back in their own area and standing still, a 3-second countdown resumes play. Scores and timers are frozen while paused. |
@@ -62,6 +62,28 @@ Quick Match, press **Just me** (uses the level you picked last time, Medium at f
   Party Tournament are for two people and switch solo mode off.
 
 ---
+
+## Christmas Golf - 1 to 4 players, taking turns
+
+Only the player whose turn it is stands in front of the camera; everyone else stands back. When your name comes up,
+step in, stand still a moment and **raise a hand** to start your turn. You play the whole hole, then the next golfer
+steps up. (Playing alone, or with only computer golfers, you just carry on.)
+
+| Movement | Action |
+|---|---|
+| Hands together, low in front of you, still for a moment | Address the ball ("Swing!" appears) |
+| Swing back - hands up to one side - then down and through quickly | Full shot: the higher the backswing, the further it goes (a live meter shows the distance). About head height is full power; higher is an overswing - a little further, less accurate |
+| Bring your hands back through where they started | Straight shot; through to one side sends the ball that way |
+| Coming back down slowly | Practice swing (no shot) |
+| On the green: hands together low, draw them back sideways, stroke through | Putt: further back = harder (the meter shows how far it will roll on the flat) |
+| Raise a hand and hold it over a club | Choose Driver, 3 Wood, 5 Iron, 9 Iron, Wedge or Putter (a club is suggested for you) |
+| Raise a hand and hold it over "< Aim" / "Aim >" | Turn the aim (keeps turning while you hold; finer on the green) |
+
+The usual round: **drive** with the Driver, hit the **approach** to the green with an iron or the wedge, then **putt**.
+Rough costs some distance, bunkers more (the wedge copes best), trees stop the ball, water and out of bounds cost a
+penalty stroke and you play again from the same spot. Watch the wind arrow, and the slope arrows on the green (putts
+curl downhill). Putts that stop very close are tapped in for one stroke. A hole ends after par + 4 strokes at most.
+Reduced movement / seated: a chest-high backswing is a full swing.
 
 ## 1. Christmas Tennis - first to 7 points
 

@@ -59,6 +59,14 @@ device, though: the build environment had no Android device and no emulator, and
 
 ## Game and UI limitations
 
+* **Golf swings are read from the front.** The camera sees your hands rise and fall, not the club face, so power
+  comes from how high the backswing goes and direction from where the hands come through. Swings were tuned on
+  simulated bodies, not real golfers; thresholds may need adjusting after the first real rounds.
+* **Golf turns rely on taking turns honestly.** The game cannot tell family members apart by face: whoever is
+  closest to the camera when a turn starts (and raises a hand) plays it. Others should stand back.
+* **Hand cursors for anyone in view.** Before set-up, cursors use a typical arm reach, so pointing may feel a little
+  off until the player is calibrated; spectators who raise a hand can also point.
+
 * **Solo mode difficulty is tuned without real players.** The Easy/Medium/Hard opponents were balanced by playing
   them against each other (Hard beats Medium beats Easy in every game) and by modelling human reaction times and
   hand speeds. How they compare with a real person at the camera - including the tracking delay a person has and
