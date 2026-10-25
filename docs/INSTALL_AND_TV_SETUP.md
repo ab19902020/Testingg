@@ -20,13 +20,13 @@
 
 ## 2. Install the APK
 
-1. Copy `ChristmasLivingRoomGames-debug.apk` to the phone (or download it from the repository's `dist/` folder).
+1. Copy `LivingRoomGames-debug.apk` to the phone (or download it from the repository's `dist/` folder).
 2. Open it from the Files app. Android asks you to allow installs from that app once ("Install unknown apps").
 3. Tap **Install**. Google Play Protect may warn because the app is debug-signed and not from the Play Store;
    choose to install anyway if you trust this build. Check the SHA-256 against `dist/SHA256SUMS` if you want to
    be sure the file is the one that was built.
 
-With a computer: `adb install -r ChristmasLivingRoomGames-debug.apk` (USB debugging on).
+With a computer: `adb install -r LivingRoomGames-debug.apk` (USB debugging on).
 
 The app needs **only the camera permission**. It has no internet permission at all.
 

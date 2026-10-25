@@ -1,25 +1,31 @@
-# Christmas Living Room Games
+# Living Room Games
 
-An Android party game for families. The phone runs the game, its camera follows two players' bodies (no
-controllers or wearables) and the picture goes to the TV through a wired USB-C to HDMI adapter. Ten two-player
-minigames, a party tournament with pair rotation and a persistent scoreboard, **Play Solo** (one person against a
-computer opponent in any of the ten games) - and **Christmas Golf**: 1 to 4 players taking turns over three
-courses, shown in 3D. Everything can be controlled with your body: lift a hand and hold it over a button. A toy
-racket, a stick or a pool noodle can be taught to the game and used as your racket or club.
+A motion-game console for Android, for families: the phone runs the games, its camera follows the players' bodies
+(no controllers or wearables) and the picture goes to the TV through a USB-C to HDMI adapter. Two halves, switched
+on the main menu:
+
+* **Sports & Arcade** - Clay Shooting, Boxing, Archery, Shooting Gallery, Darts, Penalty Save, Tennis, Table
+  Tennis, Bowling and Golf, with sporty characters and daytime looks. Shooting games are played with a **finger
+  gun**: point at the TV and drop your thumb to fire (the camera follows your fingers).
+* **Christmas** - the original ten Christmas minigames and Christmas Golf, unchanged.
+
+Every game is two players at once (or one person against a computer opponent with **Play Solo**); golf is 1 to 4
+players taking turns. A **party tournament** rotates pairs and keeps a family scoreboard. Everything can be
+controlled with your body: lift a hand and hold it over a button. Real objects can be taught to the game - a toy
+racket or stick as your racket or club, a **toy gun** for the shooting games - right from a game's start screen.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
-> reports that versions 1.0.1 to 1.5.0 run on their phone, and that in 1.5.0 tracking was still not good enough:
-> tennis swings not hitting the ball, the hand pointer needing concentration, golf wanted in 3D with a proper grip.
-> 1.6.0 reworks all of that. Its changes are tested with simulated bodies, simulated camera problems and generated
-> pictures only - **not yet on the owner's phone**. The detailed on-device checklist (tracking quality, frame
-> rates, measured latency, TV modes) has not been run yet.
-> See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the exact status of every check.
+> reports that versions up to 1.6.0 run on their phone and that 1.6.0 tracks better, "not perfect". 1.7.0 adds the
+> new games, finger tracking, punches and the bow. These are tested with simulated bodies, generated pictures and -
+> for finger tracking - the real hand model on real still photos of hands. **None of it has been tried on the
+> owner's phone yet**: how well finger guns, punches and the bow work in a real living room (distance, light,
+> motion blur, speed of the phone) is not known until then. See [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
 
 ## What's in the box
 
 | | |
 |---|---|
-| APK | `dist/ChristmasLivingRoomGames-debug.apk` (debug-signed, ~21 MB, arm64-v8a + x86_64), SHA-256 in `dist/SHA256SUMS` |
+| APK | `dist/LivingRoomGames-debug.apk` (debug-signed, ~23.5 MB, arm64-v8a + x86_64), SHA-256 in `dist/SHA256SUMS` |
 | Build guide + versions | [BUILDING.md](BUILDING.md) |
 | Install + TV setup | [docs/INSTALL_AND_TV_SETUP.md](docs/INSTALL_AND_TV_SETUP.md) |
 | Controls for every game | [docs/CONTROLS.md](docs/CONTROLS.md) |
@@ -27,6 +33,29 @@ racket, a stick or a pool noodle can be taught to the game and used as your rack
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.7.0 - a console, not just Christmas
+
+* **Two modes.** The main menu switches between **Sports & Arcade** and **Christmas**; Quick Match, Play Solo,
+  tournaments and How to Play follow the chosen mode (remembered). The app is now called Living Room Games (same
+  package: it installs over the old version and keeps players, settings and objects).
+* **Finger tracking.** In the shooting games the camera also follows the fingers of each player's gun hand, with
+  the MediaPipe hand landmark model (bundled, checksum-verified, runs only in games that need it). Make a finger gun,
+  raise your thumb, drop it to fire. Holding a toy gun instead? A quick upward flick (a recoil) fires.
+* **Clay Shooting (3D):** both players aim at the same sky; singles, doubles, then a flurry; each clay goes to
+  whoever *pulled the trigger* first (judged by when each shot was made, so camera delay favours nobody).
+* **Boxing:** split screen, your opponent face on (copying their real arms), your gloves in front of you. Jabs and
+  crosses at the TV, hooks round the side, uppercuts from below; fists up to block, lean or duck to slip; energy,
+  knockdowns, KO.
+* **Archery (3D):** bow hand at the TV to aim, hands together to load an arrow, pull back to your face, open your
+  hand (or let it fly back) to release. 20, 35 and 50 m, with wind.
+* **Shooting Gallery, Darts, Penalty Save** - more quick games; darts land where you held steady before throwing.
+* **Sports versions** of Tennis, Table Tennis, Bowling and Golf: daytime stadium, sports hall, bowling alley,
+  summer course, and athletes instead of snowmen.
+* **Objects before a game:** the start screen of a game that can use one (tennis, table tennis, shooting) lets
+  each player pick their hands, their learned object, or teach one there and then. Objects are kept per player and
+  per kind (racket/club and toy gun).
+* **Motion test** now also shows fingers (finger gun, thumb up/down), punches, the bow and shots.
 
 ## Changes in 1.6.0 - tracking rework, 3D golf, real objects
 
@@ -166,6 +195,19 @@ racket, a stick or a pool noodle can be taught to the game and used as your rack
 
 ## The games
 
+**Sports & Arcade**
+
+1. **Clay Shooting** (3D) - finger gun, first to hit each clay, most points wins.
+2. **Boxing** - real punches, guard and slips, three rounds or a KO.
+3. **Archery** (3D) - draw, aim and release; nine arrows at three distances.
+4. **Shooting Gallery** - ducks, bottles, balloons and gold stars in 60 seconds.
+5. **Darts** - aim, hold steady, throw; trebles, doubles and the bull.
+6. **Penalty Save** - reach to stop the shots.
+7. **Tennis**, 8. **Table Tennis**, 9. **Bowling** - the swing games, in sports dress.
+10. **Golf** (3D) - 1 to 4 players taking turns, three summer courses.
+
+**Christmas**
+
 1. **Christmas Tennis** - swing like a racket, first to 7.
 2. **Snowball Showdown** - throw, dodge by leaning, shield with both hands up.
 3. **Present Catch** - catch the presents Santa drops, dodge the coal.
@@ -176,9 +218,10 @@ racket, a stick or a pool noodle can be taught to the game and used as your rack
 8. **Sleigh Slalom** - lean to steer, tuck for speed (steering-only mode available).
 9. **Christmas Goalkeepers** - reach to save shots.
 10. **Decorate the Tree** - hold a hand still to pick up and hang ornaments.
+11. **Christmas Golf** (3D) - 1 to 4 players taking turns.
 
 Every game is played by two people at the same time, each controlling their own side with their own body - or,
-with **Play Solo**, by one person against the computer.
+with **Play Solo**, by one person against the computer (Easy, Medium or Hard).
 
 ## Quick start (players)
 
@@ -189,15 +232,16 @@ with **Play Solo**, by one person against the computer.
    both players raise a hand and hold to start.
 5. On your own? Choose **Play Solo**, pick yourself and an opponent level, then a game. Stand in the middle of
    the picture, calibrate, and raise a hand to start.
+6. Pick **Sports & Arcade** or **Christmas** at the top of the main menu.
 
 ## Quick start (developers)
 
 ```bash
 # needs JDK 17+ and an Android SDK with platforms;android-35 and build-tools;35.0.0
 echo "sdk.dir=$ANDROID_HOME" > local.properties
-./gradlew :core:test            # 81 JVM tests (the 6 real-model tests are skipped unless configured)
-./gradlew :app:assembleDebugApk # -> app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
-adb install -r app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
+./gradlew :core:test            # JVM tests (the real-model tests are skipped unless configured, see BUILDING.md)
+./gradlew :app:assembleDebugApk # -> app/build/outputs/apk/LivingRoomGames-debug.apk
+adb install -r app/build/outputs/apk/LivingRoomGames-debug.apk
 ```
 
 ## Technology choice
@@ -206,7 +250,8 @@ adb install -r app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
   `Canvas` (hardware accelerated via `lockHardwareCanvas`). This keeps the APK small, the build simple and the
   whole game (rules, UI, tracking logic) testable on a normal JVM.
 * **Pose model: MediaPipe BlazePose (lite + full), Apache-2.0**, run with **TensorFlow Lite 2.16.1** (GPU
-  delegate, CPU/XNNPACK fallback). The models are bundled in the APK; nothing is downloaded at runtime.
+  delegate, CPU/XNNPACK fallback). **Finger tracking: MediaPipe hand landmark model (lite), Apache-2.0**, on the
+  CPU, only in games that use fingers. The models are bundled in the APK; nothing is downloaded at runtime.
 * **Genuine multi-person tracking.** The stock MediaPipe Pose Landmarker reliably tracks one person per image, so
   the app contains its own Kotlin implementation of the BlazePose two-stage pipeline: the person detector runs on
   overlapping left/right/full search regions, each found person gets their own landmark pass and their own region
@@ -227,6 +272,7 @@ in-app performance overlay (Settings -> Developer) shows the live values to chec
 |---|---|
 | Camera | 1280x720, 30 fps, newest frame only (no queue) |
 | Pose inference, both players | <= 25 ms per camera frame (full model, GPU) |
+| Finger tracking (shooting games) | <= 8 ms per camera frame for both gun hands (lite hand model, CPU) |
 | Camera capture -> game input | <= 100 ms |
 | Render | 60 fps cap (16.7 ms), independent of inference rate |
 | Simulation | fixed 120 Hz step, independent of render rate |

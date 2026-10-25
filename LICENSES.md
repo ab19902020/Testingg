@@ -6,6 +6,7 @@
 |---|---|---|---|
 | Game code (`core`, `app`) | 1.0.0 | Original work for this project. No open-source licence has been chosen yet; add a `LICENSE` file if you intend to publish the source. | This repository |
 | MediaPipe BlazePose models: `pose_detector.tflite`, `pose_landmarks_detector.tflite` from `pose_landmarker_lite.task` and `pose_landmarker_full.task` (float16, v1) | v1 | Apache License 2.0 | Google MediaPipe, storage.googleapis.com/mediapipe-models (see the "Pose Landmarker" model card) |
+| MediaPipe hand landmark model: `hand_landmark_lite.tflite` (finger tracking) | as published in mediapipe-assets, SHA-256 `d7fde8ac...ef5b2a48` | Apache License 2.0 | Google MediaPipe, storage.googleapis.com/mediapipe-assets (the hand landmark model of MediaPipe Hands) |
 | TensorFlow Lite runtime: `tensorflow-lite`, `tensorflow-lite-api`, `tensorflow-lite-gpu`, `tensorflow-lite-gpu-api` (Java classes + native libraries) | 2.16.1 | Apache License 2.0. The native libraries include third-party components (e.g. XNNPACK, FlatBuffers, Abseil, ruy) under their own permissive licences, listed in TensorFlow's third-party notices. | Maven Central, `org.tensorflow` |
 | Kotlin standard library | 2.2.21 | Apache License 2.0 | Maven Central, `org.jetbrains.kotlin` |
 | JetBrains annotations (dependency of the Kotlin stdlib) | 13.0 | Apache License 2.0 | Maven Central, `org.jetbrains` |
@@ -34,7 +35,7 @@ The full Apache License 2.0 text: https://www.apache.org/licenses/LICENSE-2.0
 | OpenCV (opencv-python-headless) | Apache 2.0 | Validation scene building |
 | NumPy | BSD-3-Clause | Validation |
 | Pillow | MIT-CMU (HPND) | Validation; test-render contact sheet |
-| MediaPipe test images (`pose.jpg`, `male_full_height_hands.jpg`, `man-woman-okay.jpg`, `living_room.jpg`) from storage.googleapis.com/mediapipe-assets | Published by Google as MediaPipe test assets (MediaPipe is Apache 2.0) | Downloaded at validation time to compose two-person test scenes. **Not committed and not shipped.** The repository only contains numeric model outputs derived from them (`core/src/test/resources/pose/`). |
+| MediaPipe test images (`pose.jpg`, `male_full_height_hands.jpg`, `man-woman-okay.jpg`, `living_room.jpg`, and for finger tracking `pointing_up.jpg`, `pointing_up_rotated.jpg`, `thumb_up.jpg`, `fist.jpg`, `victory.jpg`, `cats_and_dogs.jpg`) from storage.googleapis.com/mediapipe-assets | Published by Google as MediaPipe test assets (MediaPipe is Apache 2.0) | Downloaded at validation time to compose two-person test scenes. **Not committed and not shipped.** The repository only contains numeric model outputs derived from them (`core/src/test/resources/pose/`). |
 | DejaVu Sans font | Bitstream Vera / DejaVu licence (permissive) | Captions on `docs/images/test_render_contact_sheet.jpg` only |
 
 ## Privacy note

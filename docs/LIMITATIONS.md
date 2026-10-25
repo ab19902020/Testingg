@@ -2,7 +2,7 @@
 
 ## Biggest open item: no measured real-device testing yet
 
-The owner reports that versions 1.0.1 and 1.1.0 install and play on their phone. Nothing has been measured on a
+The owner reports that versions up to 1.6.0 install and play on their phone. Nothing has been measured on a
 device, though: the build environment had no Android device and no emulator, and the detailed checklist in
 [TEST_REPORT.md](TEST_REPORT.md) has not been run. Until it has:
 
@@ -17,7 +17,10 @@ device, though: the build environment had no Android device and no emulator, and
   game stutters, turn on **Reduced effects**);
 * the 1.6.0 changes are untested on a phone: the new swing detection and tennis rules, the hand pointer, 3D golf
   (a few hundred polygons and trees per frame - its frame rate on a phone is not known), held-object tracking and
-  the sharp-motion camera exposure.
+  the sharp-motion camera exposure;
+* the 1.7.0 changes are untested on a phone: finger tracking (finger guns and the thumb trigger), the recoil flick,
+  punches, the bow, darts throws, all the new games (Clay Shooting, Boxing, Archery, Shooting Gallery, Darts,
+  Penalty Save), the sports looks and the toy-gun objects.
 
 ## Device compatibility
 
@@ -69,6 +72,27 @@ device, though: the build environment had no Android device and no emulator, and
   may not be learned or followed (learning says so rather than guessing). Thin objects (a pencil-thin stick) are
   hard to see from 2-3 m. Strong colour changes in the room's light (a lamp switched on) can need re-learning.
   Tested on generated pictures only.
+* **Finger tracking** (shooting games, archery release, the Motion test) runs the MediaPipe hand landmark model on
+  a crop around each player's gun hand. It was checked with the real model on real *still* photos of hands - also
+  shrunk to about 70 pixels across, roughly a hand 2.5 m from a 720p camera - where pointing, a fist, a raised thumb
+  and two fingers were all read correctly. Live video is different: a hand pointing straight at the camera is
+  foreshortened, moving fingers blur, a dim room adds noise, and a hand further away is smaller still. How reliably
+  the thumb drop is seen in a real room is unknown until tried; the upward-flick fallback works without fingers.
+  It costs extra time per camera frame on the phone's CPU (not measured; shown in the Motion test).
+* **Aiming** (crosshairs) uses where your hand is, not exactly where it points: moving the hand a hand's width covers
+  the screen. Each player's "straight ahead" is set by their first shot at the centre target. Aim assist pulls the
+  crosshair a little onto nearby targets. The box sizes are estimates.
+* **Punches** are recognised from the body model's arm speed and its estimate of depth (how far the fist is towards
+  the camera), backed up by how short the forearm looks. That depth estimate is the least precise part of the body
+  model; a straight punch straight at the camera may be seen less reliably than hooks and uppercuts. Shaped with
+  simulated bodies only. Any fast arm movement can look like a punch to the detector, but only Boxing and Darts
+  listen for punches.
+* **The bow** needs both hands seen; pulling straight back from a bow arm pointed at the camera moves the hand mostly
+  in depth, which the camera sees less well than sideways movement - pull back towards your face and a little to the
+  side. Release by opening the hand needs the finger tracker to see the drawing hand; letting the hand fly back works
+  without it.
+* **Toy guns** are short: learning one needs it held pointing up, beside the shoulder, and a bright single-coloured
+  toy. A toy gun can hide the fingers, so fire with the recoil flick.
 * **Hand pointer**: each hand points from its own side; reaching the far left of the screen is easier with the
   left hand. The pointer box sizes are estimates, not tuned on a phone.
 
@@ -99,12 +123,18 @@ device, though: the build environment had no Android device and no emulator, and
 * Elf Dance-Off compensates for the audio output latency that Android reports; HDMI/TV audio adds unknown extra
   delay and there is no manual audio-offset setting yet.
 * Bowling uses the simplified scoring that was agreed (pin = 1, strike = 15, spare = 13).
+* **Boxing** shows your own gloves where your hands are and your opponent's arms as their tracker sees them - a
+  cartoon, not a 3D body. Damage, energy and knockdowns are game rules, not a measure of real punch force.
+* **Computer opponents in the new games** (shooting, boxing, archery, darts) were balanced against each other in
+  automated tests only (Hard beats Easy in 5 or 6 out of 6 matches); against a real person they may need retuning.
+* The Christmas games keep their Christmas look in both modes; only Tennis, Table Tennis, Bowling, the goalkeeper
+  game and Golf have sports versions.
 
 ## Build limitations
 
 * No Android Gradle Plugin (see [BUILDING.md](../BUILDING.md)). Consequences: Android Studio opens the project as
   a plain Gradle/Kotlin project (no "Run app" button; install with `adb`); no Android Lint; no R8 shrinking (the
-  APK is ~21 MB, mostly models and native libraries); no on-device instrumentation tests.
+  APK is ~23.5 MB, mostly models and native libraries); no on-device instrumentation tests.
 * Debug-signed only. For distribution, sign with your own release key (not stored in the project).
 * In this environment resources were linked against the API 34 platform jar (Ubuntu's aapt2 cannot read API 35);
   `aapt2 dump badging` therefore reports compileSdkVersion 34. Code is compiled against API 35 and the target SDK

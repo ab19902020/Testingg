@@ -3,13 +3,13 @@
 Two Gradle modules:
 
 * **`:core`** - pure Kotlin, no Android dependencies (compiled against `android.jar` so only APIs that exist on
-  Android are used). Pose decoding, multi-person pipeline, identity tracking, calibration, gestures, the ten games,
-  menus/UI, tournament, settings, procedural art and synthesised audio. All of it runs and is tested on a normal
-  JVM.
+  Android are used). Pose decoding, multi-person pipeline, finger tracking, identity tracking, calibration,
+  gestures, all games (Sports & Arcade and Christmas), menus/UI, tournament, settings, procedural art and
+  synthesised audio. All of it runs and is tested on a normal JVM.
 * **`:app`** - the Android layer: camera, TFLite inference, rendering to the phone/TV surfaces, audio output,
   display routing, lifecycle and storage. It implements the `Platform` interface that `:core` talks to.
 
-About 11,300 lines of main code and 1,900 lines of tests.
+About 20,300 lines of core code, 2,300 lines of Android code and 5,400 lines of tests.
 
 ## Threads and data flow
 
@@ -50,6 +50,15 @@ fixed 120 Hz from accumulated real time, so game speed doesn't depend on either.
 Camera buffers are sampled directly from YUV with the sensor rotation folded into the sampling transform, so no
 full-frame rotated copy is made; mirroring is applied afterwards when converting to frame units. `FrameGeometry` converts to "frame units" (x in [0, aspect], y in [0, 1],
 mirrored if selected) which everything downstream uses.
+
+**Finger tracking (1.7.0).** `HandLandmarkTracker` runs the MediaPipe hand landmark model (224x224 crop, 21
+points with relative depth, presence score) on the hands that `GameApp` asks for (`Platform.setHandTracking`: per
+player, the gun hand every frame and the other hand every other frame, only while a game sets `usesFingers`). The
+first crop comes from the body pose's wrist, index and pinky points (rotated so the fingers point up, 4.6x the
+wrist-to-knuckles distance); after that the crop follows the hand's own landmarks as MediaPipe does (2x the box of
+the steady landmarks, shifted towards the fingers), falling back to the body pose when the hand is lost. Results are
+attached to the person (`RawPose.hands` -> `PersonPose.hands` -> `BodyFrame.fing`). On Android the model runs on the
+CPU (XNNPACK, 2 threads) in its own interpreter, created on first use.
 
 ## Identity tracking (`core/tracking`)
 
@@ -125,6 +134,28 @@ on/off hysteresis (on above -0.58 reach, off below -0.68), a One Euro filter in 
 zone, a 0.3 s hold through lost hands, and hand switching only when the other hand is clearly higher. `Ui` keeps a
 slipping cursor's ring for 0.35 s and moves it to a new button after 0.12 s there.
 
+**Finger gun, flick, punches, bow (1.7.0).**
+* `HandShape` measures each finger's bend at the middle joint and reach from the wrist in 3D (scale- and
+  rotation-free), and the thumb tip's distance from the side of the index finger in palm lengths. A gun = index out,
+  ring and pinky in. Values on real photos: straight finger 2-10 deg, curled 140-160 deg; thumb against the hand
+  0.1-0.25, raised 0.9+.
+* `FingerTrigger`: thumb up (gap > 0.55) for at least 0.08 s, then down (gap < 0.33) while the hand is a gun fires;
+  stamped at the moment the gap passed halfway, interpolated between frames.
+* `FlickTrigger` (no finger data, e.g. a toy gun): a short, fast upward kick of the wrist that starts from a still,
+  raised hand; stamped at the start of the kick.
+* `GunControls` keeps per-hand aim points (the knuckles from the hand model, else the wrist plus the last knuckle
+  offset), a 24-sample aim history (a shot uses the aim from 50 ms before the trigger), the gun hand and the finger
+  mask.
+* `PunchDetector`: a burst of wrist speed (3D, depth x0.7) judged when it ends: towards the camera (depth, forearm
+  foreshortening, elbow rising) = straight, across from the side = hook, upwards = uppercut; pulling back is never a
+  punch; a fast reversal splits wind-up and punch. Guard = both fists up in front of the face.
+* `BowDetector`: hands together = nock; the dominant hand pulls away (2D + 0.6 x depth) = draw 0..1; release by
+  opening the drawing hand (finger tracker), a fast fly-back of the drawing hand, or (reduced/seated) holding a good
+  draw still for 1 s; hands back together = let down.
+* `AimCursor` (`core/game/Aim.kt`) maps a hand's aim point into a crosshair like a touch pad in the air (0.34 x 0.22
+  reach units to the screen edges; smaller for gentle modes), with a One Euro filter, a centre set by each player's
+  first shot, an aim-assist offset and a 2 s history so shots are judged where the crosshair was when they were made.
+
 ## Golf (`core/golf`, `core/gesture/GolfSwing.kt`, `core/ui/screens/Golf*.kt`)
 
 * `GolfSwingDetector` (run by `PlayerControls` while `golfStroke` is FULL or PUTT) follows the hands - the midpoint
@@ -182,6 +213,17 @@ landmarks) -> `BodyFrame.obj*` -> `AvatarPose.propAngle` (drawn rackets and bats
   is lost (0.5 s settle once everyone is back, then a 3 s resume countdown); user pause; TV-loss pause.
 * Seeds: each match gets a seed; both players receive identical challenges (presents, shots, gates).
 * `RallyGame` is the shared base for Tennis and Table Tennis.
+* `GameRegistry` lists every game with its **mode** (Sports & Arcade or Christmas) and **style**; Tennis, Table
+  Tennis, Bowling and the goalkeeper game appear in both modes under different ids (`tennis` / `tennis_s` ...), and
+  `GameEnv.style` tells the game which look to draw (`Draw.person` = snowman buddy or athlete). The chosen mode is a
+  setting; menus, solo and tournaments list `GameRegistry.forMode(app.mode)`.
+* Games that can use a real object declare `GameInfo.objectKind` (racket, toy gun; golf uses club); objects are
+  stored per player and kind. `GameApp.objectKind` / `useObject` decide which learned colour model the camera
+  thread looks for.
+* 3D scenes (Clay Shooting, Archery, Golf) use `Cam3` (`core/render/Cam3.kt`), a pinhole camera projecting into the
+  same 2D drawing API.
+* Shared-target shooting (Clay Shooting, Shooting Gallery): a hit goes to whoever's shot was *made* first; a shot
+  arriving later but made earlier takes the target over within 0.3 s.
 
 ## Solo mode and computer players (`core/game/Cpu.kt`)
 

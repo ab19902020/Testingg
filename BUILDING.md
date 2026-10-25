@@ -1,4 +1,4 @@
-# Building Christmas Living Room Games
+# Building Living Room Games
 
 The project builds with Gradle and a normal Android SDK. It does **not** use the Android Gradle Plugin (AGP):
 `app/build.gradle.kts` calls the SDK tools (aapt2, D8, zipalign, apksigner) directly. This was necessary because
@@ -27,6 +27,7 @@ from Maven Central.
 | `kotlin-test-junit5` / JUnit Jupiter | 2.2.21 / 5.10.1 | Maven Central | Unit tests only |
 | MediaPipe `pose_landmarker_lite.task` (float16, v1) | SHA-256 `59929e1d…690d574a` | storage.googleapis.com/mediapipe-models | Bundled model (shipped) |
 | MediaPipe `pose_landmarker_full.task` (float16, v1) | SHA-256 `5134a3aa…a839011b1` | storage.googleapis.com/mediapipe-models | Bundled model (shipped) |
+| MediaPipe `hand_landmark_lite.tflite` | SHA-256 `d7fde8ac…ef5b2a48` | storage.googleapis.com/mediapipe-assets | Bundled model (shipped), finger tracking |
 
 The models are downloaded once into `.model-cache/` (git-ignored), checked against the SHA-256 values in
 `app/build.gradle.kts`, unpacked and stored **uncompressed** in the APK so TFLite can memory-map them. After
@@ -47,10 +48,10 @@ sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
 # 4. APK
 ./gradlew :app:assembleDebugApk
-# -> app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
+# -> app/build/outputs/apk/LivingRoomGames-debug.apk
 
 # 5. Install on a connected phone (USB debugging on)
-adb install -r app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
+adb install -r app/build/outputs/apk/LivingRoomGames-debug.apk
 ```
 
 On Windows use `gradlew.bat`; the build picks `aapt2.exe`, `zipalign.exe` and `apksigner.bat` automatically.
@@ -58,7 +59,8 @@ On Windows use `gradlew.bat`; the build picks `aapt2.exe`, `zipalign.exe` and `a
 ### What `assembleDebugApk` does
 
 1. `extractAars` - unpacks the TFLite AARs (classes + native libraries).
-2. `fetchPoseModels` - downloads and checksum-verifies the models, extracts the two `.tflite` files of each.
+2. `fetchPoseModels` - downloads and checksum-verifies the models, extracts the two `.tflite` files of each pose
+   model and copies the hand landmark model.
 3. `processManifest`, `aapt2Compile`, `aapt2Link` - resources and manifest (`minSdk 29`, `targetSdk 35`).
 4. Kotlin compile of `:core` and `:app` against `android.jar` (no JDK classes, so only Android APIs can be used).
 5. `dex` - D8 (`--debug`, `--min-api 29`; no shrinking) into a single `classes.dex`.
@@ -97,7 +99,7 @@ runs the test. Its working files go to `build/pose-validation/`.
 
 ## How the shipped APK was built (this environment)
 
-The sandbox that produced `dist/ChristmasLivingRoomGames-debug.apk` had no access to dl.google.com, so the SDK
+The sandbox that produced `dist/LivingRoomGames-debug.apk` had no access to dl.google.com, so the SDK
 was assembled by hand in `/opt/android-sdk-min` (referenced from the git-ignored `local.properties`):
 
 | Piece | Source used | Version |

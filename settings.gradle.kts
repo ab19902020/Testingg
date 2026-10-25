@@ -12,5 +12,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ChristmasLivingRoomGames"
+rootProject.name = "LivingRoomGames"
 include(":core", ":app")

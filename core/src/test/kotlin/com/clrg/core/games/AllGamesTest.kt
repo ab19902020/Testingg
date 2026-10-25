@@ -90,7 +90,7 @@ class AllGamesTest {
 
     @Test
     fun seatedAndReducedModesStillPlayable() {
-        for (id in listOf("catch", "goalie", "tree", "dance", "bowling", "slalom")) {
+        for (id in listOf("catch", "goalie", "tree", "dance", "bowling", "slalom", "clays", "boxing", "archery", "gallery", "darts")) {
             val d = play(id, floatArrayOf(0.9f, 0.9f), modes = arrayOf(MovementMode.SEATED, MovementMode.REDUCED))
             assertTrue(d.game.isOver, id)
         }

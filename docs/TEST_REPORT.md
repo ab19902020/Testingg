@@ -1,15 +1,16 @@
 # Test report
 
-Date: 2026-10-25 (version 1.6.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+Date: 2026-10-25 (version 1.7.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
 (no KVM) or TV was available here.** The only real-device evidence is the owner's reports that versions 1.0.1 to
-1.5.0 run on their phone, with their comments on how well tracking works (section 4). Everything else that needs a device is marked **UNVERIFIED**.
+1.6.0 run on their phone, with their comments on how well tracking works (section 4). Everything else that needs a device is marked **UNVERIFIED**.
 
 ## Summary
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **144 passed, 0 failed, 2 skipped** (the skipped ones are developer diagnostics) (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **192 passed, 0 failed, 2 skipped** (the skipped ones are developer diagnostics) (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
+| Finger tracking with the real MediaPipe hand model (on still photos of hands, JVM) | **Passed** - finger shapes read correctly, also on hands shrunk to ~70 px; hands found from the body pose on a real two-person photo |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
 | App launches and runs on Android | **Reported working by the owner** (1.0.1 on their phone, after the camera crash fix); not tested here |
 | Live camera tracking of real people | Owner reports the game working; tracking quality not measured - **UNVERIFIED** in detail |
@@ -19,6 +20,7 @@ Date: 2026-10-25 (version 1.6.0). Environment: Linux cloud container, OpenJDK 21
 | Christmas Golf, hand cursors before set-up, one-player tracking load (1.4.0) | Passed in JVM tests with simulated bodies; **not yet tried with a real camera** |
 | Left/right check, upside-down fix, new Present Catch, magnetic cursors (1.5.0) | Passed in JVM tests with a simulated mirrored / upside-down camera and simulated bodies; owner reports 1.5.0 runs |
 | Swing detection rework, tennis rules, hand pointer, 3D golf with grip, held objects, motion test, sharp-motion exposure (1.6.0) | Passed in JVM tests with simulated bodies, simulated tracking dropouts and jitter, and generated pictures (held objects); the camera exposure code builds but is **not yet tried on a phone**; none of 1.6.0 has been tried with a real camera yet |
+| Sports & Arcade mode, finger guns, recoil flick, punches, bow, Clay Shooting, Boxing, Archery, Shooting Gallery, Darts, Penalty Save, sports looks, toy-gun objects (1.7.0) | Passed in JVM tests with simulated bodies, scripted game input and simulated app flows; finger shapes also with the real hand model on still photos. The hand model's Android runner builds but is **not yet tried on a phone**; none of 1.7.0 has been tried with a real camera yet |
 | On-device performance (fps, latency, thermal) | **UNVERIFIED** - no numbers measured; none are claimed |
 | TV output over USB-C/HDMI, Presentation mode, cable unplug | **UNVERIFIED** |
 | Audio output and latency | **UNVERIFIED** |
@@ -27,10 +29,68 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (146: 144 passed, 2 skipped)
+## 1. Automated tests (194: 192 passed, 2 skipped)
 
-Run: `./gradlew :core:test` (140 tests, two of them skipped developer diagnostics) plus 6 real-model tests that need the validation environment
+Run: `./gradlew :core:test` (184 tests, two of them skipped developer diagnostics) plus 10 real-model tests that need the validation environment
 (`tools/pose-validation/run_real_model_tests.sh`).
+
+### Finger guns, punches, the bow and the new games (new in 1.7.0)
+
+* `RealModelHandTest` (4 passed, **real MediaPipe hand landmark model (lite)** run through the Kotlin crop, decode
+  and tracking code, on MediaPipe's Apache-2.0 test photos of hands). Bend at the middle joint of index, middle,
+  ring and little finger (0 = straight), and the thumb's distance from the side of the index finger (palm lengths):
+
+  | Photo | Bends (deg) | Thumb gap | Read as |
+  |---|---|---|---|
+  | pointing up, full size | 3, 147, 142, 140 | 0.25 | gun, thumb down |
+  | pointing up, shrunk to ~70 px | 3, 148, 147, 149 | 0.24 | gun, thumb down |
+  | fist, full / shrunk | 148-158 for all | 0.15 / 0.13 | not a gun |
+  | two fingers, full / shrunk | 9, 4, 162, 160 / 7, 2, 162, 160 | 0.45 / 0.42 | two-finger gun |
+  | thumb up, full / ~75 px | 146-178 | 1.10 / 1.11 | thumb raised, index curled |
+
+  A sideways pointing hand: first crop (not turned) presence 0.72; after following the hand's own landmarks for
+  three frames the crop turned 73 degrees, presence 1.00, read as pointing. A photo without hands: no hand. On the
+  real two-person photo (`man-woman-okay.jpg`), crops from the body pose found 3 hands with presence 0.99-1.00, the
+  hand model's wrist 13-49 px from the body model's wrist (shoulder width ~160 px). Still photos only: no motion
+  blur, no live camera, no foreshortened finger pointing straight at the lens.
+* `FingerGunTest` (5 passed, simulated hands): three thumb clicks give exactly three shots, each stamped within
+  40 ms of the moment the thumb passed halfway down; a thumb that stays down, a fist opening and closing its thumb,
+  and five seconds of a cocked gun with camera jitter give no shot; without finger data a quick upward kick of the
+  hand fires once, stamped at the start of the kick with the aim from before it, while slowly raising the aim and
+  raising the arm from the side do not; the gun hand is the one making the gun, and the finger tracker is asked for
+  that hand every frame and the other (raised) hand every other frame.
+* `PunchTest` (5 passed, simulated bodies): guard seen and lost; a punch towards the camera is a straight, and
+  pulling it back is not a punch; a wind-up to the side then a swing across is a hook; driving up from below the
+  chest is an uppercut; slow reaches and waving with jitter give nothing; reduced mode takes a shorter, slower punch.
+* `BowTest` (5 passed, simulated bodies): hands together nock; pulling back gives a full draw (>85%); holding still
+  does not release in standard mode; letting the drawing hand fly back releases at full power (>80%) aimed with the
+  bow hand; opening the fingers of a closed drawing hand releases a partial draw (41%); slowly bringing the hands
+  back together puts the arrow down; a seated archer releases by holding still; the drawing hand's fingers are
+  tracked every frame while drawing.
+* `ClayShootingTest` (8 passed, scripted input): the first shot sets "straight ahead" and uses no shell; a shot on a
+  clay breaks it, a wide one misses; a shot judged when it was made (0.3 s before it reached the game) hits, the
+  same shot judged on arrival misses; a shot made 50 ms earlier but arriving a frame later takes the clay from the
+  other player; two shells then a reload; seated players' crosshair resting on a clay fires; Hard beat Easy in 6 of
+  6 matches (first match 44-5 points).
+* `BoxingTest` (6 passed): a clean punch lands; guard blocks the head but not the body; leaning slips a straight,
+  ducking slips a straight but an uppercut catches a ducking boxer harder; after ten punches in a second a punch
+  does less than 75% of a fresh one's damage; knockdowns, getting up after the count, KO after three; Hard beat
+  Easy in 6 of 6 (first match 258-67, a knockout).
+* `ArcheryTest` (5 passed): ring scoring; a full draw aimed at the centre scores 10, a half draw drops 0.15 m+;
+  wind drifts the arrow downwind on the second end; nine arrows each, then the match ends; Hard beat Easy in 6 of 6
+  (first match 79-58).
+* `GalleryAndDartsTest` (6 passed): first shot made wins a gallery target; six shots then a 1 s reload; dartboard
+  scoring (bull, 25, T20, D20, the numbers at 3, 6, 9 o'clock); a dart lands where the sight was held steady even
+  though the throw drags the hand away, and a floppy throw drops; Hard beat Easy in 5-6 of 6 in both (first matches
+  49-14 gallery, 251-141 darts). The hard gallery computer was toned down from an unbeatable 138 hits to 28.
+* `AllGamesTest` (6 passed, updated): all 19 registered games (10 Christmas, 9 Sports & Arcade) play to a valid
+  result; ids unique; the active player beats an idle one in 14 games, including all the new ones; seated and
+  reduced-movement players can finish the new games.
+* `SportsFlowTest` (4 passed, simulated input, through the real app): a new console opens in Sports & Arcade; the
+  mode switch is remembered; the sports game list shows the nine sports games and no Christmas ones; from Clay
+  Shooting's start screen a player teaches a toy gun, comes back to the same start screen with finger tracking still
+  on, can switch between finger gun and toy gun, and plays the match to the results (finger tracking off again
+  afterwards); golf in sports mode is the summer course with the club object; Boxing and Archery play through.
 
 ### Swings, pointing and held objects (new in 1.6.0 - simulated bodies, simulated dropouts, generated pictures)
 
@@ -247,14 +307,14 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,357,699 bytes, SHA-256 `07ed0eb868931b8f16a8667c68c1ac111958455940b46d9c3ee4db5b585b2619` |
-| Package / version | `com.clrg.christmasgames`, versionCode 8, versionName 1.6.0 |
+| File | `dist/LivingRoomGames-debug.apk`, 23,532,760 bytes, SHA-256 `8534c26b88fee4b11ae3ca919b7c18a27e8e4d5bebdda15c4ff821cb18353802` |
+| Package / version | `com.clrg.christmasgames` (unchanged, so it installs over earlier versions), versionCode 9, versionName 1.7.0, label "Living Room Games" |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
 | Signature | `apksigner verify --min-sdk-version 24`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
-| Reproducibility | A clean rebuild (`./gradlew clean :app:assembleDebugApk`) produced a byte-identical APK with the same debug key |
+| Reproducibility | Two clean builds (`./gradlew clean :app:assembleDebugApk`) produced byte-identical APKs with the same debug key |
 | Alignment | `zipalign -p 4` |
-| Code | single `classes.dex`, 1,614 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
-| Models | 4 `.tflite` files, stored uncompressed (memory-mappable) |
+| Code | single `classes.dex`, 1,686 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
+| Models | 5 `.tflite` files (4 pose + 1 hand landmark), stored uncompressed (memory-mappable); the build downloads and checks each against a SHA-256 |
 | Native libs | TFLite + GPU delegate for `arm64-v8a` and `x86_64` |
 | Permissions | `CAMERA` only. No `INTERNET` (enforced by the build) |
 | Features | `camera.any` required; rear camera and autofocus optional |
@@ -285,11 +345,17 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 | Thermal adaptation | Implemented / UNVERIFIED | PoseEngine, GameRenderer |
 | Offline after install | Passed (APK contents: models bundled, no INTERNET permission) | verifyApkContents |
 | No recording / upload | Passed by construction (no storage of frames, no network permission) / code review only | |
+| Sports & Arcade and Christmas modes; game lists, solo and tournaments per mode | Passed (simulated input) | SportsFlowTest, AllGamesTest |
+| Boxing 1v1, archery, clay shooting (first hit wins / most hits), more mini games | Passed (scripted) / UNVERIFIED with real bodies | BoxingTest, ArcheryTest, ClayShootingTest, GalleryAndDartsTest |
+| 3D where it fits (clays, archery, golf) | Implemented (`Cam3` projection) / frame rate on a phone UNVERIFIED | test renders |
+| Finger gun: thumb click fires | Passed (real hand model on still photos for the shapes; simulated hands for the click) / UNVERIFIED live | RealModelHandTest, FingerGunTest |
+| Toy gun (or other object) added before a game | Passed (simulated input; learning itself shares the 1.6.0 held-object code tested on generated pictures) / UNVERIFIED with a real toy | SportsFlowTest, HeldObjectTrackerTest |
 
 ## 4. Field reports
 
 | Report | Version | Status |
 |---|---|---|
+| "It works better now. We're not perfect ... I don't want it now to be purely a Christmas game - like a Nintendo Wii ... boxing 1v1, archery, shooting with your hand like a gun, clay pigeon shooting, first to hit gets the point or most things out of the sky ... 3D where it can be ... add objects like a fake gun before a game, or use your fingers with the thumb clicking down to shoot" - owner | 1.6.0 | 1.7.0 adds the Sports & Arcade mode (Christmas kept as its own mode), finger tracking with the thumb trigger, Clay Shooting (first to hit, and a flurry round), Boxing, Archery, Shooting Gallery, Darts, Penalty Save, sports versions of tennis, table tennis, bowling and golf, and teaching a toy gun or racket from a game's start screen. **Not yet confirmed on the phone.** |
 | "The tennis game's no good - the ball goes past you even when you're swinging ... golf needs to be 3D, tell you to put your hands together ... add your own objects (a stick as the racket) ... the motion tracker: you've got to concentrate and move your hand all the time" - owner | 1.5.0 | Causes found in code: a swing before the bounce was ignored and an early swing (or a backswing) used up the shot and blocked the real swing for 0.35 s; fast arms were read from smoothed points and missed when the wrist blurred; the pointer's bottom row sat where it switched off, edges needed a stretch across the body, and forward prediction made it overshoot. 1.6.0 reworks swing detection and the rally rules, rebuilds the pointer, puts golf in 3D with a grip, adds held objects, the motion test screen and a sharper camera exposure. **Not yet confirmed on the phone.** |
 | "It's reverse mirroring - your hands go the opposite way to you moving them on the screen ... the present game is crap" - owner | 1.4.0 | The camera picture on the owner's phone is most likely delivered already mirrored for the camera they use, so the game's own mirroring reversed it. 1.5.0 detects and fixes this per camera (left/right check), adds Flip left/right, and rebuilds Present Catch. **Not yet confirmed on the phone.** |
 | "It's all good, just keep improving the motion tracking" - owner, after 1.3.0 | 1.3.0 | Runs on the owner's phone. Asked for golf (1.4.0) and for controlling everything with hand gestures (hand cursors before set-up, 1.4.0). |
@@ -351,6 +417,19 @@ overlay**. Record PASS/FAIL and the overlay numbers. Repeat key items on a secon
 25g. [ ] Sharp-motion exposure: the motion test shows "sharp-motion exposure ... ms" on the back camera; the picture is
     not dark, flickering or banded; switching the option off returns to auto exposure. Compare a fast arm's blur in
     the camera preview with the option on and off.
+
+25h. [ ] 1.7.0 finger guns: Motion test, hold a finger gun towards the TV at 2-3 m: it says "Finger gun ... thumb UP";
+    dropping the thumb counts one shot each time; a fist or an open hand never counts. Note the "Finger tracking: x ms"
+    line and whether the tracking rate drops. Repeat in a dimmer room and further back; note where it stops working.
+25i. [ ] Clay Shooting and Shooting Gallery with two people: the centre-target shot sets each crosshair; crosshairs
+    follow the hands steadily; hits feel fair (a clean shot breaks the clay). Try a toy gun taught from the start
+    screen, fired with the upward flick.
+25j. [ ] Boxing: jabs at the TV, hooks and uppercuts each register as the right punch (Motion test shows the kind);
+    guard blocks; leaning and ducking slip; nothing fires while standing still.
+25k. [ ] Archery: hands together loads; pulling back fills the power bar; opening the hand (or letting it fly back)
+    releases; slowly bringing the hands together puts the arrow down.
+25l. [ ] Darts: the dart lands where the sight was held before the throw; a quick push throws, a slow reach does not.
+25m. [ ] Sports mode overall: mode switch, sports characters, summer golf; frame rate of the 3D scenes.
 
 **TV**
 26. [ ] HDMI connected before launch: TV detected (name, resolution, Hz shown); game on TV, phone shows camera +

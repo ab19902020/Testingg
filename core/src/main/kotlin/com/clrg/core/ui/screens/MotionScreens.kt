@@ -195,14 +195,23 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
     private val events = ArrayList<GestureEvent>()
     private val peak = Array(2) { FloatArray(2) }
 
+    private val shots = IntArray(2)
+    private val punches = IntArray(2)
+    private val arrows = IntArray(2)
+
     override fun onEnter() {
-        for (c in app.controls) { c.discardEvents(); c.swingBoost = 0f }
+        // follow the fingers too, so finger guns can be tried out here
+        for (c in app.controls) { c.discardEvents(); c.swingBoost = 0f; c.wantFingers = true }
+    }
+
+    override fun onExit() {
+        for (c in app.controls) c.wantFingers = false
     }
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
         Common.header(g, ui, "Motion test", app = app)
-        val view = Rect(40f, 150f, g.width * 0.56f, 760f)
+        val view = Rect(40f, 150f, g.width * 0.56f, 730f)
         PreviewView.draw(g, app, view, showAreas = false, labels = true)
         for (k in 0..1) drawHeldOverlay(g, app, k, view)
         // camera and tracking speed
@@ -210,9 +219,10 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
         val lines = if (app.settings.simulatedInput) listOf("Simulated input - not the camera") else listOf(
             "Camera %.0f fps  -  tracking %.0f per second  -  delay %s".format(p.cameraFps, p.inferenceFps, if (app.lastPoseLatencyMs.isNaN()) "-" else "%.0f ms".format(app.lastPoseLatencyMs)),
             "${p.model} on ${p.delegate}  -  ${p.exposure}",
+            "Finger tracking: ${p.fingers}",
         )
-        var y = view.bottom + 40f
-        for (l in lines) { g.text(l, view.cx, y, ui.fit(g, l, 30f, view.width, false), app.theme.dim, bold = false); y += 42f }
+        var y = view.bottom + 34f
+        for (l in lines) { g.text(l, view.cx, y, ui.fit(g, l, 28f, view.width, false), app.theme.dim, bold = false); y += 38f }
         if (ui.button(g, "labHeld", Rect(view.left, 900f, view.cx - 10f, 1010f), "Use a real object", "stick, toy racket, noodle", accent = Colors.GOOD, size = 36f)) app.push(HeldObjectScreen(app))
         if (ui.button(g, "labCheck", Rect(view.cx + 10f, 900f, view.right, 1010f), "Check left/right", accent = Colors.ICE, size = 36f)) {
             app.directionCheck.request(); app.notify("Raise a hand to start the left/right check")
@@ -229,10 +239,17 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
         val ctl = app.controls[k]
         val slot = app.tracker.slots[k]
         events.clear(); ctl.drainEvents(events)
-        for (e in events) if (e is GestureEvent.Swing) {
-            swings[k]++
+        for (e in events) {
+            val side = if (e.hand == LEFT) "left" else "right"
+            val text = when (e) {
+                is GestureEvent.Swing -> { swings[k]++; "SWING $side hand, seen by the " + when (ctl.lastSwingSource) { 0 -> "wrist"; 1 -> "elbow"; else -> "object" } }
+                is GestureEvent.Shot -> { shots[k]++; "BANG! $side hand - " + if (e.byThumb) "thumb dropped" else "recoil flick" }
+                is GestureEvent.Punch -> { punches[k]++; "PUNCH: ${e.kind.name.lowercase()} with the $side hand" }
+                is GestureEvent.Release -> { arrows[k]++; "ARROW let go - power %.0f%%".format(e.power * 100f) }
+                else -> null
+            } ?: continue
             flash[k] = 0f
-            flashText[k] = "SWING " + (if (e.hand == LEFT) "left" else "right") + " hand, seen by the " + when (ctl.lastSwingSource) { 0 -> "wrist"; 1 -> "elbow"; else -> "object" }
+            flashText[k] = text
         }
         flash[k] += dt
         Draw.panel(g, r, app.theme.panel, if (flash[k] < 0.4f) Colors.GOOD else app.theme.panelBorder)
@@ -241,7 +258,7 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
         Common.qualityMeter(g, app, k, r.right - 300f, r.top + 10f, 270f)
         if (!slot.isPlaying || !ctl.hasPose) { g.text("Not seen - step into the picture", r.cx, r.cy, 32f, Colors.WARN, bold = false); return }
         // swing meters: how close each hand's movement is to counting as a swing
-        var y = r.top + 150f
+        var y = r.top + 125f
         for (h in intArrayOf(LEFT, RIGHT)) {
             val lvl = ctl.swingLevel[h]
             peak[k][h] = maxOf(lvl, peak[k][h] - dt * 0.8f)
@@ -252,23 +269,32 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
             g.fillRoundRect(bar.left, bar.top, bar.left + bar.width * f, bar.bottom, 18f, if (peak[k][h] >= 1f) Colors.GOOD else Colors.WARN)
             val thr = bar.left + bar.width / 1.5f
             g.line(thr, bar.top - 6f, thr, bar.bottom + 6f, 4f, Colors.WHITE)
-            y += 52f
+            y += 46f
         }
-        g.text("Swings counted: ${swings[k]}", r.left + 30f, y + 4f, 28f, Colors.WHITE, Align.LEFT, bold = false)
-        y += 42f
+        g.text("Swings ${swings[k]}   Shots ${shots[k]}   Punches ${punches[k]}   Arrows ${arrows[k]}", r.left + 30f, y + 4f, 28f, Colors.WHITE, Align.LEFT, bold = false)
+        y += 38f
         if (flash[k] < 1.5f) g.text(flashText[k], r.left + 30f, y, ui.fit(g, flashText[k], 30f, r.width - 60f), Colors.GOOD, Align.LEFT)
-        y += 46f
+        y += 40f
         // golf grip, held object, pointer
         val gap = handsGap(k)
         val grip = !gap.isNaN() && gap < com.clrg.core.gesture.GolfSwingDetector.GRIP_GAP
         val held = if (ctl.hasObject) "object seen in the ${if (ctl.avatar.propHand == LEFT) "left" else "right"} hand" else if (app.heldModelFor(k) != null) "object learned, not seen now" else "no object"
         val pointer = app.pointers[k]
+        val gc = ctl.gunCtl
+        val gh = gc.gunHand
+        val fingers = when {
+            !gc.fingersSeen[0] && !gc.fingersSeen[1] -> "Fingers: not seen (hold a hand up towards the TV)"
+            gc.trigger[gh].gun -> "Finger gun in the ${if (gh == RIGHT) "right" else "left"} hand - thumb ${if (gc.trigger[gh].cocked) "UP (ready)" else "down"}"
+            else -> "Fingers seen - make a finger gun: index out, other fingers in"
+        }
         val info = listOf(
+            fingers,
+            "Boxing: " + (if (ctl.punch.guard) "guard up" else "guard down") + "   Bow: " + ctl.bow.state.name.lowercase() + (if (ctl.bow.state == com.clrg.core.gesture.BowDetector.State.DRAWING) " %.0f%%".format(ctl.bow.draw * 100f) else ""),
             "Golf grip: " + (if (gap.isNaN()) "hands not both seen" else if (grip) "hands together" else "hands %.1f apart".format(gap)),
             "Held: $held",
             "Pointer: " + if (pointer.active) "pointing with the ${if (pointer.hand == RIGHT) "right" else "left"} hand" else if (pointer.visible) "lift your hand a little higher" else "hand down",
         )
-        for (l in info) { if (y > r.bottom - 20f) break; g.text(l, r.left + 30f, y, ui.fit(g, l, 28f, r.width - 60f, false), app.theme.dim, Align.LEFT, bold = false); y += 40f }
+        for (l in info) { if (y > r.bottom - 16f) break; g.text(l, r.left + 30f, y, ui.fit(g, l, 26f, r.width - 60f, false), app.theme.dim, Align.LEFT, bold = false); y += 33f }
     }
 
     /** Distance between the wrists in body units (NaN unless both are seen well). */

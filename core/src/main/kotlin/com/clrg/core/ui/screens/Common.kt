@@ -131,12 +131,15 @@ object PreviewView {
             if (labels) Draw.badge(g, (ax0 + ax1) / 2f, view.top + 46f, "P${k + 1} ${app.activePlayers[k].name}", c, 30f)
             if (!ok) outline(g, (ax0 + ax1) / 2f, view.top + h * 0.2f, h * 0.7f, Colors.withAlpha(c, 0.35f))
         }
+        // skeletons stay inside the picture (a person partly out of frame has joints outside it)
+        g.save(); g.clipRect(view.left, view.top, view.right, view.bottom)
         for (m in app.tracker.others) skeleton(g, m, map, 0x99B0BEC5.toInt(), 4f)
         for (k in 0..1) {
             val s = app.tracker.slots[k]
             val m = s.metrics ?: continue
             skeleton(g, m, map, app.playerColor(k), 7f)
         }
+        g.restore()
         // pipeline debug geometry (search regions / ROIs) when the skeleton overlay is on
         if (app.settings.skeletonOverlay) app.platform.pipelineDebug()?.let { dbg ->
             for (reg in dbg.regions) { val (a, b) = map(reg[0], reg[1]); val (c, d) = map(reg[2], reg[3]); g.strokeRoundRect(minOf(a, c), b, maxOf(a, c), d, 4f, 2f, 0x88FFEB3B.toInt()) }

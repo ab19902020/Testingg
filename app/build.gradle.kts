@@ -14,7 +14,7 @@ import java.util.zip.ZipOutputStream
 // the APK is assembled with the standard SDK tools (aapt2, D8, zipalign, apksigner). See BUILDING.md
 // for why (the build sandbox cannot reach Google's Maven repository) and how to configure tool paths.
 //
-//   ./gradlew :app:assembleDebugApk   -> app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
+//   ./gradlew :app:assembleDebugApk   -> app/build/outputs/apk/LivingRoomGames-debug.apk
 // =============================================================================================
 
 plugins {
@@ -304,7 +304,7 @@ val ensureDebugKeystore by tasks.registering(Exec::class) {
     )
 }
 
-val finalApk = layout.buildDirectory.file("outputs/apk/ChristmasLivingRoomGames-debug.apk")
+val finalApk = layout.buildDirectory.file("outputs/apk/LivingRoomGames-debug.apk")
 val signApk by tasks.registering(Exec::class) {
     dependsOn(zipalignApk, ensureDebugKeystore)
     inputs.file(alignedApk)
