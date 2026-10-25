@@ -19,6 +19,7 @@ import com.clrg.core.ui.Key
 import com.clrg.core.ui.Screen
 import com.clrg.core.ui.Theme
 import com.clrg.core.ui.Ui
+import com.clrg.core.ui.screens.CrashReportScreen
 import com.clrg.core.ui.screens.DevOverlay
 import com.clrg.core.ui.screens.MainMenuScreen
 import com.clrg.core.ui.screens.PermissionScreen
@@ -74,6 +75,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         applySettings()
         stack.add(MainMenuScreen(this))
         if (platform.cameraStatus().state == CameraState.NEEDS_PERMISSION) stack.add(PermissionScreen(this))
+        platform.previousCrash()?.let { stack.add(CrashReportScreen(this, it)) }
         hadExternalDisplay = platform.displayStatus().externalConnected
     }
 
@@ -291,6 +293,14 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
             val w = g.measureText(msg, 40f) + 80f
             g.fillRoundRect(g.width / 2 - w / 2, g.height - 140f, g.width / 2 + w / 2, g.height - 60f, 30f, 0xEE7A1F1F.toInt())
             g.text(msg, g.width / 2, g.height - 100f, 40f, Colors.WHITE)
+        } else if (!settings.simulatedInput && scr.needsCamera) {
+            platform.trackingProblem()?.let { problem ->
+                val msg = problem.take(110)
+                val size = 32f
+                val w = minOf(g.width - 40f, g.measureText(msg, size) + 80f)
+                g.fillRoundRect(g.width / 2 - w / 2, g.height - 140f, g.width / 2 + w / 2, g.height - 60f, 30f, 0xEE7A1F1F.toInt())
+                g.text(msg, g.width / 2, g.height - 100f, ui.fit(g, msg, size, w - 60f), Colors.WHITE)
+            }
         }
         if (displayLost) {
             g.fillRect(0f, 0f, g.width, g.height, 0xCC000000.toInt())

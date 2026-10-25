@@ -60,27 +60,33 @@ class GameRenderer(private val app: GameApp, private val router: DisplayRouter, 
         Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY)
         var last = System.nanoTime()
         while (running) {
-            if (!active) { Thread.sleep(30); last = System.nanoTime(); continue }
-            var drew = false
-            synchronized(SurfaceLock) {
-                val tv = router.tvHolder
-                val phone = phoneHolder
-                val target = tv ?: phone
-                if (target != null) {
-                    phoneShowsGame = tv == null
-                    drawGame(target, tv == null)
-                    if (tv != null && phone != null && frame % 3 == 0L) drawCompanion(phone)
-                    drew = true
+            try {
+                if (!active) { Thread.sleep(30); last = System.nanoTime(); continue }
+                var drew = false
+                synchronized(SurfaceLock) {
+                    val tv = router.tvHolder
+                    val phone = phoneHolder
+                    val target = tv ?: phone
+                    if (target != null) {
+                        phoneShowsGame = tv == null
+                        drawGame(target, tv == null)
+                        if (tv != null && phone != null && frame % 3 == 0L) drawCompanion(phone)
+                        drew = true
+                    }
                 }
+                if (!drew) { Thread.sleep(16); continue }
+                frame++
+                // cap at ~60 fps (TVs run at 60 Hz; saves power and heat on 120 Hz phones); 30 fps when the phone is hot
+                val hot = power.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_SEVERE
+                val now = System.nanoTime()
+                val wait = (if (hot) 33_000_000L else 16_000_000L) - (now - last)
+                if (wait > 1_000_000L) Thread.sleep(wait / 1_000_000L)
+                last = System.nanoTime()
+            } catch (t: Throwable) {
+                // never let one bad frame take the whole game down; slow down so a persistent error can't spin
+                Log.e("GameRenderer", "render loop", t)
+                try { Thread.sleep(100) } catch (_: InterruptedException) {}
             }
-            if (!drew) { Thread.sleep(16); continue }
-            frame++
-            // cap at ~60 fps (TVs run at 60 Hz; saves power and heat on 120 Hz phones); 30 fps when the phone is hot
-            val hot = power.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_SEVERE
-            val now = System.nanoTime()
-            val wait = (if (hot) 33_000_000L else 16_000_000L) - (now - last)
-            if (wait > 1_000_000L) Thread.sleep(wait / 1_000_000L)
-            last = System.nanoTime()
         }
     }
 

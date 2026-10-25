@@ -23,6 +23,20 @@ minigames, a party tournament with pair rotation and a persistent scoreboard.
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
 
+## Changes in 1.0.1
+
+* **Crash right after allowing the camera: most likely cause fixed** (found by code review; not yet confirmed on
+  the phone). Granting the permission started the camera twice (from the permission result and again when the app
+  resumed), so the same camera was opened twice and the first one was shut down mid-setup; an error on the camera
+  thread was not caught and closed the app. Camera start is now idempotent, stale camera callbacks are ignored and
+  every camera callback is guarded.
+* If the game ever closes unexpectedly, the next launch shows what happened (phone model and where the error was)
+  with a **Share details** button. Nothing is sent automatically.
+* If the phone's GPU driver crashes during body tracking, the game switches to the CPU for good on that phone.
+* If body tracking cannot start (for example the TensorFlow Lite library cannot load), a message says so instead
+  of tracking silently not working.
+* Safer camera image handling and pose-thread restarts after pausing.
+
 ## The games
 
 1. **Christmas Tennis** - swing like a racket, first to 7.
@@ -51,7 +65,7 @@ Every game is played by two people at the same time, each controlling their own 
 ```bash
 # needs JDK 17+ and an Android SDK with platforms;android-35 and build-tools;35.0.0
 echo "sdk.dir=$ANDROID_HOME" > local.properties
-./gradlew :core:test            # 72 JVM tests (the 6 real-model tests are skipped unless configured)
+./gradlew :core:test            # 74 JVM tests (the 6 real-model tests are skipped unless configured)
 ./gradlew :app:assembleDebugApk # -> app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
 adb install -r app/build/outputs/apk/ChristmasLivingRoomGames-debug.apk
 ```

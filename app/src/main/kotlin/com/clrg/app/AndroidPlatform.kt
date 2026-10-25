@@ -24,6 +24,7 @@ class AndroidPlatform(
     private val camera: CameraSource,
     private val pose: PoseEngine,
     private val router: DisplayRouter,
+    private val crashReport: String? = null,
 ) : Platform {
     private val device by lazy { DeviceCheck.info() }
     private val options by lazy { camera.options() }
@@ -59,6 +60,19 @@ class AndroidPlatform(
     override fun pipelineDebug(): PipelineDebug? = pose.debug()
     override fun setSimulatedInput(on: Boolean) { pose.enabled = !on }
     override fun nowNanos(): Long = System.nanoTime()
+    override fun previousCrash(): String? = crashReport
+    override fun trackingProblem(): String? = pose.problem
+
+    override fun shareText(subject: String, text: String) {
+        activity.runOnUiThread {
+            try {
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, subject).putExtra(Intent.EXTRA_TEXT, text)
+                activity.startActivity(Intent.createChooser(send, subject))
+            } catch (t: Throwable) {
+                android.util.Log.w("AndroidPlatform", "share failed", t)
+            }
+        }
+    }
     override fun quit() { activity.runOnUiThread { activity.finish() } }
 
     companion object {

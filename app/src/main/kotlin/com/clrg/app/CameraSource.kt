@@ -54,6 +54,12 @@ class CameraSource(private val context: Context) {
 
     private var device: CameraDevice? = null
     private var session: CameraCaptureSession? = null
+    /** An openCamera() call is in flight (its callback has not arrived yet). */
+    private var opening = false
+    /** Incremented for every open/close; callbacks from an older generation are ignored. */
+    private var generation = 0
+    /** Held while the consumer reads an image and while a reader is closed, so a buffer is never freed mid-read. */
+    val frameLock = Any()
     private var wantedId: String? = null
     private var wantWide = false
     private var running = false
@@ -91,11 +97,15 @@ class CameraSource(private val context: Context) {
     private fun defaultId(): String? = infos.filter { !it.front }.maxByOrNull { it.hFovDeg }?.id ?: infos.firstOrNull()?.id
 
     fun setPermissionMissing(denied: Boolean) {
-        status = CameraStatus(if (denied) CameraState.DENIED else CameraState.NEEDS_PERMISSION)
+        val st = CameraStatus(if (denied) CameraState.DENIED else CameraState.NEEDS_PERMISSION)
+        status = st
+        handler.post { if (!running) status = st } // also after any stop() still queued on the camera thread
     }
 
     /** Applies camera choice; restarts the camera if it changed while running. */
-    fun configure(id: String?, wide: Boolean) = handler.post {
+    fun configure(id: String?, wide: Boolean) = handler.post { guarded("configure camera", id) { configureInternal(id, wide) } }
+
+    private fun configureInternal(id: String?, wide: Boolean) {
         val newId = id?.takeIf { want -> infos.any { it.id == want } } ?: defaultId()
         val changed = newId != (active?.id ?: wantedId) || wide != wantWide
         wantedId = newId
@@ -103,53 +113,80 @@ class CameraSource(private val context: Context) {
         if (changed && running) { closeInternal(); openInternal() }
     }
 
+    /** Idempotent: calling it again while the camera is open or opening does nothing. */
     fun start() = handler.post {
         running = true
         retryCount = 0
-        openInternal()
+        guarded("start", wantedId) { openInternal() }
     }
 
     fun stop() = handler.post {
         running = false
-        closeInternal()
-        status = CameraStatus(CameraState.STOPPED)
+        try { closeInternal() } catch (t: Throwable) { Log.e(TAG, "close failed", t) }
+        // keep "permission needed" visible; anything else becomes STOPPED
+        if (status.state != CameraState.NEEDS_PERMISSION && status.state != CameraState.DENIED) status = CameraStatus(CameraState.STOPPED)
+    }
+
+    /**
+     * Runs a camera callback so that nothing it throws can reach the camera thread's looper (which would kill the
+     * app): any failure becomes an ERROR status and a retry.
+     */
+    private inline fun guarded(what: String, id: String?, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            Log.e(TAG, "$what failed", t)
+            status = CameraStatus(CameraState.ERROR, "$what: ${t.javaClass.simpleName}", id)
+            try { closeInternal() } catch (_: Throwable) {}
+            scheduleRetry()
+        }
     }
 
     @SuppressLint("MissingPermission")
     private fun openInternal() {
-        if (!running || device != null) return
+        if (!running || device != null || opening) return
         if (infos.isEmpty()) { status = CameraStatus(CameraState.NO_CAMERA, "no camera"); return }
         val id = wantedId ?: defaultId() ?: return
-        val info = infos.first { it.id == id }
-        status = CameraStatus(CameraState.OPENING, activeId = id)
+        val info = infos.firstOrNull { it.id == id } ?: infos.first()
+        val gen = ++generation
+        status = CameraStatus(CameraState.OPENING, activeId = info.id)
+        opening = true
         try {
-            manager.openCamera(id, executor, object : CameraDevice.StateCallback() {
-                override fun onOpened(cam: CameraDevice) {
-                    if (!running) { cam.close(); return }
+            manager.openCamera(info.id, executor, object : CameraDevice.StateCallback() {
+                override fun onOpened(cam: CameraDevice) = guarded("open", info.id) {
+                    if (gen != generation) { try { cam.close() } catch (_: Throwable) {}; return@guarded } // superseded by a newer open or a close
+                    opening = false
+                    if (!running) { try { cam.close() } catch (_: Throwable) {}; return@guarded }
                     device = cam
                     active = info
-                    createSession(cam, info)
+                    createSession(cam, info, gen)
                 }
-                override fun onDisconnected(cam: CameraDevice) {
+                override fun onDisconnected(cam: CameraDevice) = guarded("disconnect", info.id) {
                     Log.w(TAG, "camera disconnected")
-                    cam.close()
-                    if (device === cam) device = null
-                    status = CameraStatus(CameraState.INTERRUPTED, "in use by another app", id)
+                    try { cam.close() } catch (_: Throwable) {}
+                    if (gen != generation) return@guarded
+                    opening = false
+                    if (device === cam || device == null) closeInternal()
+                    status = CameraStatus(CameraState.INTERRUPTED, "in use by another app", info.id)
                     scheduleRetry()
                 }
-                override fun onError(cam: CameraDevice, error: Int) {
+                override fun onError(cam: CameraDevice, error: Int) = guarded("error", info.id) {
                     Log.e(TAG, "camera error $error")
-                    cam.close()
-                    if (device === cam) device = null
-                    status = CameraStatus(if (error == ERROR_CAMERA_IN_USE || error == ERROR_MAX_CAMERAS_IN_USE) CameraState.INTERRUPTED else CameraState.ERROR, "code $error", id)
+                    try { cam.close() } catch (_: Throwable) {}
+                    if (gen != generation) return@guarded
+                    opening = false
+                    if (device === cam || device == null) closeInternal()
+                    status = CameraStatus(if (error == ERROR_CAMERA_IN_USE || error == ERROR_MAX_CAMERAS_IN_USE) CameraState.INTERRUPTED else CameraState.ERROR, "code $error", info.id)
                     scheduleRetry()
                 }
             })
         } catch (e: SecurityException) {
+            opening = false
             status = CameraStatus(CameraState.NEEDS_PERMISSION)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            opening = false
             Log.e(TAG, "openCamera failed", e)
-            status = CameraStatus(CameraState.ERROR, e.message ?: "open failed", id)
+            status = CameraStatus(CameraState.ERROR, e.message ?: "open failed", info.id)
             scheduleRetry()
         }
     }
@@ -157,7 +194,7 @@ class CameraSource(private val context: Context) {
     private fun scheduleRetry() {
         if (!running) return
         retryCount++
-        handler.postDelayed({ if (running && device == null) openInternal() }, minOf(5000L, 800L * retryCount))
+        handler.postDelayed({ guarded("retry", wantedId) { if (running && device == null && !opening) openInternal() } }, minOf(5000L, 800L * retryCount))
     }
 
     private fun chooseSize(id: String): Size {
@@ -176,20 +213,26 @@ class CameraSource(private val context: Context) {
             ?: ranges.maxByOrNull { it.upper * 100 + it.lower }
     }
 
-    private fun createSession(cam: CameraDevice, info: Info) {
+    private fun createSession(cam: CameraDevice, info: Info, gen: Int) {
         try {
             val size = chooseSize(info.id)
             val r = ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, 3)
             r.setOnImageAvailableListener({
-                val now = SystemClock.elapsedRealtimeNanos()
-                if (lastFrameNs != 0L) { val inst = 1e9f / (now - lastFrameNs).coerceAtLeast(1); fps += 0.1f * (inst - fps) }
-                lastFrameNs = now
-                onFrame?.invoke()
+                try {
+                    val now = SystemClock.elapsedRealtimeNanos()
+                    if (lastFrameNs != 0L) { val inst = 1e9f / (now - lastFrameNs).coerceAtLeast(1); fps += 0.1f * (inst - fps) }
+                    lastFrameNs = now
+                    onFrame?.invoke()
+                } catch (t: Throwable) {
+                    Log.e(TAG, "frame callback failed", t)
+                }
             }, handler)
             reader = r
             val outputs = listOf(OutputConfiguration(r.surface))
             val cfg = SessionConfiguration(SessionConfiguration.SESSION_REGULAR, outputs, executor, object : CameraCaptureSession.StateCallback() {
-                override fun onConfigured(s: CameraCaptureSession) {
+                override fun onConfigured(s: CameraCaptureSession) = guarded("configure", info.id) {
+                    // a session for a camera that has since been closed or replaced: drop it
+                    if (gen != generation || device !== cam || !running) { try { s.close() } catch (_: Throwable) {}; return@guarded }
                     session = s
                     val req = cam.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                         addTarget(r.surface)
@@ -210,14 +253,15 @@ class CameraSource(private val context: Context) {
                     }
                 }
 
-                override fun onConfigureFailed(s: CameraCaptureSession) {
+                override fun onConfigureFailed(s: CameraCaptureSession) = guarded("configure", info.id) {
+                    if (gen != generation) return@guarded
                     status = CameraStatus(CameraState.ERROR, "configuration failed", info.id)
                     closeInternal()
                     scheduleRetry()
                 }
             })
             cam.createCaptureSession(cfg)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "createSession failed", e)
             status = CameraStatus(CameraState.ERROR, e.message ?: "session failed", info.id)
             closeInternal()
@@ -226,14 +270,17 @@ class CameraSource(private val context: Context) {
     }
 
     private fun closeInternal() {
-        try { session?.close() } catch (_: Exception) {}
+        generation++
+        opening = false
+        try { session?.close() } catch (_: Throwable) {}
         session = null
-        try { device?.close() } catch (_: Exception) {}
+        try { device?.close() } catch (_: Throwable) {}
         device = null
-        // the reader is closed by the consumer side swap below so an in-flight image is not yanked away
+        active = null
         val r = reader
         reader = null
-        handler.postDelayed({ try { r?.close() } catch (_: Exception) {} }, 300)
+        // waits for the consumer to finish copying any image it holds from this reader
+        synchronized(frameLock) { try { r?.close() } catch (_: Throwable) {} }
     }
 
     fun shutdown() {

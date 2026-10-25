@@ -67,6 +67,7 @@ class TfliteRunner(assets: AssetManager, val variant: String, wantGpu: Boolean) 
         var lm: Interpreter? = null
         if (wantGpu) {
             try {
+                CrashReporter.beginStep(CrashReporter.STEP_GPU_INIT)
                 val compat = CompatibilityList()
                 if (compat.isDelegateSupportedOnThisDevice) {
                     g = GpuDelegate(compat.bestOptionsForThisDevice)
@@ -82,11 +83,13 @@ class TfliteRunner(assets: AssetManager, val variant: String, wantGpu: Boolean) 
             }
         }
         if (det == null || lm == null) {
+            CrashReporter.beginStep(CrashReporter.STEP_CPU_INIT)
             val threads = max(2, minOf(4, Runtime.getRuntime().availableProcessors() / 2))
             det = Interpreter(detModel, Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true))
             lm = Interpreter(lmModel, Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true))
             delegateName = "CPU x$threads"
         } else delegateName = "GPU"
+        CrashReporter.endStep()
         gpu = g
         detector = det
         landmarks = lm
@@ -149,11 +152,21 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     private val lock = Object()
     private var pending = false
     @Volatile private var running = false
+    /** Each start() gets a new token; a thread whose token is stale exits, so only one thread ever runs the models. */
+    @Volatile private var token = 0
+    @Volatile private var releaseOnExit = false
     private var thread: Thread? = null
     private var runner: TfliteRunner? = null
     private var pipeline: MultiPosePipeline? = null
     private var variant = "full"
-    private var gpuFailed = false
+    private val prefs = context.getSharedPreferences("pose_engine", Context.MODE_PRIVATE)
+    /** GPU is skipped for good once it failed (or crashed the app) on this phone. */
+    private var gpuFailed = prefs.getBoolean(KEY_GPU_OFF, false)
+    private var initFailures = 0
+    private var nextInitAttemptNs = 0L
+    /** Plain-language reason when pose tracking cannot run (shown on screen), or null. */
+    @Volatile var problem: String? = null
+        private set
 
     // buffers reused across frames
     private var yBuf = ByteArray(0)
@@ -180,30 +193,46 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
 
     fun start() {
         if (running) return
+        releaseOnExit = false
+        val my = ++token
         running = true
         camera.onFrame = { synchronized(lock) { if (pending) dropped++; pending = true; lock.notifyAll() } }
-        thread = Thread({ loop() }, "pose-inference").also { it.start() }
+        val previous = thread
+        thread = Thread({
+            // a previous thread may still be finishing a slow model load: never let two threads use the models
+            try { previous?.join() } catch (_: InterruptedException) {}
+            loop(my)
+        }, "pose-inference").also { it.start() }
     }
 
+    /** Stops quickly without blocking the UI thread for long; the models stay loaded for the next start(). */
     fun stop() {
         running = false
+        token++
         synchronized(lock) { lock.notifyAll() }
-        thread?.join(1500)
-        thread = null
+        thread?.join(300)
+    }
+
+    /** Stops and frees the models (activity destroyed). */
+    fun release() {
+        releaseOnExit = true
+        stop()
+        val t = thread
+        if (t == null || !t.isAlive) { runner?.close(); runner = null; pipeline = null }
     }
 
     fun preview(): PreviewFrame? = latestPreview.get()
     fun debug(): PipelineDebug? = latestDebug.get()
     fun perf(): PerfSnapshot = perfSnap
 
-    private fun loop() {
+    private fun loop(my: Int) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY)
-        while (running) {
+        while (running && token == my) {
             synchronized(lock) {
-                while (running && !pending) lock.wait(500)
+                while (running && token == my && !pending) lock.wait(500)
                 pending = false
             }
-            if (!running) break
+            if (!running || token != my) break
             if (!enabled) continue
             // critical heat: process every other camera frame (the tracker copes with 15 Hz)
             if (power.currentThermalStatus >= PowerManager.THERMAL_STATUS_CRITICAL && (skipToggle++ % 2L == 0L)) continue
@@ -214,8 +243,11 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
                 if (t is OutOfMemoryError) System.gc()
             }
         }
-        runner?.close()
-        runner = null
+        if (releaseOnExit) {
+            try { runner?.close() } catch (_: Throwable) {}
+            runner = null
+            pipeline = null
+        }
     }
 
     private fun ensureRunner() {
@@ -225,12 +257,27 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
             QualityMode.AUTO -> variant
         }
         if (runner != null && runner!!.variant == wanted) return
-        runner?.close()
-        val r = try { TfliteRunner(context.assets, wanted, !gpuFailed) } catch (t: Throwable) {
-            Log.e("PoseEngine", "runner init failed (gpu=${!gpuFailed})", t)
-            gpuFailed = true
-            TfliteRunner(context.assets, wanted, false)
+        if (System.nanoTime() < nextInitAttemptNs) return
+        try { runner?.close() } catch (_: Throwable) {}
+        runner = null
+        pipeline = null
+        val r = try {
+            try { TfliteRunner(context.assets, wanted, !gpuFailed) } catch (t: Throwable) {
+                Log.e("PoseEngine", "runner init failed (gpu=${!gpuFailed})", t)
+                if (!gpuFailed) disableGpu()
+                TfliteRunner(context.assets, wanted, false)
+            }
+        } catch (t: Throwable) {
+            // e.g. the TensorFlow Lite native library cannot be loaded on this phone: report it, retry slowly
+            CrashReporter.endStep()
+            initFailures++
+            nextInitAttemptNs = System.nanoTime() + minOf(30_000_000_000L, 2_000_000_000L * initFailures)
+            problem = "Body tracking could not start: ${t.javaClass.simpleName}: ${t.message?.take(160) ?: ""}"
+            Log.e("PoseEngine", "runner init failed", t)
+            return
         }
+        problem = null
+        initFailures = 0
         runner = r
         variant = wanted
         val cfg = if (wanted == "lite") PipelineConfig(maxPoses = 3, detectIntervalWhenSatisfied = 6, refineWithHeatmap = false)
@@ -239,38 +286,48 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     }
 
     private fun processLatest() {
-        val reader = camera.reader ?: return
-        val info = camera.active ?: return
-        val image = try { reader.acquireLatestImage() } catch (e: IllegalStateException) { null } ?: return
         val captureNs: Long
         val w: Int; val h: Int
         val yuv: YuvImage
-        try {
-            w = image.width; h = image.height
-            val planes = image.planes
-            val yP = planes[0]; val uP = planes[1]; val vP = planes[2]
-            yBuf = copy(yP.buffer, yBuf)
-            uBuf = copy(uP.buffer, uBuf)
-            vBuf = copy(vP.buffer, vBuf)
-            yuv = YuvImage(w, h, yBuf, yP.rowStride, uBuf, vBuf, uP.rowStride, uP.pixelStride)
-            // camera timestamps -> System.nanoTime base (only meaningful for REALTIME timestamp sources)
-            captureNs = if (info.realtimeTimestamps) System.nanoTime() - (SystemClock.elapsedRealtimeNanos() - image.timestamp) else System.nanoTime()
-        } finally {
-            image.close()
+        val info: CameraSource.Info
+        // the camera thread closes readers under the same lock, so the image memory stays valid while copying
+        synchronized(camera.frameLock) {
+            val reader = camera.reader ?: return
+            info = camera.active ?: return
+            val image = try { reader.acquireLatestImage() } catch (e: IllegalStateException) { null } ?: return
+            try {
+                w = image.width; h = image.height
+                val planes = image.planes
+                val yP = planes[0]; val uP = planes[1]; val vP = planes[2]
+                yBuf = copy(yP.buffer, yBuf)
+                uBuf = copy(uP.buffer, uBuf)
+                vBuf = copy(vP.buffer, vBuf)
+                yuv = YuvImage(w, h, yBuf, yP.rowStride, uBuf, vBuf, uP.rowStride, uP.pixelStride)
+                // camera timestamps -> System.nanoTime base (only meaningful for REALTIME timestamp sources)
+                captureNs = if (info.realtimeTimestamps) System.nanoTime() - (SystemClock.elapsedRealtimeNanos() - image.timestamp) else System.nanoTime()
+            } finally {
+                image.close()
+            }
         }
         ensureRunner()
         val pipe = pipeline ?: return
         val rot = FrameOrientation.rotationFor(info.sensorOrientation, displayRotationDeg, info.front)
         val orient = FrameOrientation(w, h, rot)
         val t0 = System.nanoTime()
+        val onGpu = runner?.delegateName == "GPU"
+        // the first GPU inferences are where buggy GPU drivers crash: mark them so a crash disables the GPU next time
+        val watch = onGpu && frameCount < 3
+        if (watch) CrashReporter.beginStep(CrashReporter.STEP_GPU_RUN)
         val raws = try {
             pipe.process(yuv, orient)
         } catch (e: Exception) {
+            if (watch) CrashReporter.endStep()
             // e.g. a GPU delegate that initialised but fails at run time: fall back to the CPU for good
             Log.e("PoseEngine", "inference failed on ${runner?.delegateName}", e)
-            if (runner?.delegateName == "GPU") { gpuFailed = true; runner?.close(); runner = null; pipeline = null }
+            if (onGpu) { disableGpu(); try { runner?.close() } catch (_: Throwable) {}; runner = null; pipeline = null }
             return
         }
+        if (watch) CrashReporter.endStep()
         val t1 = System.nanoTime()
         val geo = FrameGeometry(orient.uprightWidth, orient.uprightHeight, mirror)
         val persons = raws.map { PersonPose.fromRaw(it, geo) }
@@ -280,6 +337,11 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         publishDebug(pipe, geo)
         updateStats(pipe, t0, t1, captureNs, info.realtimeTimestamps, orient)
         adapt(t1)
+    }
+
+    private fun disableGpu() {
+        gpuFailed = true
+        prefs.edit().putBoolean(KEY_GPU_OFF, true).apply()
     }
 
     private fun copy(src: ByteBuffer, dst: ByteArray): ByteArray {
@@ -344,6 +406,14 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
             inputSize = "${o.bufferWidth}x${o.bufferHeight} rot ${o.rotationCw}", thermal = thermal,
             adaptiveLevel = "${quality.label}/$variant",
         )
+    }
+
+    companion object {
+        const val KEY_GPU_OFF = "gpu_off"
+
+        /** Called at startup when the previous run crashed inside the GPU driver. */
+        fun disableGpuForGood(context: Context) =
+            context.getSharedPreferences("pose_engine", Context.MODE_PRIVATE).edit().putBoolean(KEY_GPU_OFF, true).apply()
     }
 
     /** AUTO quality: drop to the lite model when slow or hot, return to full when there is headroom. */

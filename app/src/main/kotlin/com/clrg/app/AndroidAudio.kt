@@ -32,9 +32,9 @@ class AndroidAudio(private val engine: AudioEngine) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
         if (!engine.ready) engine.prepare()
         val sr = engine.sampleRate
-        val minBytes = AudioTrack.getMinBufferSize(sr, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
         val frames = 256
         val track = try {
+            val minBytes = AudioTrack.getMinBufferSize(sr, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
             AudioTrack.Builder()
                 .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(sr).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
@@ -42,7 +42,7 @@ class AndroidAudio(private val engine: AudioEngine) {
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
                 .build()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e("AndroidAudio", "AudioTrack failed", e)
             running = false
             return
@@ -51,8 +51,8 @@ class AndroidAudio(private val engine: AudioEngine) {
         val ts = AudioTimestamp()
         var written = 0L
         var latency = 0.08
-        track.play()
         try {
+            track.play()
             while (running) {
                 if (paused) {
                     if (track.playState == AudioTrack.PLAYSTATE_PLAYING) track.pause()
@@ -70,11 +70,11 @@ class AndroidAudio(private val engine: AudioEngine) {
                     engine.outputLatencySec = latency
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e("AndroidAudio", "audio loop", e)
         } finally {
-            try { track.stop() } catch (_: Exception) {}
-            track.release()
+            try { track.stop() } catch (_: Throwable) {}
+            try { track.release() } catch (_: Throwable) {}
         }
     }
 }

@@ -1,13 +1,13 @@
 # Test report
 
-Date: 2026-10-24. Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+Date: 2026-10-25 (version 1.0.1). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
 (no KVM) or TV was available.** Everything below that needs a device is marked **UNVERIFIED**.
 
 ## Summary
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **72 passed, 0 failed, 0 skipped** (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **74 passed, 0 failed, 0 skipped** (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
 | App launches and runs on Android | **UNVERIFIED** - no device/emulator |
@@ -20,9 +20,9 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (72)
+## 1. Automated tests (74)
 
-Run: `./gradlew :core:test` (66 tests) plus 6 real-model tests that need the validation environment
+Run: `./gradlew :core:test` (68 tests) plus 6 real-model tests that need the validation environment
 (`tools/pose-validation/run_real_model_tests.sh`).
 
 ### Pose pipeline - fixtures from the real models (`BlazePoseFixtureTest`, 5 passed)
@@ -85,6 +85,11 @@ restart of the app object; TV unplugged mid-match pauses with a notice and freez
 backgrounding pauses the match and returning does not restart play by itself. (The display and lifecycle events
 are injected by the test; the Android side that produces them is not exercised.)
 
+### Crash report (`CrashReportFlowTest`, 2 passed)
+A report about a previous crash is shown first at startup, long reports page through, nothing is shared until
+Share is tapped, Continue returns to the main menu; a "body tracking could not start" message appears on camera
+screens when the platform reports one.
+
 ### Hands-free dwell menus (`UiDwellTest`, 6 passed)
 Selection only after the full hold time, with progress shown; sweeping a hand across buttons never selects;
 keeping the hand on a button selects it once and it must leave before selecting again; after one player selects,
@@ -98,8 +103,8 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,156,995 bytes, SHA-256 `5bacbf2f700bb37b5e100ad15d1f49bd2c432897b1ab5939b8291e2032fad995` |
-| Package / version | `com.clrg.christmasgames`, versionCode 1, versionName 1.0.0 |
+| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,169,283 bytes, SHA-256 `b82a5796ee27def4349763db04f1b7a63bec1124a768b13c6cc6979d73ac011c` |
+| Package / version | `com.clrg.christmasgames`, versionCode 2, versionName 1.0.1 |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
 | Signature | `apksigner verify`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
 | Reproducibility | A clean rebuild (`./gradlew clean :app:assembleDebugApk`) produced a byte-identical APK with the same debug key |
@@ -136,7 +141,13 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 | Offline after install | Passed (APK contents: models bundled, no INTERNET permission) | verifyApkContents |
 | No recording / upload | Passed by construction (no storage of frames, no network permission) / code review only | |
 
-## 4. Physical-device checklist (to do)
+## 4. Field reports
+
+| Report | Version | Status |
+|---|---|---|
+| Crash right after allowing the camera (first real-device report) | 1.0.0 | Most likely cause found by code review (camera opened twice after the permission dialog; an error on the camera thread was not caught). Fixed in 1.0.1. **The fix itself is not yet confirmed on the phone.** 1.0.1 also shows a crash report on the next launch if anything still goes wrong. |
+
+## 5. Physical-device checklist (to do)
 
 Use a Snapdragon 8 Gen 3 class phone with USB-C video output, a USB-C to HDMI adapter (with power pass-through),
 a TV, and two people. Turn on **Settings -> Developer -> Performance overlay** and **Skeleton + tracking debug

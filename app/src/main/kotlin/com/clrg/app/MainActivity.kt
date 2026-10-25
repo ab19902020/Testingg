@@ -33,10 +33,13 @@ class MainActivity : Activity() {
     private lateinit var platform: AndroidPlatform
     private lateinit var app: GameApp
     private lateinit var renderer: GameRenderer
+    private var permissionDenied = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        CrashReporter.install(this)
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val crashReport = try { CrashReporter.collect(this) } catch (t: Throwable) { null }
         store = PrefsStore(this)
         audioEngine = AudioEngine(48000)
         Thread({ audioEngine.prepare() }, "sfx-prepare").start()
@@ -47,7 +50,7 @@ class MainActivity : Activity() {
             updateRotation()
             if (::app.isInitialized) app.submitLifecycle("display")
         }
-        platform = AndroidPlatform(this, store, camera, pose, router)
+        platform = AndroidPlatform(this, store, camera, pose, router, crashReport)
         if (!platform.hasCameraPermission()) camera.setPermissionMissing(denied = false)
         app = GameApp(platform, audioEngine)
         renderer = GameRenderer(app, router, getSystemService(POWER_SERVICE) as android.os.PowerManager)
@@ -65,7 +68,8 @@ class MainActivity : Activity() {
         hideSystemUi()
         router.start()
         updateRotation()
-        if (platform.hasCameraPermission()) camera.start()
+        // camera.start() is idempotent, so the permission result and onResume may both call it safely
+        if (platform.hasCameraPermission()) camera.start() else camera.setPermissionMissing(permissionDenied)
         pose.start()
         audio.start()
         audio.setPaused(false)
@@ -84,6 +88,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        pose.release()
         renderer.shutdown()
         audio.stop()
         camera.shutdown()
@@ -104,10 +109,12 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != AndroidPlatform.REQ_CAMERA) return
         if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            permissionDenied = false
             camera.start()
         } else {
             // after a refusal Android may stop showing the dialog; offer the settings page then
-            camera.setPermissionMissing(denied = !shouldShowRequestPermissionRationale(Manifest.permission.CAMERA))
+            permissionDenied = !shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)
+            camera.setPermissionMissing(denied = permissionDenied)
         }
         app.submitLifecycle("camera")
     }

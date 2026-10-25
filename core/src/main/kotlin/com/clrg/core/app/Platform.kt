@@ -76,6 +76,12 @@ interface Platform {
     fun setSimulatedInput(on: Boolean)
     fun nowNanos(): Long
     fun quit()
+    /** Report about the previous run if it ended in a crash (collected once at startup), else null. */
+    fun previousCrash(): String? = null
+    /** Plain-language reason why body tracking cannot run right now (e.g. the model runtime failed to load), else null. */
+    fun trackingProblem(): String? = null
+    /** Opens the system share sheet with [text] (only ever on the player's request). */
+    fun shareText(subject: String, text: String) {}
 }
 
 /** Platform stub for tests and headless tools. */
@@ -96,4 +102,10 @@ open class NullPlatform(override val store: KeyValueStore) : Platform {
     override fun setSimulatedInput(on: Boolean) {}
     override fun nowNanos() = clock
     override fun quit() {}
+    var crash: String? = null
+    var problem: String? = null
+    val shared = ArrayList<String>()
+    override fun previousCrash() = crash
+    override fun trackingProblem() = problem
+    override fun shareText(subject: String, text: String) { shared.add(text) }
 }
