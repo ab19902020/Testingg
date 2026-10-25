@@ -104,12 +104,41 @@ the gesture-sensitivity setting.
 Games only see `PlayerInput` (continuous values + gesture events), so all ten games share one tracking and
 gesture system.
 
+**Swings (1.6.0).** `SwingDetector` measures each hand from the *unsmoothed* joints carried in `BodyFrame`
+(`rwx/rwy/rwz/rwv`, `rex/rey/rev`) over a 0.22 s window: path and displacement of the wrist (depth weighted 0.45),
+the held object's far end (x0.5), or - only while the wrist is not being seen - the elbow (x1.8). Steps are joined
+across gaps of up to 0.17 s (blurred frames); a window must be mostly one-directional (displacement >= 55% of the
+path) and covered over several frames (no step > 72% of the path), which rejects jitter and one-frame jumps.
+Frames up to a detection are never re-used; a hand re-arms when it slows, clearly reverses (backswing -> swing) or
+after 0.45 s. The event is stamped with the fastest moment (parabola through the smoothed step speeds). Games set
+`PlayerInput.expectSwing` (0..1) while waiting for a swing; `GameSession` copies it to `PlayerControls.swingBoost`,
+which lowers the thresholds by up to 40% and enables the "wrist vanished while moving fast" rule.
+
+**Rally games.** `RallyGame` predicts the receiver's perfect moment at launch by flying the ball forward with the
+game's own integration steps; every swing between -2.2 and +1.35 timing windows of it is a candidate, and the one
+closest to the perfect moment is played once no closer one can still arrive (`decide`). `timingErrors` records how
+far each played swing was from the perfect moment.
+
+**Hand pointer.** `HandPointer` (one per player, in `GameApp`) maps the measured - not forward-predicted - hand into
+a per-hand box (centre 0.28 reach to that hand's side, 0.05 below the shoulders; half-size 0.62 x 0.45 reach), with
+on/off hysteresis (on above -0.58 reach, off below -0.68), a One Euro filter in screen pixels plus a 3 px still
+zone, a 0.3 s hold through lost hands, and hand switching only when the other hand is clearly higher. `Ui` keeps a
+slipping cursor's ring for 0.35 s and moves it to a new button after 0.12 s there.
+
 ## Golf (`core/golf`, `core/gesture/GolfSwing.kt`, `core/ui/screens/Golf*.kt`)
 
 * `GolfSwingDetector` (run by `PlayerControls` while `golfStroke` is FULL or PUTT) follows the hands - the midpoint
-  of both wrists weighted by visibility - in body units: address (hands together, low, still), backswing (peak
-  height = power, or sideways distance for putts), downswing (impact at the lowest point; minimum speed, else a
-  practice swing), with thresholds scaled by reach and movement mode.
+  of both wrists weighted by visibility - in body units: grip (both wrists seen, under 0.42 body units apart),
+  address (gripped, low, still), backswing (peak height = power, or sideways distance for putts; hands may be lost
+  for up to 0.5 s), downswing (impact at the lowest point; minimum speed, else a practice swing), with thresholds
+  scaled by reach and movement mode.
+* `GolfScene3D` draws the hole in perspective with the ordinary 2D drawing calls: `Cam3` (eye, look-at, no roll)
+  projects ground polygons (rough, fairway strips and joints, mowing stripes, green, bunkers, water) clipped at the
+  near plane and fogged with distance, then depth-sorted billboards (pine trees from the hole's tree stands plus a
+  framing forest, flag, tee markers, stakes, the ball with its trail and shadow, and a snowman golfer whose arms
+  and club swing in a tilted plane along the target line by an angle taken from the player's hands). Camera views:
+  behind the ball while aiming (with the planned flight dotted through the air), a blend into a camera riding
+  behind the ball in flight, a low putting view, and a high overview between turns.
 * `GolfCourse` holds the holes (tee, pin, green radius and slope, fairway centre line and width, bunkers, water,
   trees, boundary, wind); `GolfPhysics` turns club, lie, aim, power and offset into a carry with wind and spread, a
   roll that can find hazards or the hole, and simulates putts on the sloping green. `GolfMatch` runs stroke play
@@ -126,8 +155,19 @@ raised hand on an unchecked camera starts a two-step check (slide towards a righ
 movement measured in frame coordinates with cursors off); two reversed results flip the camera's mirroring. Every
 camera frame is also checked for people whose shoulders are below their hips (upside-down picture).
 
-**Magnetic cursors** (`Ui.hitMagnetic`): a cursor within 40 px of a button points at it, and stays on its button
-until 48 px outside it.
+**Magnetic cursors** (`Ui.hitMagnetic`): a cursor within 60 px of a button points at it, and stays on its button
+until 70 px outside it.
+
+**Held objects** (`core/pose/HeldObjectTracker.kt`). Runs on the camera thread inside `MultiPosePipeline` after the
+landmarks. Learning: with the hand raised, 21 directions within 50 degrees of straight up are tried; for each, a
+narrow strip from the hand is sampled against strips either side, and the most uniform, most different strip is the
+object. Its colours (18 hues x 4 saturations x 4 brightnesses + 8 greys, with lighting neighbours) are gathered
+against the flanks, a ring around the hand and the player's own body points over 24 frames; the model is the
+per-bin share of object colour (`ObjectColorModel`, saved per player profile as a hex string). Tracking: a 64 x 64
+grid around each hand is classified by the model, cells connected to the hand form the patch (one-cell gaps
+bridged), and its principal axis and 95th-percentile reach give the direction and tip; patches that are too short,
+too round or too wide are rejected. Results travel as `RawPose.held` -> `PersonPose.held` (mirrored like the
+landmarks) -> `BodyFrame.obj*` -> `AvatarPose.propAngle` (drawn rackets and bats) and the swing detector.
 
 **Hand cursors** are shown for every tracked person (calibrated or not; uncalibrated players use a typical reach).
 **Expected people:** `Platform.setExpectedPeople` (1 in solo/golf, 2 otherwise) sets the pipeline's
@@ -171,8 +211,8 @@ live play.
 | Class | Role |
 |---|---|
 | `MainActivity` | Single landscape activity; lifecycle -> camera/pose/audio/render start/stop; permission result; keys |
-| `CameraSource` | Camera2, front/back selection and switching, 1280x720 YUV in the low-delay preview template (fast noise reduction and edge modes), 30 or 60 fps range (switched on the running session), zoom-out for wide angle, error/retry, "in use" handling |
-| `PoseEngine` | Inference thread, TFLite runner (GPU delegate or XNNPACK CPU), performance snapshot, AUTO quality (prefers whichever model reaches the 60 fps budget of 13 ms per frame; one try of the lite model per session), thermal adaptation and 30/60 fps camera adaptation; resets the pipeline when the camera changes. The camera preview image is made on a separate low-priority thread from a copy of the frame, only while a screen shows it |
+| `CameraSource` | Camera2, front/back selection and switching, 1280x720 YUV in the low-delay preview template (fast noise reduction and edge modes), 30 or 60 fps range (switched on the running session), zoom-out for wide angle, error/retry, "in use" handling. Sharp-motion exposure: when the camera has the manual-sensor capability, after auto exposure settles (1.5 s) the same exposure x sensitivity is set up with a flicker-matched 10 ms (or 8.3 ms for 60 Hz) exposure and the sensitivity capped at twice the analogue maximum (3200 at most); a 4 Hz loop keeps the measured frame brightness at the auto-exposure reference, lengthens the exposure only as a last resort, returns to auto on large light changes, and gives up for the session if the camera refuses |
+| `PoseEngine` | Inference thread, TFLite runner (GPU delegate or XNNPACK CPU), performance snapshot, AUTO quality (the full model unless it takes over 38 ms per picture or the phone is hot; back to full when lite is under 16 ms for 10 s), thermal adaptation and 30/60 fps camera adaptation (60 when offered, not warm and tracking under 40 ms per picture); resets the pipeline when the camera changes; measures each frame's brightness for the exposure loop; hosts the held-object tracker. The camera preview image is made on a separate low-priority thread from a copy of the frame, only while a screen shows it |
 | `GameRenderer` | Render thread on a Looper; frames start on the display vsync (Choreographer), ~60 fps on any refresh rate, so no queue of finished frames builds up. Draws to the TV `Presentation` surface or the phone surface; companion touch D-pad on the phone in second-screen mode. Both windows ask for minimal post-processing (HDMI ALLM / game mode, Android 11+) |
 | `DisplayRouter` | `DisplayManager` listener; shows/dismisses the `Presentation`; reports TV name/size/refresh |
 | `AndroidAudio` | Low-latency `AudioTrack` (float PCM) fed by the core mixer |

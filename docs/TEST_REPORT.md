@@ -1,14 +1,14 @@
 # Test report
 
-Date: 2026-10-25 (version 1.5.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+Date: 2026-10-25 (version 1.6.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
 (no KVM) or TV was available here.** The only real-device evidence is the owner's reports that versions 1.0.1 to
-1.4.0 run on their phone, and that in 1.4.0 movements went the wrong way round (section 4). Everything else that needs a device is marked **UNVERIFIED**.
+1.5.0 run on their phone, with their comments on how well tracking works (section 4). Everything else that needs a device is marked **UNVERIFIED**.
 
 ## Summary
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **112 passed, 0 failed, 1 skipped** (the skipped one is a developer diagnostic) (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **144 passed, 0 failed, 2 skipped** (the skipped ones are developer diagnostics) (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
 | App launches and runs on Android | **Reported working by the owner** (1.0.1 on their phone, after the camera crash fix); not tested here |
@@ -17,7 +17,8 @@ Date: 2026-10-25 (version 1.5.0). Environment: Linux cloud container, OpenJDK 21
 | Camera switching, motion smoothing/prediction, 60 fps camera, new graphics (1.2.0) | Passed in JVM tests (simulated input, synthetic motion, test renders); **not yet tried on a phone** |
 | Lag compensation, timing test, lower-delay camera/drawing, bigger tennis court (1.3.0) | Passed in JVM tests with simulated people and simulated camera/TV delays; the Android parts (vsync drawing, camera preview mode, TV game-mode request, preview thread, Auto model choice) build but are **not yet tried on a phone or TV** |
 | Christmas Golf, hand cursors before set-up, one-player tracking load (1.4.0) | Passed in JVM tests with simulated bodies; **not yet tried with a real camera** |
-| Left/right check, upside-down fix, new Present Catch, magnetic cursors (1.5.0) | Passed in JVM tests with a simulated mirrored / upside-down camera and simulated bodies; **not yet tried on the owner's phone** |
+| Left/right check, upside-down fix, new Present Catch, magnetic cursors (1.5.0) | Passed in JVM tests with a simulated mirrored / upside-down camera and simulated bodies; owner reports 1.5.0 runs |
+| Swing detection rework, tennis rules, hand pointer, 3D golf with grip, held objects, motion test, sharp-motion exposure (1.6.0) | Passed in JVM tests with simulated bodies, simulated tracking dropouts and jitter, and generated pictures (held objects); the camera exposure code builds but is **not yet tried on a phone**; none of 1.6.0 has been tried with a real camera yet |
 | On-device performance (fps, latency, thermal) | **UNVERIFIED** - no numbers measured; none are claimed |
 | TV output over USB-C/HDMI, Presentation mode, cable unplug | **UNVERIFIED** |
 | Audio output and latency | **UNVERIFIED** |
@@ -26,10 +27,56 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (113: 112 passed, 1 skipped)
+## 1. Automated tests (146: 144 passed, 2 skipped)
 
-Run: `./gradlew :core:test` (107 tests, one of them the skipped developer diagnostic) plus 6 real-model tests that need the validation environment
+Run: `./gradlew :core:test` (140 tests, two of them skipped developer diagnostics) plus 6 real-model tests that need the validation environment
 (`tools/pose-validation/run_real_model_tests.sh`).
+
+### Swings, pointing and held objects (new in 1.6.0 - simulated bodies, simulated dropouts, generated pictures)
+
+* `SwingRobustnessTest` (8 passed): a quick backswing out to the side followed by the forehand gives both swings,
+  the last one stamped at the forehand's fastest moment (within 40 ms); a swing whose wrist is lost for two frames
+  in the middle counts once; with the wrist never seen, the elbow carries the swing (reported as "elbow"); a forehand
+  that is mostly towards the camera (0.5 body units across, 1.5 towards the TV) counts, while the same sideways
+  movement without depth does not; a wrist placed elsewhere for single frames every third of a second is no swing;
+  a gentle 0.5-unit swing counts only while a ball is arriving; a wrist and elbow that vanish mid-swing while a
+  swing is expected still count; four seconds of standing still with 3x the usual jitter and maximum sensitivity
+  give no swing.
+* `HeldObjectSwingTest` (2 passed): with the arm blurred out of view, a swing is seen through the held object (and
+  reported as "object"); the drawn racket follows the object (wrist cocked 1.2 rad away from the forearm) and goes
+  back to the forearm when the object is put down.
+* `SwingTimingTest` (2 passed, updated): with the unsmoothed joints, a parabola through the step speeds, and one more
+  picture awaited when a swing is recognised while the hand is still speeding up, swings of 0.2-0.45 s at 30 and
+  60 fps are stamped within 17 ms of the moment the hand moved fastest (-2 to +17 ms) and recognised 8-50 ms after
+  it (1.5.0: 17-42 ms).
+* `GestureTest` (18 passed, one updated): waving a hand six times a second for two seconds gives at most one swing
+  per stroke (13 strokes), where 1.5.0 counted at most one swing per 0.35 s.
+* `HandPointerTest` (7 passed): every corner and the bottom row of the screen are reached with the hand between the
+  chest and the face and no further than 0.4 reach across the body, with the pointer on; a still hand with
+  tracking noise of 1% of body size keeps the pointer within a 2.0 px spread; a hand sagging up and down at the
+  bottom of the screen never switches the pointer off; a hand lost for 0.15 s keeps its pointer; a deliberate move
+  across half the screen is followed within 50 ms of the hand arriving; arms by the sides give no pointer; holding
+  over a bottom-right button with jitter chooses it in under 2 s.
+* `HeldObjectTrackerTest` (5 passed, generated 1280x720 pictures of a room with a person and a 12 px yellow stick):
+  holding the stick up teaches its colours and length (0.9 body units, within 0.25); the model survives being saved;
+  the stick is then found at seven angles from straight up to out to either side within 1 degree and 0.02 body
+  units at the tip; a stick smeared over 24 degrees (motion blur) is still found within 1 degree; an empty hand
+  gives nothing; a stick the colour of the wall is refused with an explanation.
+* `MotionScreensTest` (2 passed): the object screen starts learning for the person in front of the camera after its
+  countdown, shows the learned object being followed before it is kept, keeps it for that player and then uses it;
+  the motion test screen counts a forehand and shows the golf grip. `PointerLookTest` renders the pointer half-way
+  through a choice.
+* `TennisGameTest` (12 passed, updated rules): perfect timing keeps the rally going; 0.62 s early sails out, 0.42 s
+  late hits the net; a quarter of a second either way still returns; swings at the top of the bounce (0.45 s early)
+  return early in a rally; a backswing 0.6 s early followed by a swing on time plays the swing on time every time;
+  a player swinging every 0.3 s whatever the ball does still returns balls; the perfect moment is known before the
+  bounce and the receiver's detection is made more sensitive as the ball arrives; first to 7, auto-serve, rematch.
+* `LatencyCompensationTest` (3 passed, updated): swings made on time on a TV 0.1 s late with camera frames 0.16 s
+  late are judged 22 ms early on average with compensation, and 265 ms late without (the "my swing is always late"
+  problem); with the more forgiving 1.6.0 rules lateness now costs shot quality rather than whole points.
+* `GolfSwingTest` (7 passed, 2 new): hands low in front but apart give no address, and the guide reports them apart;
+  together, they grip and address; both wrists lost for 0.35 s at the top of the backswing do not cancel the swing,
+  which strikes with the backswing's power.
 
 ### Pose pipeline - fixtures from the real models (`BlazePoseFixtureTest`, 5 passed)
 Decoding checked against raw tensors exported from the real models: anchor count (2254), detector decoding,
@@ -159,7 +206,7 @@ matches per pairing (both sides swapped):
 
 | Game | Hard beats Easy | Medium beats Easy | Hard beats Medium |
 |---|---|---|---|
-| Tennis (1.3.0 court and timing) | 1.00 | 0.88 | 0.88 |
+| Tennis (1.6.0 rules) | 1.00 | 1.00 | 0.75 |
 | Snowball Showdown | 0.88 | 0.88 | 0.69 |
 | Present Catch (1.5.0 rebuild) | 0.94 | 0.63 | 0.88 |
 | Reindeer Racing | 1.00 | 1.00 | 1.00 |
@@ -200,13 +247,13 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,296,259 bytes, SHA-256 `7e5a983f13fcb0855446efba124efbefe21358e1aeb39708325220fe66ea7807` |
-| Package / version | `com.clrg.christmasgames`, versionCode 7, versionName 1.5.0 |
+| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,357,699 bytes, SHA-256 `07ed0eb868931b8f16a8667c68c1ac111958455940b46d9c3ee4db5b585b2619` |
+| Package / version | `com.clrg.christmasgames`, versionCode 8, versionName 1.6.0 |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
 | Signature | `apksigner verify --min-sdk-version 24`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
 | Reproducibility | A clean rebuild (`./gradlew clean :app:assembleDebugApk`) produced a byte-identical APK with the same debug key |
 | Alignment | `zipalign -p 4` |
-| Code | single `classes.dex`, 1,584 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
+| Code | single `classes.dex`, 1,614 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
 | Models | 4 `.tflite` files, stored uncompressed (memory-mappable) |
 | Native libs | TFLite + GPU delegate for `arm64-v8a` and `x86_64` |
 | Permissions | `CAMERA` only. No `INTERNET` (enforced by the build) |
@@ -243,6 +290,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Report | Version | Status |
 |---|---|---|
+| "The tennis game's no good - the ball goes past you even when you're swinging ... golf needs to be 3D, tell you to put your hands together ... add your own objects (a stick as the racket) ... the motion tracker: you've got to concentrate and move your hand all the time" - owner | 1.5.0 | Causes found in code: a swing before the bounce was ignored and an early swing (or a backswing) used up the shot and blocked the real swing for 0.35 s; fast arms were read from smoothed points and missed when the wrist blurred; the pointer's bottom row sat where it switched off, edges needed a stretch across the body, and forward prediction made it overshoot. 1.6.0 reworks swing detection and the rally rules, rebuilds the pointer, puts golf in 3D with a grip, adds held objects, the motion test screen and a sharper camera exposure. **Not yet confirmed on the phone.** |
 | "It's reverse mirroring - your hands go the opposite way to you moving them on the screen ... the present game is crap" - owner | 1.4.0 | The camera picture on the owner's phone is most likely delivered already mirrored for the camera they use, so the game's own mirroring reversed it. 1.5.0 detects and fixes this per camera (left/right check), adds Flip left/right, and rebuilds Present Catch. **Not yet confirmed on the phone.** |
 | "It's all good, just keep improving the motion tracking" - owner, after 1.3.0 | 1.3.0 | Runs on the owner's phone. Asked for golf (1.4.0) and for controlling everything with hand gestures (hand cursors before set-up, 1.4.0). |
 | "It works ... the tracking is a bit behind: in tennis it's not catching the swing of your arm and hitting the ball at the same time" - owner | 1.2.0 | Causes found: swings were judged when they reached the game (after camera, tracking and TV delays) and detected 33-75 ms after the swing's fastest point. 1.3.0 judges swings by when they were made, adds the timing test and cuts delay in smoothing, drawing and the camera. **Not yet confirmed on the phone.** |
@@ -290,6 +338,19 @@ overlay**. Record PASS/FAIL and the overlay numbers. Repeat key items on a secon
 25b. [ ] Golf with 2-4 people: turn changes pick up the next person; full swings at different heights give different
     distances; straight swings go straight; putting strokes control distance; club and aim buttons work by hovering;
     no accidental club change during a swing.
+25c. [ ] 1.6.0 tracking: in Settings -> Motion -> Motion test, normal forehands, forehands swung towards the TV and
+    quick backswing-then-swing movements each flash "SWING" once per stroke (note which part saw them); standing
+    still flashes nothing. In tennis, swings when the ball arrives are returned - note any ball that passes a swing.
+25d. [ ] Pointer: every button on the main menu, settings and golf screens can be chosen with a relaxed hand at chest
+    height, including the bottom row, without the pointer switching off; it holds still enough to fill the ring.
+25e. [ ] 3D golf: smooth on the phone (note the render fps in the overlay); the grip guide reacts to hands together /
+    apart; the snowman copies the swing; the camera follows the ball.
+25f. [ ] Held object: learn a brightly coloured toy racket or pool noodle; the green line follows it at all angles;
+    the tennis racket points the way it does; try a dull stick in front of furniture and note whether learning
+    refuses it.
+25g. [ ] Sharp-motion exposure: the motion test shows "sharp-motion exposure ... ms" on the back camera; the picture is
+    not dark, flickering or banded; switching the option off returns to auto exposure. Compare a fast arm's blur in
+    the camera preview with the option on and off.
 
 **TV**
 26. [ ] HDMI connected before launch: TV detected (name, resolution, Hz shown); game on TV, phone shows camera +

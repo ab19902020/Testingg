@@ -4,13 +4,15 @@ An Android party game for families. The phone runs the game, its camera follows 
 controllers or wearables) and the picture goes to the TV through a wired USB-C to HDMI adapter. Ten two-player
 minigames, a party tournament with pair rotation and a persistent scoreboard, **Play Solo** (one person against a
 computer opponent in any of the ten games) - and **Christmas Golf**: 1 to 4 players taking turns over three
-courses. Everything can be controlled with your body: raise a hand and hold it over a button.
+courses, shown in 3D. Everything can be controlled with your body: lift a hand and hold it over a button. A toy
+racket, a stick or a pool noodle can be taught to the game and used as your racket or club.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
-> reports that versions 1.0.1 to 1.4.0 run on their phone, and that in 1.4.0 movements went the wrong way on screen
-> (left and right reversed). 1.5.0 adds an automatic left/right check for that, tested with a simulated
-> mirrored camera - not yet on the owner's phone. The detailed on-device checklist (tracking quality, frame rates,
-> measured latency, TV modes) has not been run yet.
+> reports that versions 1.0.1 to 1.5.0 run on their phone, and that in 1.5.0 tracking was still not good enough:
+> tennis swings not hitting the ball, the hand pointer needing concentration, golf wanted in 3D with a proper grip.
+> 1.6.0 reworks all of that. Its changes are tested with simulated bodies, simulated camera problems and generated
+> pictures only - **not yet on the owner's phone**. The detailed on-device checklist (tracking quality, frame
+> rates, measured latency, TV modes) has not been run yet.
 > See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the exact status of every check.
 
 ## What's in the box
@@ -25,6 +27,30 @@ courses. Everything can be controlled with your body: raise a hand and hold it o
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.6.0 - tracking rework, 3D golf, real objects
+
+* **Swings that count.** Swing detection now reads the camera's unsmoothed body points and copes with what real
+  cameras do to a fast arm: a wrist that blurs out for a few frames (the elbow and the gap are bridged), a forehand
+  swung towards the TV (depth counts), one-frame glitches (ignored). A backswing no longer blocks the real swing
+  that follows it, and while a ball is arriving the detector becomes more sensitive.
+* **Tennis and table tennis fixed.** The right moment is known as soon as the opponent hits; every swing around the
+  ball's arrival is a candidate and the one nearest the right moment is played - early swings and backswings are
+  never "used up", and a swing at the top of the bounce still returns the ball. Rallies tighten faster so points end.
+* **Hand pointer rebuilt.** Each hand points from its own side like a touch pad in the air; small relaxed movements
+  reach the whole screen and the bottom buttons are at chest height (they used to sit where the pointer switched
+  off). Steady when held still, quick when moved, no overshoot; slipping off a button pauses the ring instead of
+  restarting it; a bigger mitten pointer with a ring and a "pop"; 1.2 s to choose.
+* **Christmas Golf in 3D.** Played from behind the ball with the planned flight drawn through the air; the camera
+  follows the shot down the fairway; low putting view with the green's slope; trees, water, bunkers, mountains; a
+  snowman golfer copies your swing. You now **grip** first - hands together like holding a club (the mittens on
+  screen join up) - and hands hidden behind your head at the top of the backswing no longer cancel the swing.
+* **Use a real object** (Settings -> Motion): hold a toy racket, stick or pool noodle up and the game learns its
+  colours, then follows it; your racket, bat or club points the way it does, and swings are seen through it too.
+* **Motion test** (Settings -> Motion): your skeleton, held object, live swing meters (and which part of the arm saw
+  each swing), grip, pointer and camera speed - to try movements out and to screenshot when something isn't seen.
+* **Camera:** sharper fast movements (a short, flicker-matched exposure where the phone allows it), the 60 fps camera
+  used whenever tracking keeps up, and the more accurate pose model kept unless the phone is too slow or hot.
 
 ## Changes in 1.5.0 - movements go the right way, a new Present Catch
 

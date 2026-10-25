@@ -6,9 +6,9 @@ calibrated body size and comfortable reach, so a child and an adult need the sam
 
 Nothing in any game asks you to run, jump, cross over to the other player, crouch deeply or touch anyone.
 
-> These controls are implemented and covered by automated tests that feed in synthetic body movements. They have
-> **not yet been tried with real people in front of a real camera** - thresholds may need tuning after the first
-> on-device tests (see [TEST_REPORT.md](TEST_REPORT.md)).
+> These controls are implemented and covered by automated tests that feed in synthetic body movements (and, for
+> held objects, generated pictures). The owner has played earlier versions on their phone; the 1.6.0 changes have
+> **not yet been tried with real people in front of a real camera** (see [TEST_REPORT.md](TEST_REPORT.md)).
 
 ## Everywhere
 
@@ -16,7 +16,10 @@ Nothing in any game asks you to run, jump, cross over to the other player, crouc
 |---|---|
 | Start a match | On the instructions card, **both players raise a hand and hold it up** until their ring fills. |
 | Left/right check | The first time someone raises a hand in front of a camera, slide that hand towards the arrow on the right, then the one on the left. If movements went the wrong way, the picture is flipped for that camera (and remembered). Also: **Flip left/right** on the "Stand in your areas" screen, **Check left/right** in Settings -> Camera & TV. |
-| Hands-free menus | Stand in front of the camera (no set-up needed) and raise a hand above your waist: your coloured cursor appears. Buttons are slightly magnetic: a hand just off a button still points at it. Move it onto a button and **hold still** until the ring fills (1.5 s, adjustable 0.8-3 s). After a selection, cursors lock briefly and must leave the button before it can be chosen again, to stop accidental double selections. |
+| Hands-free menus | Stand in front of the camera (no set-up needed) and **lift a hand to chest height**: your coloured mitten pointer appears. Each hand points from its own side like a touch pad in the air - small, relaxed movements reach the whole screen, and the bottom row of buttons is at chest height. Hold over a button until the gold ring fills (1.2 s, adjustable 0.8-3 s). Buttons are magnetic (a hand just off a button still points at it), and slipping off for a moment pauses the ring instead of restarting it. A lowered hand shows no pointer; a hand on its way up shows a faded one. After a selection, pointers lock briefly and must leave the button before it can be chosen again. |
+| Use a real object | **Settings -> Motion -> Use a real object**: hold a toy racket, a stick, a rolled-up magazine or a pool noodle straight up beside your shoulder and keep still; the game learns its colours (bright, single-coloured objects work best) and draws a green line along it on the camera picture so you can check it is followed. **Keep it** and it is used in tennis, table tennis and golf: your racket or bat points the way the object does, and swings are also seen through the object (useful when a fast arm blurs). Per player; **Forget** or switch off "Use learned objects in games" any time. |
+| Motion test | **Settings -> Motion -> Motion test** shows what the camera sees: your skeleton and held object, a swing meter for each hand (it flashes and counts every swing, and says whether the wrist, the elbow or the object saw it), the golf grip, the pointer, and the camera speed, delay and exposure. Good for trying movements out - and for a screenshot when something isn't picked up. |
+| Sharper fast movements | **Settings -> Motion** (on by default): on phones that allow it, the camera uses a much shorter exposure so swinging arms are not blurred. The picture can look a little grainier in a dim room; switch it off if it flickers or goes dark. |
 | Touch / remote | Every menu also works by touch on the phone, a TV remote / game controller D-pad (if connected) or a keyboard. When the game is on the TV as a second screen, the phone shows large arrow / OK / Back buttons. |
 | Pause | Back (phone gesture/button, remote), the **II** button, or the phone's **Back / Pause** button. Hands-free: one player steps out of view - the game pauses automatically. |
 | Someone steps out of view | The game pauses and names the missing player. When they are back in their own area and standing still, a 3-second countdown resumes play. Scores and timers are frozen while paused. |
@@ -70,9 +73,14 @@ Only the player whose turn it is stands in front of the camera; everyone else st
 step in, stand still a moment and **raise a hand** to start your turn. You play the whole hole, then the next golfer
 steps up. (Playing alone, or with only computer golfers, you just carry on.)
 
+The hole is shown in 3D from behind your ball: the planned flight is drawn through the air, the camera follows the
+ball down the fairway after each shot, and putts are seen low along the green. A snowman golfer beside the ball copies
+your swing, the small map shows the whole hole, and the camera inset marks your hands.
+
 | Movement | Action |
 |---|---|
-| Hands together, low in front of you, still for a moment | Address the ball ("Swing!" appears) |
+| Put your hands together as if holding a club (the two mittens on screen join up and the inset says "Grip OK") | Grip |
+| Keep the grip, low in front of you, still for a moment | Address the ball ("Swing!" appears) |
 | Swing back - hands up to one side - then down and through quickly | Full shot: the higher the backswing, the further it goes (a live meter shows the distance). About head height is full power; higher is an overswing - a little further, less accurate |
 | Bring your hands back through where they started | Straight shot; through to one side sends the ball that way |
 | Coming back down slowly | Practice swing (no shot) |
@@ -92,11 +100,14 @@ Your snow buddy runs to the ball for you; you only swing.
 
 | Movement | Action |
 |---|---|
-| Swing either arm across your body | Hit the ball |
+| Swing either arm across your body (or swing your held object) | Hit the ball |
 | Watch the shrinking ring around your character | Swing as it turns green |
 
-On time = fast, deep shot. Far too early = out. Far too late = net. Serve by swinging when it's your turn. Rallies
-get gradually harder (the timing window shrinks with every hit) so points always end.
+Swing like a racket - back, then through. Every swing around the ball's arrival counts as a try and the one nearest
+the right moment is played, so a backswing or a slightly early swing never "uses up" your shot, and a swing before
+the bounce or at the top of the bounce still returns the ball. On time = fast, deep shot; a little early or late is
+still a safe return; way too early = out, way too late = net. Serve by swinging when it's your turn. Rallies get
+gradually harder (faster balls, tighter timing with every hit) so points end in under a minute.
 
 Your swing is judged by the moment your arm moved fastest, compared with where the ball was on your TV at that
 moment (camera and TV delays allowed for - see the timing test above). So swing when the ball reaches you on the
@@ -156,7 +167,7 @@ Reduced movement: a small low-to-chest swing rolls the ball. Seated: swing from 
 | Small quick backhand: playing hand sweeps the other way | Return BACKHAND balls |
 
 Each incoming ball shows FOREHAND or BACKHAND. The wrong stroke gives a weak pop-up that the opponent can smash.
-Smaller swing thresholds than tennis. Reduced movement / seated: tiny wrist-and-forearm strokes are enough.
+Smaller swing thresholds than tennis; as in tennis, the stroke nearest the right moment is the one played. Reduced movement / seated: tiny wrist-and-forearm strokes are enough.
 
 ## 7. Elf Dance-Off - highest dance score
 

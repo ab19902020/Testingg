@@ -14,7 +14,10 @@ device, though: the build environment had no Android device and no emulator, and
   sessions;
 * the 1.2.0 changes are untested on a phone: switching cameras while playing, the 60 fps camera mode, the motion
   prediction and the new graphics (which use more gradients and glows, so they cost more drawing time - if the
-  game stutters, turn on **Reduced effects**).
+  game stutters, turn on **Reduced effects**);
+* the 1.6.0 changes are untested on a phone: the new swing detection and tennis rules, the hand pointer, 3D golf
+  (a few hundred polygons and trees per frame - its frame rate on a phone is not known), held-object tracking and
+  the sharp-motion camera exposure.
 
 ## Device compatibility
 
@@ -23,7 +26,8 @@ device, though: the build environment had no Android device and no emulator, and
 | Android version | Android 10 (API 29) or newer. Targets Android 15 (API 35). |
 | CPU architecture | 64-bit only: `arm64-v8a` (phones) and `x86_64` (emulators/Chromebooks). 32-bit-only phones are not supported. |
 | Performance target | Snapdragon 8 Gen 3 or equivalent/better. The app recognises (from `Build.SOC_MODEL`, Android 12+) Snapdragon 8 Gen 3 / 8 Elite / 8 Elite Gen 5, Dimensity 9300 / 9400 and Exynos 2400 / 2500 as meeting the target, and several older chips as below it (shows a note, never refuses to run). Other chips, including Google Tensor, are reported as "not verified". These ratings are from published chip tiers, not measurements. |
-| Camera | Any camera (front or back). Rear camera and autofocus are optional. Uses 1280x720 in the camera's low-delay preview mode; asks for 60 fps when the camera offers it and tracking keeps up (in Auto quality the lite model is tried if the full one is too slow for 60 fps), otherwise 30 fps (Settings: "Smoother tracking"). Some phones only allow 60 fps on certain cameras or not at all; the game then stays at 30. "Wide angle" works only where the camera supports a zoom ratio below 1x. |
+| Camera | Any camera (front or back). Rear camera and autofocus are optional. Uses 1280x720 in the camera's low-delay preview mode; asks for 60 fps when the camera offers it and tracking keeps up with about 25 pictures a second, otherwise 30 fps (Settings: "Smoother tracking"). Auto quality keeps the more accurate full pose model unless the phone is too slow (under ~26 per second) or hot. Some phones only allow 60 fps on certain cameras or not at all; the game then stays at 30. "Wide angle" works only where the camera supports a zoom ratio below 1x. |
+| Sharp-motion exposure | Needs the camera to allow manual exposure (Camera2 "manual sensor"); many phones allow it on the back camera, fewer on the front. Elsewhere the camera's own exposure is used. Matched to 50 Hz lighting unless the camera reports 60 Hz flicker; under unusual lighting (some LED lamps) the picture may flicker or band - switch it off in Settings -> Motion. Sensitivity is capped, so in a very dim room the exposure gets longer again. Not yet tried on a phone. |
 | GPU inference | TensorFlow Lite GPU delegate when the device is on TFLite's GPU compatibility list; otherwise multi-threaded CPU (XNNPACK). If the GPU delegate fails at runtime the app switches to CPU automatically. |
 | USB-C video output | Required for a wired TV. **Not all phones have it**, including some flagships. It needs DisplayPort Alt Mode over USB-C; check the phone's specifications. |
 | Second screen vs mirroring | The game uses the TV as a separate screen when Android offers it as a presentation display; otherwise it is mirrored. Behaviour depends on the phone maker: Samsung DeX and Motorola Ready For may take over the external display until mirroring is chosen. When mirroring, the TV shows the phone's aspect ratio (usually with black bars). |
@@ -56,6 +60,17 @@ device, though: the build environment had no Android device and no emulator, and
 * **Tracking meter** thresholds (how close, how much light) are estimates; the meter is a guide, not a measurement.
 * **Simulated input** (Settings -> Developer) is a testing tool with a permanent on-screen banner. It is not
   tracking and proves nothing about cameras.
+* **Swing detection** now uses unsmoothed body points and accepts a wrist that is lost for a few frames, the elbow
+  when the wrist is not seen, and movement towards the camera (depth, which the pose model estimates less precisely).
+  All of this was shaped with simulated bodies and simulated dropouts; real blur and real depth noise may need the
+  thresholds adjusting. The Motion test screen shows each hand's swing meter for checking this on a phone.
+* **Held objects** are found by colour. A brightly coloured, single-coloured object against a room without that
+  colour works best; a brown stick in front of brown furniture, or an object the colour of your clothes or skin,
+  may not be learned or followed (learning says so rather than guessing). Thin objects (a pencil-thin stick) are
+  hard to see from 2-3 m. Strong colour changes in the room's light (a lamp switched on) can need re-learning.
+  Tested on generated pictures only.
+* **Hand pointer**: each hand points from its own side; reaching the far left of the screen is easier with the
+  left hand. The pointer box sizes are estimates, not tuned on a phone.
 
 ## Game and UI limitations
 
