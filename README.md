@@ -7,10 +7,10 @@ computer opponent in any of the ten games) - and **Christmas Golf**: 1 to 4 play
 courses. Everything can be controlled with your body: raise a hand and hold it over a button.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
-> reports that versions 1.0.1 to 1.3.0 work on their phone. The detailed on-device checklist (tracking quality,
-> frame rates, measured latency, TV modes) has not been run yet. The 1.4.0 changes (Christmas Golf, hand cursors
-> from the moment you stand in front of the camera, less tracking work in one-player modes) are tested with
-> simulated bodies only - how golf swings feel in front of a real camera has not been checked yet.
+> reports that versions 1.0.1 to 1.4.0 run on their phone, and that in 1.4.0 movements went the wrong way on screen
+> (left and right reversed). 1.5.0 adds an automatic left/right check for that, tested with a simulated
+> mirrored camera - not yet on the owner's phone. The detailed on-device checklist (tracking quality, frame rates,
+> measured latency, TV modes) has not been run yet.
 > See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the exact status of every check.
 
 ## What's in the box
@@ -25,6 +25,22 @@ courses. Everything can be controlled with your body: raise a hand and hold it o
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.5.0 - movements go the right way, a new Present Catch
+
+* **Left and right fixed for every phone.** Some phones deliver a camera's picture already mirrored, which made
+  every movement go backwards on screen (hand right, cursor left). Now, the first time someone raises a hand in
+  front of a camera, a quick check appears: slide your hand towards an arrow on the right, then on the left. If the
+  hand went the wrong way, the game flips the picture for that camera and remembers it. A picture that arrives
+  upside down is noticed and turned the right way up automatically. There is also a **Flip left/right** button on
+  the "Stand in your areas" screen, and **Check left/right** in Settings -> Camera & TV.
+* **Present Catch rebuilt.** Santa's sleigh flies over each lane dropping presents; catch them with your hands
+  anywhere on the way down. Candy canes and gold presents score more, a star gives **magnet mittens** (a bigger
+  catch zone for 6 seconds), coal glows red and costs points. Catches in a row raise a multiplier (x2, x3, x4) and
+  the last 12 seconds are a double-points **Present Rush**. Shadows on the snow show where each present will land,
+  and catches allow for camera and TV delay.
+* **Easier hand control:** buttons are slightly magnetic - a hand just off a button still points at it, and a small
+  wobble over the edge no longer restarts the hold-to-choose ring.
 
 ## Changes in 1.4.0 - golf, and control everything with your body
 
@@ -126,7 +142,7 @@ courses. Everything can be controlled with your body: raise a hand and hold it o
 
 1. **Christmas Tennis** - swing like a racket, first to 7.
 2. **Snowball Showdown** - throw, dodge by leaning, shield with both hands up.
-3. **Present Catch** - reach for presents, avoid coal.
+3. **Present Catch** - catch the presents Santa drops, dodge the coal.
 4. **Reindeer Racing** - pump your arms in rhythm (no running), lean to steer.
 5. **Festive Bowling** - underarm swing, 5 frames, independent lanes.
 6. **Table Tennis** - small quick forehands/backhands, first to 11.

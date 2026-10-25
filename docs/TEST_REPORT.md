@@ -1,14 +1,14 @@
 # Test report
 
-Date: 2026-10-25 (version 1.4.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+Date: 2026-10-25 (version 1.5.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
 (no KVM) or TV was available here.** The only real-device evidence is the owner's reports that versions 1.0.1 to
-1.3.0 work on their phone (section 4). Everything else that needs a device is marked **UNVERIFIED**.
+1.4.0 run on their phone, and that in 1.4.0 movements went the wrong way round (section 4). Everything else that needs a device is marked **UNVERIFIED**.
 
 ## Summary
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **108 passed, 0 failed, 1 skipped** (the skipped one is a developer diagnostic) (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **112 passed, 0 failed, 1 skipped** (the skipped one is a developer diagnostic) (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
 | App launches and runs on Android | **Reported working by the owner** (1.0.1 on their phone, after the camera crash fix); not tested here |
@@ -17,6 +17,7 @@ Date: 2026-10-25 (version 1.4.0). Environment: Linux cloud container, OpenJDK 21
 | Camera switching, motion smoothing/prediction, 60 fps camera, new graphics (1.2.0) | Passed in JVM tests (simulated input, synthetic motion, test renders); **not yet tried on a phone** |
 | Lag compensation, timing test, lower-delay camera/drawing, bigger tennis court (1.3.0) | Passed in JVM tests with simulated people and simulated camera/TV delays; the Android parts (vsync drawing, camera preview mode, TV game-mode request, preview thread, Auto model choice) build but are **not yet tried on a phone or TV** |
 | Christmas Golf, hand cursors before set-up, one-player tracking load (1.4.0) | Passed in JVM tests with simulated bodies; **not yet tried with a real camera** |
+| Left/right check, upside-down fix, new Present Catch, magnetic cursors (1.5.0) | Passed in JVM tests with a simulated mirrored / upside-down camera and simulated bodies; **not yet tried on the owner's phone** |
 | On-device performance (fps, latency, thermal) | **UNVERIFIED** - no numbers measured; none are claimed |
 | TV output over USB-C/HDMI, Presentation mode, cable unplug | **UNVERIFIED** |
 | Audio output and latency | **UNVERIFIED** |
@@ -25,9 +26,9 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (109: 108 passed, 1 skipped)
+## 1. Automated tests (113: 112 passed, 1 skipped)
 
-Run: `./gradlew :core:test` (103 tests, one of them the skipped developer diagnostic) plus 6 real-model tests that need the validation environment
+Run: `./gradlew :core:test` (107 tests, one of them the skipped developer diagnostic) plus 6 real-model tests that need the validation environment
 (`tools/pose-validation/run_real_model_tests.sh`).
 
 ### Pose pipeline - fixtures from the real models (`BlazePoseFixtureTest`, 5 passed)
@@ -70,6 +71,17 @@ tip when a hand is out of the picture and when tracking is slow.
 
 The 6 real-model tests above were re-run after the smoothing changes with the same results (they test the
 landmark pipeline, which smoothing does not change).
+
+### Left and right (new in 1.5.0 - simulated cameras)
+
+* `DirectionCheckTest` (3 passed): a simulated phone whose camera delivers the picture already mirrored (so the
+  pose model also labels the hands the other way, as it would on such a phone): the first raised hand starts the
+  check, the person slides their hand to their right and then their left as the arrows ask, the game flips the
+  picture for that camera and saves it, and afterwards moving the hand right moves the cursor right. A normal camera
+  is checked once and left as it is (no second check on the next start). A camera delivering the picture upside
+  down is turned the right way up within a few seconds.
+* `UiDwellTest` now 7 tests: a hand 25 px off a button still selects it, and wobbling 30 px either side of a
+  button's edge does not restart the ring.
 
 ### Golf (new in 1.4.0 - simulated bodies)
 
@@ -149,7 +161,7 @@ matches per pairing (both sides swapped):
 |---|---|---|---|
 | Tennis (1.3.0 court and timing) | 1.00 | 0.88 | 0.88 |
 | Snowball Showdown | 0.88 | 0.88 | 0.69 |
-| Present Catch | 1.00 | 1.00 | 0.88 |
+| Present Catch (1.5.0 rebuild) | 0.94 | 0.63 | 0.88 |
 | Reindeer Racing | 1.00 | 1.00 | 1.00 |
 | Festive Bowling | 0.75 | 1.00 | 0.75 |
 | Table Tennis | 1.00 | 1.00 | 1.00 |
@@ -188,13 +200,13 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,283,971 bytes, SHA-256 `393d150059ed5bd89660f2a8a90df2dbd8db87526031eac312d704b7475ff9eb` |
-| Package / version | `com.clrg.christmasgames`, versionCode 6, versionName 1.4.0 |
+| File | `dist/ChristmasLivingRoomGames-debug.apk`, 21,296,259 bytes, SHA-256 `7e5a983f13fcb0855446efba124efbefe21358e1aeb39708325220fe66ea7807` |
+| Package / version | `com.clrg.christmasgames`, versionCode 7, versionName 1.5.0 |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
 | Signature | `apksigner verify --min-sdk-version 24`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
 | Reproducibility | A clean rebuild (`./gradlew clean :app:assembleDebugApk`) produced a byte-identical APK with the same debug key |
 | Alignment | `zipalign -p 4` |
-| Code | single `classes.dex`, 1,580 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
+| Code | single `classes.dex`, 1,584 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
 | Models | 4 `.tflite` files, stored uncompressed (memory-mappable) |
 | Native libs | TFLite + GPU delegate for `arm64-v8a` and `x86_64` |
 | Permissions | `CAMERA` only. No `INTERNET` (enforced by the build) |
@@ -231,6 +243,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Report | Version | Status |
 |---|---|---|
+| "It's reverse mirroring - your hands go the opposite way to you moving them on the screen ... the present game is crap" - owner | 1.4.0 | The camera picture on the owner's phone is most likely delivered already mirrored for the camera they use, so the game's own mirroring reversed it. 1.5.0 detects and fixes this per camera (left/right check), adds Flip left/right, and rebuilds Present Catch. **Not yet confirmed on the phone.** |
 | "It's all good, just keep improving the motion tracking" - owner, after 1.3.0 | 1.3.0 | Runs on the owner's phone. Asked for golf (1.4.0) and for controlling everything with hand gestures (hand cursors before set-up, 1.4.0). |
 | "It works ... the tracking is a bit behind: in tennis it's not catching the swing of your arm and hitting the ball at the same time" - owner | 1.2.0 | Causes found: swings were judged when they reached the game (after camera, tracking and TV delays) and detected 33-75 ms after the swing's fastest point. 1.3.0 judges swings by when they were made, adds the timing test and cuts delay in smoothing, drawing and the camera. **Not yet confirmed on the phone.** |
 | "Okay, it's all working" - owner, after installing 1.1.0 (solo mode) | 1.1.0 | App and solo mode run on the owner's phone. |
@@ -249,7 +262,8 @@ overlay**. Record PASS/FAIL and the overlay numbers. Repeat key items on a secon
    offers to ask again. Deny twice -> app offers Android settings. Grant -> camera preview appears.
 
 **Camera and tracking**
-3. [ ] Front camera and rear camera both show an upright, correctly mirrored picture (raise your right hand: it
+3. [ ] Left/right check: raise a hand on each camera and follow the arrows; afterwards, moving your right hand to
+   your right moves the cursor right on both cameras. Front camera and rear camera both show an upright, correctly mirrored picture (raise your right hand: it
    appears on the right of the screen for a mirrored view). Switch cameras from the main menu, the framing
    screen and the pause menu: each switch works without a crash and the match carries on after re-framing.
 4. [ ] Two adults side by side at 2-3 m: both skeletons drawn, shoulders/elbows/wrists/hips on the right joints.

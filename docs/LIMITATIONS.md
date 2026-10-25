@@ -59,6 +59,9 @@ device, though: the build environment had no Android device and no emulator, and
 
 ## Game and UI limitations
 
+* **Left/right check.** It relies on the player sliding their hand towards the arrows; if they do something else,
+  it asks once more and otherwise leaves the setting alone (use **Flip left/right**). The automatic upside-down fix
+  only works if the pose model still finds people in the upside-down picture.
 * **Golf swings are read from the front.** The camera sees your hands rise and fall, not the club face, so power
   comes from how high the backswing goes and direction from where the hands come through. Swings were tuned on
   simulated bodies, not real golfers; thresholds may need adjusting after the first real rounds.

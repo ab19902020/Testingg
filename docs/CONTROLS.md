@@ -15,7 +15,8 @@ Nothing in any game asks you to run, jump, cross over to the other player, crouc
 | Action | How |
 |---|---|
 | Start a match | On the instructions card, **both players raise a hand and hold it up** until their ring fills. |
-| Hands-free menus | Stand in front of the camera (no set-up needed) and raise a hand above your waist: your coloured cursor appears. Move it onto a button and **hold still** until the ring fills (1.5 s, adjustable 0.8-3 s). After a selection, cursors lock briefly and must leave the button before it can be chosen again, to stop accidental double selections. |
+| Left/right check | The first time someone raises a hand in front of a camera, slide that hand towards the arrow on the right, then the one on the left. If movements went the wrong way, the picture is flipped for that camera (and remembered). Also: **Flip left/right** on the "Stand in your areas" screen, **Check left/right** in Settings -> Camera & TV. |
+| Hands-free menus | Stand in front of the camera (no set-up needed) and raise a hand above your waist: your coloured cursor appears. Buttons are slightly magnetic: a hand just off a button still points at it. Move it onto a button and **hold still** until the ring fills (1.5 s, adjustable 0.8-3 s). After a selection, cursors lock briefly and must leave the button before it can be chosen again, to stop accidental double selections. |
 | Touch / remote | Every menu also works by touch on the phone, a TV remote / game controller D-pad (if connected) or a keyboard. When the game is on the TV as a second screen, the phone shows large arrow / OK / Back buttons. |
 | Pause | Back (phone gesture/button, remote), the **II** button, or the phone's **Back / Pause** button. Hands-free: one player steps out of view - the game pauses automatically. |
 | Someone steps out of view | The game pauses and names the missing player. When they are back in their own area and standing still, a 3-second countdown resumes play. Scores and timers are frozen while paused. |
@@ -117,11 +118,14 @@ Reduced movement / seated: a short forward push from chest height throws; small 
 
 | Movement | Action |
 |---|---|
-| Reach left, right, up or overhead with either hand | Touch a present while its ring shows |
-| Keep hands away from coal (red X) | Avoid a penalty |
+| Move a hand under / onto a falling present (anywhere on the way down) | Catch it: present 10, candy cane 15, gold present 25 |
+| Catch the star | Magnet mittens: a bigger catch zone for 6 seconds |
+| Keep your hands away from coal (glows red, X) | Avoid -15 |
 
-Gold presents are worth extra. Both players get the same presents in their own lane. Spots are placed inside each
-player's own calibrated reach; seated players get no low spots.
+Santa's sleigh drops everything; the shadows on the snow show where each drop is heading. Catches in a row raise a
+multiplier (x2 from 5, x3 from 10, x4 from 15); a miss or coal resets it. The last 12 seconds are a Present Rush with
+double points. Both players get exactly the same drops in their own lane, inside their own calibrated reach; seated
+and reduced-movement players get a narrower lane.
 
 ## 4. Reindeer Racing - first over the finish line
 

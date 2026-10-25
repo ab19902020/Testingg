@@ -120,6 +120,15 @@ gesture system.
   quickly and locks on, and a raised hand starts the turn. Club and aim buttons use the ordinary hand cursors, which
   are switched off while the swing detector sees an address or backswing.
 
+**Left/right and upside-down** (`DirectionCheck`, `Settings.mirrorByCamera`/`upsideDownCameras`): mirroring and a
+180-degree correction are stored per camera id and applied by `PoseEngine` (`mirror`, `upsideDown`). The first
+raised hand on an unchecked camera starts a two-step check (slide towards a right arrow, then a left arrow; hand
+movement measured in frame coordinates with cursors off); two reversed results flip the camera's mirroring. Every
+camera frame is also checked for people whose shoulders are below their hips (upside-down picture).
+
+**Magnetic cursors** (`Ui.hitMagnetic`): a cursor within 40 px of a button points at it, and stays on its button
+until 48 px outside it.
+
 **Hand cursors** are shown for every tracked person (calibrated or not; uncalibrated players use a typical reach).
 **Expected people:** `Platform.setExpectedPeople` (1 in solo/golf, 2 otherwise) sets the pipeline's
 `desiredPoses`/`maxPoses` live, so with one player the person-detector runs every few frames instead of every frame.
