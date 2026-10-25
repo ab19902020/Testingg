@@ -6,10 +6,11 @@ minigames, a party tournament with pair rotation and a persistent scoreboard - a
 against a computer opponent (Easy, Medium or Hard) in any of the ten games.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
-> reports that versions 1.0.1 and 1.1.0 work on their phone; the detailed on-device checklist (tracking quality,
-> frame rates, latency, TV modes) has not been run yet. The 1.2.0 changes (camera switching, motion smoothing and
-> prediction, 60 fps camera, new graphics) are tested with recorded poses, simulated input and test renders only -
-> how they look and feel on your phone and TV has not been checked yet.
+> reports that versions 1.0.1 to 1.2.0 work on their phone, and that in 1.2.0 tennis swings were judged a bit late.
+> The detailed on-device checklist (tracking quality, frame rates, measured latency, TV modes) has not been run yet.
+> The 1.3.0 changes (swings judged by when they were made, the timing test, lower-delay camera and drawing, bigger
+> tennis court) are tested with simulated people and simulated delays only - how they feel on your phone and TV has
+> not been checked yet.
 > See [docs/TEST_REPORT.md](docs/TEST_REPORT.md) for the exact status of every check.
 
 ## What's in the box
@@ -24,6 +25,30 @@ against a computer opponent (Easy, Medium or Hard) in any of the ten games.
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.3.0 - less lag, fairer timing
+
+* **Swings count when you make them, not when the game hears about them.** Every movement reaches the game a
+  little late (the camera and body tracking take ~0.1 s, and the TV shows the picture late too), which made
+  on-time tennis swings land "late". Swings are now stamped with the moment your arm moved fastest - where the racket
+  meets the ball - and judged against where the ball was *on your TV* at that moment. The same allowance is used for
+  goalkeeper saves, snowball shields and dodges, and dance poses. Computer players are unaffected.
+* **Timing test** (Settings -> Timing): a snowball flies into a ring ten times; swing as it gets there. The game
+  measures your phone + TV delay and allows for exactly that. Without the test it assumes a typical 60 ms. You can
+  also nudge the allowance up or down by hand.
+* **Less delay to begin with:**
+  * Swings are recognised 17-42 ms after the fastest moment of the swing (was 33-75 ms): the smoothing now opens up
+    as soon as you start moving.
+  * Drawing is synchronised with the screen refresh, so finished pictures no longer wait in a queue (up to ~33 ms).
+  * The game asks the TV for its low-delay game mode (HDMI ALLM) where the TV and phone support it.
+  * The camera uses its low-delay preview mode with fast noise reduction (no multi-frame smoothing that smears
+    fast arms).
+  * The small camera picture is made on a separate thread, only while it is shown, so it never holds up tracking.
+  * In Auto quality the game picks whichever body-tracking model lets the camera run at 60 fps on your phone.
+  * Your character's arms are shown slightly further ahead (up to 0.12 s) to hide the remaining delay; steering
+    (lean) reacts faster.
+* **Bigger tennis court and more time:** the court is about 18% wider, shots take about 0.15-0.2 s longer to cross,
+  and the timing window is wider (0.36 s). Long rallies still get faster, so matches still end.
 
 ## Changes in 1.2.0
 

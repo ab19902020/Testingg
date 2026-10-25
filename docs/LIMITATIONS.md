@@ -23,7 +23,7 @@ device, though: the build environment had no Android device and no emulator, and
 | Android version | Android 10 (API 29) or newer. Targets Android 15 (API 35). |
 | CPU architecture | 64-bit only: `arm64-v8a` (phones) and `x86_64` (emulators/Chromebooks). 32-bit-only phones are not supported. |
 | Performance target | Snapdragon 8 Gen 3 or equivalent/better. The app recognises (from `Build.SOC_MODEL`, Android 12+) Snapdragon 8 Gen 3 / 8 Elite / 8 Elite Gen 5, Dimensity 9300 / 9400 and Exynos 2400 / 2500 as meeting the target, and several older chips as below it (shows a note, never refuses to run). Other chips, including Google Tensor, are reported as "not verified". These ratings are from published chip tiers, not measurements. |
-| Camera | Any camera (front or back). Rear camera and autofocus are optional. Uses 1280x720; asks for 60 fps when the camera offers it and tracking keeps up, otherwise 30 fps (Settings: "Smoother tracking"). Some phones only allow 60 fps on certain cameras or not at all; the game then stays at 30. "Wide angle" works only where the camera supports a zoom ratio below 1x. |
+| Camera | Any camera (front or back). Rear camera and autofocus are optional. Uses 1280x720 in the camera's low-delay preview mode; asks for 60 fps when the camera offers it and tracking keeps up (in Auto quality the lite model is tried if the full one is too slow for 60 fps), otherwise 30 fps (Settings: "Smoother tracking"). Some phones only allow 60 fps on certain cameras or not at all; the game then stays at 30. "Wide angle" works only where the camera supports a zoom ratio below 1x. |
 | GPU inference | TensorFlow Lite GPU delegate when the device is on TFLite's GPU compatibility list; otherwise multi-threaded CPU (XNNPACK). If the GPU delegate fails at runtime the app switches to CPU automatically. |
 | USB-C video output | Required for a wired TV. **Not all phones have it**, including some flagships. It needs DisplayPort Alt Mode over USB-C; check the phone's specifications. |
 | Second screen vs mirroring | The game uses the TV as a separate screen when Android offers it as a presentation display; otherwise it is mirrored. Behaviour depends on the phone maker: Samsung DeX and Motorola Ready For may take over the external display until mirroring is chosen. When mirroring, the TV shows the phone's aspect ratio (usually with black bars). |
@@ -43,7 +43,14 @@ device, though: the build environment had no Android device and no emulator, and
 * **Lighting.** Dark rooms and strong backlight (window behind the players) reduce tracking quality.
 * **Spectators.** A spectator cannot take a player's place while that player is visible. If a player leaves, only a
   person in that player's area who matches their calibrated size and colours is accepted back.
-* **Motion prediction** shows your character slightly ahead of the last camera frame (at most 0.09 s) to hide
+* **Timing allowance.** Timing games judge camera players by when they moved, using the camera's frame timestamps
+  (measured automatically) plus a TV allowance that the phone cannot measure by itself: it is a typical 60 ms until
+  the timing test has been run. A wrong allowance shifts every judgement the same way (swings seem early or late);
+  re-run the test after changing TV or TV picture mode. Some phones' cameras do not report usable timestamps; the
+  timing test then also covers the camera's processing time. Not yet tried on a phone or TV.
+* **Waiting for late movements.** To be fair to a movement that is still on its way, a missed ball or a goal is
+  called a little later than before (up to ~0.45 s, usually ~0.3 s): the ball flies on briefly before "Missed!".
+* **Motion prediction** shows your character slightly ahead of the last camera frame (at most 0.12 s) to hide
   delay. Its size was chosen from recorded-pose tests, not tuned on a phone; on very sudden stops a hand can
   overshoot by a few centimetres for a frame or two.
 * **Tracking meter** thresholds (how close, how much light) are estimates; the meter is a guide, not a measurement.

@@ -44,7 +44,10 @@ The app needs **only the camera permission**. It has no internet permission at a
 4. If the cable is pulled out during a game, the game pauses and says "TV disconnected". Plug it back in, or
    press **Continue** to carry on on the phone screen.
 
-Tip: turn on the TV's **Game mode** to cut the TV's own picture delay.
+Tip: turn on the TV's **Game mode** (also called PC mode or low-latency mode) to cut the TV's own picture delay.
+On Android 11 and newer the game asks the TV for it automatically (HDMI "ALLM"), but only some TVs and phones
+support that. Then run **Settings -> Timing -> Run the timing test** once, so the timing games allow for whatever
+delay is left.
 
 ## 4. Place the phone
 

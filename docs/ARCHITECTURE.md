@@ -64,15 +64,30 @@ mirrored if selected) which everything downstream uses.
   colours, stable for 0.6 s. Other people are tracked as "others" and never fill a slot that is still visible.
 
 **Smoothing** (`SmoothedPose`): a One Euro filter per joint whose speed term is measured in body lengths per
-second, so it behaves the same for near and far players. Low-visibility joints get a lower cutoff (steadier);
-a joint that moves faster than any body can (30 body lengths per second) is held for up to two frames, which
-removes single-frame landmark glitches. `TrackingQuality` turns a slot's visibility, size, light and the
+second, so it behaves the same for near and far players. Its speed estimate reacts within a few frames (derivative
+cutoff 4 Hz), so the filter opens up as soon as a swing starts. Low-visibility joints get a lower cutoff (steadier);
+a joint that moves faster than any body can (40 body lengths per second) is held for one frame, which removes
+single-frame landmark glitches. `TrackingQuality` turns a slot's visibility, size, light and the
 inference rate into the Excellent-Weak meter and a tip shown on the framing screen.
 
 **Latency compensation** (`PlayerControls.predict`): gesture detection (swings, throws, pumps, poses) uses the
 measured (smoothed) frames only. The drawn avatar and the hand positions (used by the reach games and the menu
-cursors) are moved ahead along each joint's velocity by 75% of the time since the camera frame, capped at 0.09 s
+cursors) are moved ahead along each joint's velocity by 75% of the time since the camera frame, capped at 0.12 s
 and 0.35 body lengths, so what players see and touch lines up better with what they are doing.
+
+**Timing by when a movement was made** (`InputTiming`, `GestureEvent.at`): every pose frame carries the camera's
+capture time, and a swing is stamped with the moment the wrist moved fastest (looked up in the last 0.25 s when the
+swing is recognised). `GameApp` measures the camera-to-game delay for every frame (average and a high estimate);
+the display delay (phone + TV) comes from the timing test (`TimingCalibrator`, `TimingTestScreen`) or a 60 ms
+default. When `GameSession` hands a camera player's gesture to a game it sets
+`at = playTime - (age of the gesture) - displayDelay`: the game moment the player was reacting to. Games use it:
+
+* `RallyGame` (tennis, table tennis) compares `at` with the perfect hit moment, returns the ball from where it was
+  at `at` (a 0.6 s history of ball positions), and calls a miss only once `MiniGame.inputGrace` (camera high
+  estimate + 60 ms detection slack + display delay, at most 0.45 s) has passed.
+* Goalkeepers keep the save window open for `inputGrace` longer; Snowball decides hit/blocked/dodged `inputGrace`
+  after the landing; Elf Dance-Off compares poses with the beat shifted by the avatar's remaining lag.
+* Computer players and simulated input are judged as their gestures arrive (no allowance).
 
 `Calibration` measures neutral pose, body scale (torso length S), side and upward reach and the playing hand.
 Every gesture threshold is expressed in S or in reach units, so the same relative movement works for a child and
@@ -127,9 +142,9 @@ live play.
 | Class | Role |
 |---|---|
 | `MainActivity` | Single landscape activity; lifecycle -> camera/pose/audio/render start/stop; permission result; keys |
-| `CameraSource` | Camera2, front/back selection and switching, 1280x720 YUV, 30 or 60 fps range (switched on the running session), zoom-out for wide angle, error/retry, "in use" handling |
-| `PoseEngine` | Inference thread, TFLite runner (GPU delegate or XNNPACK CPU), preview image for setup screens, performance snapshot, AUTO quality, thermal adaptation and 30/60 fps camera adaptation (60 only while inference keeps up); resets the pipeline when the camera changes |
-| `GameRenderer` | Render thread; draws to the TV `Presentation` surface or the phone surface; companion touch D-pad on the phone in second-screen mode |
+| `CameraSource` | Camera2, front/back selection and switching, 1280x720 YUV in the low-delay preview template (fast noise reduction and edge modes), 30 or 60 fps range (switched on the running session), zoom-out for wide angle, error/retry, "in use" handling |
+| `PoseEngine` | Inference thread, TFLite runner (GPU delegate or XNNPACK CPU), performance snapshot, AUTO quality (prefers whichever model reaches the 60 fps budget of 13 ms per frame; one try of the lite model per session), thermal adaptation and 30/60 fps camera adaptation; resets the pipeline when the camera changes. The camera preview image is made on a separate low-priority thread from a copy of the frame, only while a screen shows it |
+| `GameRenderer` | Render thread on a Looper; frames start on the display vsync (Choreographer), ~60 fps on any refresh rate, so no queue of finished frames builds up. Draws to the TV `Presentation` surface or the phone surface; companion touch D-pad on the phone in second-screen mode. Both windows ask for minimal post-processing (HDMI ALLM / game mode, Android 11+) |
 | `DisplayRouter` | `DisplayManager` listener; shows/dismisses the `Presentation`; reports TV name/size/refresh |
 | `AndroidAudio` | Low-latency `AudioTrack` (float PCM) fed by the core mixer |
 | `AndroidGfx` | `Gfx` on `android.graphics.Canvas`; linear and radial gradients use cached unit shaders moved into place with a local matrix, so no shader objects are created per frame |

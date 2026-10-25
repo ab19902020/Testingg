@@ -21,6 +21,7 @@ Nothing in any game asks you to run, jump, cross over to the other player, crouc
 | Someone steps out of view | The game pauses and names the missing player. When they are back in their own area and standing still, a 3-second countdown resumes play. Scores and timers are frozen while paused. |
 | Pause menu | Resume, Restart match, Recalibrate players, Switch to front/back camera, Quit. |
 | Front or back camera | Tap the camera button at the top left of the main menu, the **Use back/front camera** button on the "Stand in your areas" screen, or **Switch to ... camera** in the pause menu. After switching mid-game everyone checks their position again, then the match carries on. The choice is remembered. |
+| Timing test | **Settings -> Timing -> Run the timing test**: a snowball flies into a ring ten times; swing like a tennis shot as each one reaches the ring *on the TV*. The game measures your phone + TV delay and allows for it in the timing games. If swings still feel judged late, raise the allowance a little on the same page; early, lower it. |
 | Tracking meter | On the "Stand in your areas" screen, each player's bars (Excellent, Good, Fair, Weak) show how well the camera sees them, with a tip when something would help (come closer, step back, more light, keep both hands in the picture). |
 | After a match | Rematch, Choose another game, Main menu (or Continue tournament). |
 
@@ -73,6 +74,10 @@ Your snow buddy runs to the ball for you; you only swing.
 
 On time = fast, deep shot. Far too early = out. Far too late = net. Serve by swinging when it's your turn. Rallies
 get gradually harder (the timing window shrinks with every hit) so points always end.
+
+Your swing is judged by the moment your arm moved fastest, compared with where the ball was on your TV at that
+moment (camera and TV delays allowed for - see the timing test above). So swing when the ball reaches you on the
+screen; if the ball has flown on a little by the time your swing registers, it is returned from where you hit it.
 
 Reduced movement / seated: a smaller, slower arm swing counts.
 
