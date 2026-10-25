@@ -350,6 +350,8 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         // time on a camera, a quick left/right check makes sure the cursor goes the way the hand goes
         directionCheck.update(dt, scr.allowCursors && !displayLost)
         val cursorsOn = scr.allowCursors && !directionCheck.active
+        // no pointer on screen while pointing does nothing (live play, flights in golf, the left/right check)
+        if (!cursorsOn) for (c in ui.cursors) { c.visible = false; c.active = false }
         ui.begin(dt, events, cursorsOn)
         if (ui.backPressed && scr.onBack()) { /* handled */ }
         g.fillRect(0f, 0f, g.width, g.height, Colors.NIGHT_TOP)

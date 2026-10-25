@@ -17,7 +17,8 @@ enum class GolfStroke { NONE, FULL, PUTT }
  * clearly each is seen, so a wrist hidden behind the head during the backswing does not drag it off).
  *
  * Full swing (driver, woods, irons, wedge):
- *  1. **Address** - hands together, low in front of you and still for a moment.
+ *  0. **Grip** - both hands together, as if holding a club ([grip], [handsGap] show how close they are).
+ *  1. **Address** - hands gripped, low in front of you and still for a moment.
  *  2. **Backswing** - hands rise to either side. How high they go sets the power (a full swing takes them about
  *     level with your head; going much higher is an overswing - a little more distance, less accuracy).
  *  3. **Downswing** - hands come back down quickly. The shot is struck at the lowest point of the downswing; the
@@ -55,6 +56,13 @@ class GolfSwingDetector {
         private set
     var handsY = Float.NaN
         private set
+    /** Distance between the wrists (body units), NaN unless both are seen. */
+    var handsGap = Float.NaN
+        private set
+    /** True while both hands are seen together, as if holding a club. */
+    var grip = false
+        private set
+    private var lostSince = Double.NaN
 
     private var stillSince = Double.NaN
     private var addrX = 0f
@@ -74,12 +82,14 @@ class GolfSwingDetector {
 
     fun reset() {
         phase = Phase.IDLE; livePower = 0f; addressProgress = 0f; stillSince = Double.NaN
-        prevX = Float.NaN; prevY = Float.NaN; descending = false
+        prevX = Float.NaN; prevY = Float.NaN; descending = false; grip = false; handsGap = Float.NaN; lostSince = Double.NaN
     }
 
     /** Hands position from a body frame; false when neither wrist is seen well enough. */
     private fun hands(f: BodyFrame): Boolean {
         val v0 = f.wv[LEFT]; val v1 = f.wv[RIGHT]
+        handsGap = if (v0 >= 0.3f && v1 >= 0.3f) hypot(f.wx[LEFT] - f.wx[RIGHT], f.wy[LEFT] - f.wy[RIGHT]) else Float.NaN
+        grip = !handsGap.isNaN() && handsGap < GRIP_GAP
         if (v0 < 0.2f && v1 < 0.2f) return false
         val w0 = max(0f, v0 - 0.15f); val w1 = max(0f, v1 - 0.15f)
         handsX = (f.wx[LEFT] * w0 + f.wx[RIGHT] * w1) / (w0 + w1)
@@ -93,7 +103,15 @@ class GolfSwingDetector {
      */
     fun update(f: BodyFrame, stroke: GolfStroke, mode: MovementMode, reach: Float, sensitivity: Float = 1f): Shot? {
         if (stroke == GolfStroke.NONE) { reset(); return null }
-        if (!hands(f)) { if (phase != Phase.FOLLOW) reset(); return null }
+        if (!hands(f)) {
+            // hands hidden for a moment at the top of the backswing (behind the head, blurred, out of shot): keep going
+            if (phase == Phase.BACKSWING) {
+                if (lostSince.isNaN()) lostSince = f.t
+                if (f.t - lostSince > LOST_GRACE_SEC) reset()
+            } else if (phase != Phase.FOLLOW) reset()
+            return null
+        }
+        lostSince = Double.NaN
         val k = clamp(reach / 1.5f, 0.55f, 1.3f) / clamp(sensitivity, 0.5f, 2f)
         val std = mode == MovementMode.STANDARD
         val x = handsX; val y = handsY; val t = f.t
@@ -102,7 +120,8 @@ class GolfSwingDetector {
         val vy = if (dt > 0f) (y - prevY) / dt else 0f
         val vx = if (dt > 0f) (x - prevX) / dt else 0f
         prevX = x; prevY = y; prevT = t
-        val together = f.wv[LEFT] < 0.3f || f.wv[RIGHT] < 0.3f || hypot(f.wx[LEFT] - f.wx[RIGHT], f.wy[LEFT] - f.wy[RIGHT]) < 0.6f
+        // address needs a real grip: both hands seen, together; once gripped, a hand hidden behind the other is fine
+        val together = grip || (phase == Phase.ADDRESS && (handsGap.isNaN() || handsGap < GRIP_GAP * 1.4f))
         val lowEnough = y < (if (std) -0.55f else if (mode == MovementMode.SEATED) -0.35f else -0.45f)
         var shot: Shot? = null
         when (phase) {
@@ -175,6 +194,10 @@ class GolfSwingDetector {
     }
 
     companion object {
+        /** Wrists closer than this (body units) count as holding a club together. */
+        const val GRIP_GAP = 0.42f
+        /** How long the hands may be lost during a backswing (s). */
+        const val LOST_GRACE_SEC = 0.5
         const val ADDRESS_HOLD_SEC = 0.45
         const val MAX_POWER = 1.15f
         /** Downswing speed (body lengths per second) below which the swing is a practice swing. */

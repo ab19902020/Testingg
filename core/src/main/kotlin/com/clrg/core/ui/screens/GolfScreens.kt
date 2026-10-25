@@ -14,6 +14,7 @@ import com.clrg.core.golf.GolfMatch
 import com.clrg.core.golf.GolfPhysics
 import com.clrg.core.golf.GolfPlayer
 import com.clrg.core.golf.Outcome
+import com.clrg.core.golf.Pt
 import com.clrg.core.golf.Surface
 import com.clrg.core.math.Rect
 import com.clrg.core.math.Rng
@@ -28,6 +29,8 @@ import com.clrg.core.render.Prop
 import com.clrg.core.ui.Screen
 import com.clrg.core.ui.Ui
 import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.sin
 
 /** One golfer in the line-up: a family member (by profile id) or a computer golfer. */
@@ -282,25 +285,27 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
 
     // ------------------------------------------------------------------ drawing
 
+    private val scene = GolfScene3D()
+    private val extras = GolfScene3D.Extras()
+    private var shownAngle = 0f
+
+    /** The middle of the screen between the side panels (banners and overlays go here). */
+    private fun centre(g: Gfx) = Rect(520f, 140f, g.width - 290f, 1060f)
+
     private fun draw(g: Gfx, ui: Ui, dt: Float) {
-        g.gradientRect(0f, 0f, g.width, g.height, 0xFF0B1E3A.toInt(), 0xFF06122A.toInt())
         val hole = match.hole
+        updateCamera(dt)
+        fillExtras(dt)
+        scene.draw(g, Rect(0f, 0f, g.width, g.height), hole, app.time, extras)
         Common.header(g, ui, "Hole ${hole.number} of ${course.holes.size}  -  Par ${hole.par}  -  ${hole.length} m", app = app)
         g.text(course.name, g.width - 30f, 70f, 30f, app.theme.dim, Align.RIGHT, bold = false)
-        val mapR = Rect(580f, 140f, g.width - 290f, 1060f)
-        frameView(mapR, dt)
-        val putting = match.club == Club.PUTTER && match.phase == GolfMatch.Phase.AIM || (match.plan?.club == Club.PUTTER && match.phase != GolfMatch.Phase.AIM && match.phase != GolfMatch.Phase.TURN_START)
-        view.drawHole(g, hole, app.time, putting)
-        g.save(); g.clipRect(mapR.left, mapR.top, mapR.right, mapR.bottom)
-        view.drawFlag(g, hole, app.time)
-        drawBallAndGuide(g)
-        if (!app.settings.reducedEffects) Draw.snowfall(g, mapR, app.time, 18)
-        view.drawWind(g, hole)
-        g.restore()
-        view.frameBorder(g)
-        leftPanel(g, Rect(20f, 140f, 560f, 1060f))
+        val mapR = centre(g)
+        infoPanel(g, Rect(20f, 140f, 500f, 400f))
+        cameraInset(g, Rect(20f, 410f, 500f, 680f))
+        swingPanel(g, Rect(20f, 690f, 500f, 1060f))
+        miniMap(g, Rect(g.width - 290f - 250f, 150f, g.width - 290f - 12f, 470f), dt)
         clubColumn(g, ui, Rect(g.width - 270f, 140f, g.width - 20f, 1060f))
-        // result message over the map
+        // result message over the view
         val showMsg = match.phase == GolfMatch.Phase.AIM || match.phase == GolfMatch.Phase.FLIGHT || match.phase == GolfMatch.Phase.RESULT
         if (showMsg && match.message.isNotEmpty() && match.messageTime < 3.2f) {
             val a = (if (match.messageTime > 2.6f) (3.2f - match.messageTime) / 0.6f else 1f).coerceIn(0f, 1f)
@@ -322,112 +327,229 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
         if (paused) pauseMenu(g, ui)
     }
 
-    private fun frameView(r: Rect, dt: Float) {
+    /** Where the 3D camera wants to be for what is happening now. */
+    private fun updateCamera(dt: Float) {
         val h = match.hole
-        val b = match.ball
+        val left = match.player.hand == com.clrg.core.tracking.Hand.LEFT
+        var rate = 3.2f
         when (match.phase) {
             GolfMatch.Phase.AIM -> {
-                if (match.club == Club.PUTTER) view.frame(r, listOf(b, h.pin), 3.5f, 12f, dt)
-                else {
-                    val reach = match.reachNow()
-                    val land = b + GolfPhysics.dir(match.aim) * reach
-                    val pts = if (b.dist(h.pin) < reach * 1.3f) listOf(b, land, h.pin) else listOf(b, land)
-                    view.frame(r, pts, 28f, 110f, dt)
-                }
+                if (match.club == Club.PUTTER) scene.puttView(match.ball, match.aim, h.pin, left) else scene.aimView(match.ball, match.aim, left)
+                rate = 4f
             }
             GolfMatch.Phase.FLIGHT, GolfMatch.Phase.RESULT -> {
                 val p = match.plan
-                if (p != null) {
-                    if (p.club == Club.PUTTER) view.frame(r, listOf(p.start, p.end, h.pin), 3.5f, 12f, dt)
-                    else view.frame(r, listOf(p.start, p.land, p.end), 25f, 110f, dt)
+                if (p == null) scene.overview(h, app.time)
+                else if (p.club == Club.PUTTER) scene.puttView(p.start, match.aim, h.pin, left)
+                else if (match.phase == GolfMatch.Phase.FLIGHT) {
+                    val (pos, hgt) = GolfPhysics.positionAt(p, match.animTime)
+                    scene.flightView(p.start, match.aim, left, pos.x, pos.y, hgt, GolfPhysics.aimAt(p.start, p.land), match.animTime)
+                } else {
+                    // settle behind where the ball finished
+                    val end = if (p.outcome == Outcome.STOPPED) p.end else p.land
+                    scene.chaseView(end.x, end.y, 0f, GolfPhysics.aimAt(p.start, p.land), 1f)
+                    rate = 1.6f
                 }
             }
-            else -> view.frameHole(r, h, dt)
+            else -> { scene.overview(h, app.time); rate = 1.4f }
         }
+        scene.update(dt, rate)
     }
 
-    private fun drawBallAndGuide(g: Gfx) {
-        val color = match.player.color
+    private fun fillExtras(dt: Float) {
+        val x = extras
+        val pl = match.player
+        x.ballColor = pl.color
+        x.golferColor = pl.color
+        x.leftHanded = pl.hand == com.clrg.core.tracking.Hand.LEFT
+        x.club = match.club
+        x.showAim = false; x.golfer = false; x.putting = false
+        x.ballX = Float.NaN
+        val p = match.plan
         when (match.phase) {
             GolfMatch.Phase.AIM -> {
-                val det = app.controls[0].golf
-                val live = if (humanTurn) det.livePower else 0f
+                x.ballX = match.ball.x; x.ballY = match.ball.y; x.ballH = 0f
+                x.golferX = match.ball.x; x.golferY = match.ball.y
+                x.golfer = true
+                x.aim = match.aim
+                x.showAim = true
+                val live = if (humanTurn) app.controls[0].golf.livePower else 0f
+                x.aimStrong = live > 0f
+                x.aimColor = pl.color
                 if (match.club == Club.PUTTER) {
-                    val d = if (live > 0f) GolfPhysics.puttDistance(live) else match.distanceToPin()
-                    view.drawAim(g, match.ball, match.aim, d, 0.5f, color, live > 0f)
+                    x.putting = true
+                    x.aimDist = if (live > 0f) GolfPhysics.puttDistance(live) else match.distanceToPin()
+                    x.ringR = 0.5f; x.apex = 0f
                 } else {
                     val reach = match.reachNow(if (live > 0f) live.coerceAtMost(1f) else 1f)
-                    val spread = (reach * kotlin.math.sin(match.club.spreadDeg * PI / 360.0)).toFloat()
-                    view.drawAim(g, match.ball, match.aim, reach, spread, color, live > 0f)
+                    x.aimDist = reach
+                    x.ringR = (reach * sin(match.club.spreadDeg * PI / 360.0)).toFloat()
+                    x.apex = maxOf(4f, reach * match.club.loft)
                 }
-                view.drawBall(g, match.ball, 0f, color)
+                x.trailN = 0
             }
-            GolfMatch.Phase.FLIGHT -> {
-                val p = match.plan ?: return
+            GolfMatch.Phase.FLIGHT -> if (p != null) {
                 val (pos, hgt) = GolfPhysics.positionAt(p, match.animTime)
-                view.drawBall(g, pos, hgt, color)
+                x.ballX = pos.x; x.ballY = pos.y; x.ballH = hgt
+                x.putting = p.club == Club.PUTTER
+                x.golferX = p.start.x; x.golferY = p.start.y
+                x.golfer = match.animTime < 1.8f
+                x.aim = match.aim
+                if (x.trailN >= x.trail.size / 3) { System.arraycopy(x.trail, 3, x.trail, 0, x.trail.size - 3); x.trailN-- }
+                x.trail[x.trailN * 3] = pos.x; x.trail[x.trailN * 3 + 1] = pos.y; x.trail[x.trailN * 3 + 2] = hgt
+                x.trailN++
             }
-            GolfMatch.Phase.RESULT -> {
-                val p = match.plan
-                if (p != null && p.outcome != Outcome.HOLED && match.ball != match.hole.pin) view.drawBall(g, if (p.outcome == Outcome.STOPPED) p.end else match.ball, 0f, color)
+            GolfMatch.Phase.RESULT -> if (p != null && p.outcome != Outcome.HOLED && match.ball != match.hole.pin) {
+                val end = if (p.outcome == Outcome.STOPPED) p.end else match.ball
+                x.ballX = end.x; x.ballY = end.y; x.ballH = 0f
+                x.putting = p.club == Club.PUTTER
             }
-            else -> Unit
+            else -> x.trailN = 0
+        }
+        // the golfer copies the player's swing (or the computer's animation)
+        val target = if (humanTurn && app.controls[0].hasPose && !app.controls[0].golf.handsX.isNaN())
+            GolfScene3D.swingAngleFromHands(app.controls[0].golf.handsX, app.controls[0].golf.handsY, x.leftHanded)
+        else scriptedAngle()
+        shownAngle += (target - shownAngle) * (1f - kotlin.math.exp(-dt * 18f))
+        x.swingAngle = shownAngle
+    }
+
+    /** Swing angle of the computer golfer's animation: address, backswing, strike and follow-through. */
+    private fun scriptedAngle(): Float {
+        val t = swingAnim
+        val putt = match.club == Club.PUTTER
+        val top = if (putt) 0.45f else 2.0f
+        val fin = if (putt) -0.4f else -2.1f
+        return when {
+            t < 0.6f -> top * sin(t / 0.6f * PI.toFloat() / 2f)
+            t < 0.75f -> top
+            t < CPU_IMPACT -> top * (1f - ((t - 0.75f) / (CPU_IMPACT - 0.75f)).let { it * it })
+            t < CPU_IMPACT + 0.35f -> fin * sin((t - CPU_IMPACT) / 0.35f * PI.toFloat() / 2f)
+            t < 3f -> fin
+            else -> 0f
         }
     }
 
-    private fun leftPanel(g: Gfx, r: Rect) {
-        Draw.panel(g, r, app.theme.panel, app.theme.panelBorder)
+    private fun infoPanel(g: Gfx, r: Rect) {
+        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 24f, 0xCC0B1E3A.toInt())
+        g.strokeRoundRect(r.left, r.top, r.right, r.bottom, 24f, 3f, app.theme.panelBorder)
         val pl = match.player
-        g.text(pl.name + if (pl.isCpu) " (computer)" else "", r.cx, r.top + 44f, 44f, pl.color, outline = Colors.BLACK, outlineWidth = 4f)
+        g.text(pl.name + if (pl.isCpu) " (computer)" else "", r.cx, r.top + 42f, 44f, pl.color, outline = Colors.BLACK, outlineWidth = 4f)
         val strokeNo = match.strokesThisHole + if (match.phase == GolfMatch.Phase.AIM) 1 else 0
         g.text("Stroke ${strokeNo.coerceAtLeast(1)}   -   Round ${GolfMatch.toParText(match.toPar(match.current))}", r.cx, r.top + 92f, 30f, Colors.WHITE, bold = false)
-        // the golfer: the player's own tracked body, or the computer's animated swing
-        val ax = r.cx; val ay = r.top + 585f; val ah = 380f
-        val prop = if (match.club == Club.PUTTER) Prop.PUTTER else Prop.GOLF_CLUB
-        if (humanTurn && app.controls[0].hasPose && app.tracker.slots[0].isPlaying) {
-            Draw.buddy(g, ax, ay, ah, pl.color, app.controls[0].avatar, Expression.FOCUSED, prop, t = app.time)
-        } else {
-            val (hx, hy) = scriptedHands(ax, ay, ah)
-            Draw.buddy(g, ax, ay, ah, pl.color, null, if (match.phase == GolfMatch.Phase.RESULT) Expression.EXCITED else Expression.FOCUSED, prop, t = app.time, handTargets = floatArrayOf(hx - 8f, hy, hx + 8f, hy))
+        val playing = match.phase == GolfMatch.Phase.AIM || match.phase == GolfMatch.Phase.FLIGHT || match.phase == GolfMatch.Phase.RESULT
+        if (playing) {
+            g.text("To the pin: ${GolfMatch.fmt(match.distanceToPin())}", r.left + 30f, r.top + 140f, 32f, Colors.WHITE, Align.LEFT, bold = false)
+            g.text("Lie: ${match.lie.label}", r.left + 30f, r.top + 182f, 32f, if (match.lie == Surface.SAND || match.lie == Surface.TREES) Colors.WARN else Colors.WHITE, Align.LEFT, bold = false)
         }
-        // facts
-        var y = r.top + 625f
-        fun line(t: String, c: Int = Colors.WHITE) { g.text(t, r.cx, y, 30f, c, bold = false); y += 40f }
-        if (match.phase == GolfMatch.Phase.AIM || match.phase == GolfMatch.Phase.FLIGHT || match.phase == GolfMatch.Phase.RESULT) {
-            line("To the pin: ${GolfMatch.fmt(match.distanceToPin())}")
-            line("Lie: ${match.lie.label}", if (match.lie == Surface.SAND || match.lie == Surface.TREES) Colors.WARN else Colors.WHITE)
+        // wind, as it blows across the view
+        val w = match.hole.wind
+        val m = w.len()
+        val ang = atan2(w.x, w.y) - scene.cam.yaw // relative to where the camera looks
+        val ax = r.right - 70f; val ay = r.bottom - 70f
+        g.fillCircle(ax, ay, 46f, 0x55000000)
+        val dx = sin(ang) * 34f; val dy = -cos(ang) * 34f
+        g.line(ax - dx, ay - dy, ax + dx, ay + dy, 6f, Colors.ICE)
+        val hd = atan2(dy, dx)
+        g.line(ax + dx, ay + dy, ax + dx - cos(hd - 0.5f) * 16f, ay + dy - sin(hd - 0.5f) * 16f, 6f, Colors.ICE)
+        g.line(ax + dx, ay + dy, ax + dx - cos(hd + 0.5f) * 16f, ay + dy - sin(hd + 0.5f) * 16f, 6f, Colors.ICE)
+        g.text("Wind %.1f m/s".format(m), r.left + 30f, r.bottom - 34f, 30f, Colors.ICE, Align.LEFT, bold = false)
+    }
+
+    /** The camera's picture of the player with the hands marked: green when they hold the "club" together. */
+    private fun cameraInset(g: Gfx, r: Rect) {
+        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 24f, 0xCC0B1E3A.toInt())
+        if (!humanTurn || match.phase == GolfMatch.Phase.TURN_START) {
+            g.text(if (match.player.isCpu) "${match.player.name} is playing" else "Your turn is coming", r.cx, r.cy, 30f, app.theme.dim, bold = false)
+            return
         }
-        // what to do now / the live power meter
-        val box = Rect(r.left + 20f, r.bottom - 250f, r.right - 20f, r.bottom - 20f)
-        g.fillRoundRect(box.left, box.top, box.right, box.bottom, 20f, 0x66000000)
+        val inner = Rect(r.left + 10f, r.top + 10f, r.right - 10f, r.bottom - 10f)
+        PreviewView.draw(g, app, inner, showAreas = false, labels = false)
+        val slot = app.tracker.slots[0]
+        val sm = slot.smooth
+        if (!slot.isPlaying || !sm.valid) return
+        val aspect = app.tracker.aspect
+        var w = inner.width; var hgt = w / aspect
+        if (hgt > inner.height) { hgt = inner.height; w = hgt * aspect }
+        val x0 = inner.cx - w / 2f; val y0 = inner.cy - hgt / 2f
+        fun mx(fx: Float) = x0 + fx / aspect * w
+        fun my(fy: Float) = y0 + fy * hgt
+        val lw = com.clrg.core.pose.Lm.LEFT_WRIST; val rw = com.clrg.core.pose.Lm.RIGHT_WRIST
+        val det = app.controls[0].golf
+        val ok = det.grip
+        val c = if (ok) Colors.GOOD else Colors.WARN
+        val ax = mx(sm.x[lw]); val ay = my(sm.y[lw]); val bx = mx(sm.x[rw]); val by = my(sm.y[rw])
+        if (!ok) g.line(ax, ay, bx, by, 4f, Colors.withAlpha(c, 0.8f))
+        val rr = (slot.scale * hgt * 0.25f).coerceIn(10f, 60f)
+        g.strokeCircle((ax + bx) / 2f, (ay + by) / 2f, rr + if (ok) 0f else kotlin.math.hypot(ax - bx, ay - by) / 2f, 5f, c)
+        g.text(if (ok) "Grip OK" else "Hands together", inner.cx, inner.bottom - 22f, 26f, c, outline = Colors.BLACK, outlineWidth = 4f)
+    }
+
+    /** What to do now: the grip guide, then the address, then the live power of the swing. */
+    private fun swingPanel(g: Gfx, r: Rect) {
+        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 24f, 0xCC0B1E3A.toInt())
+        g.strokeRoundRect(r.left, r.top, r.right, r.bottom, 24f, 3f, app.theme.panelBorder)
         if (match.phase != GolfMatch.Phase.AIM) return
-        if (!humanTurn) { g.text("${pl.name} is lining up...", box.cx, box.cy, 34f, Colors.WHITE, bold = false); return }
+        if (!humanTurn) { g.text("${match.player.name} is lining up...", r.cx, r.cy, 34f, Colors.WHITE, bold = false); return }
         val det = app.controls[0].golf
         val putt = match.club == Club.PUTTER
         when (det.phase) {
             GolfSwingDetector.Phase.IDLE -> {
-                g.text("Hands together, low and still", box.cx, box.top + 50f, 34f, Colors.GOLD)
-                g.text(if (putt) "then draw the putter back and stroke through" else "then swing back and through", box.cx, box.top + 95f, 28f, Colors.WHITE, bold = false)
-                g.text("Raise a hand to choose a club or aim", box.cx, box.top + 150f, 26f, app.theme.dim, bold = false)
-                if (det.addressProgress > 0f) Draw.progressRing(g, box.cx, box.top + 200f, 22f, det.addressProgress, Colors.GOLD, 7f)
+                // two mittens that come together as the player's hands do
+                val gap = if (det.handsGap.isNaN()) 1.2f else det.handsGap.coerceIn(0f, 1.4f)
+                val cx = r.cx; val cy = r.top + 85f
+                val sep = 18f + gap * 110f
+                val col = if (det.grip) Colors.GOOD else Colors.WARN
+                for (s in intArrayOf(-1, 1)) {
+                    val mx = cx + s * sep / 2f
+                    g.fillRoundRectGradient(mx - 22f, cy - 30f, mx + 22f, cy + 26f, 20f, Colors.lighter(col, 0.3f), Colors.darker(col, 0.7f))
+                    g.fillCircle(mx - s * 24f, cy, 11f, col)
+                }
+                if (det.grip) g.line(cx, cy - 60f, cx, cy + 60f, 6f, 0xFFB0BEC5.toInt())
+                if (!det.grip) {
+                    g.text("Hands together", r.cx, r.top + 160f, 42f, Colors.GOLD)
+                    g.text("as if holding a club, low in front", r.cx, r.top + 205f, 30f, Colors.WHITE, bold = false)
+                } else {
+                    g.text("Good grip - hold still", r.cx, r.top + 160f, 42f, Colors.GOOD)
+                    g.text(if (putt) "then rock the putter back and through" else "then swing back and through", r.cx, r.top + 205f, 28f, Colors.WHITE, bold = false)
+                    if (det.addressProgress > 0f) Draw.progressRing(g, r.cx, r.top + 260f, 24f, det.addressProgress, Colors.GOLD, 8f)
+                }
+                g.text("Raise one hand to pick a club or aim", r.cx, r.bottom - 30f, 26f, app.theme.dim, bold = false)
             }
             GolfSwingDetector.Phase.ADDRESS -> {
-                g.text(if (putt) "Putt!" else "Swing!", box.cx, box.top + 60f, 52f, Colors.GOOD, outline = Colors.BLACK, outlineWidth = 5f)
-                g.text(if (putt) "Further back = harder putt" else "Higher backswing = further", box.cx, box.top + 120f, 28f, Colors.WHITE, bold = false)
+                g.text(if (putt) "Putt!" else "Swing!", r.cx, r.top + 90f, 76f, Colors.GOOD, outline = Colors.BLACK, outlineWidth = 6f)
+                g.text(if (putt) "Further back = harder putt" else "Higher backswing = further", r.cx, r.top + 175f, 32f, Colors.WHITE, bold = false)
+                g.text("Keep your hands together", r.cx, r.top + 225f, 28f, app.theme.dim, bold = false)
             }
             GolfSwingDetector.Phase.BACKSWING, GolfSwingDetector.Phase.FOLLOW -> {
                 val p = det.livePower
-                val bar = Rect(box.left + 30f, box.top + 40f, box.right - 30f, box.top + 90f)
-                g.fillRoundRect(bar.left, bar.top, bar.right, bar.bottom, 20f, 0x55FFFFFF)
+                val bar = Rect(r.left + 30f, r.top + 60f, r.right - 30f, r.top + 120f)
+                g.fillRoundRect(bar.left, bar.top, bar.right, bar.bottom, 24f, 0x55FFFFFF)
                 val full = bar.left + bar.width / GolfSwingDetector.MAX_POWER
                 val fx = bar.left + bar.width * (p / GolfSwingDetector.MAX_POWER).coerceIn(0f, 1f)
-                g.fillRoundRect(bar.left, bar.top, fx, bar.bottom, 20f, if (p > 1f) Colors.WARN else Colors.GOOD)
+                g.fillRoundRect(bar.left, bar.top, fx, bar.bottom, 24f, if (p > 1f) Colors.WARN else Colors.GOOD)
                 g.line(full, bar.top - 8f, full, bar.bottom + 8f, 4f, Colors.WHITE)
                 val d = if (putt) GolfPhysics.puttDistance(p) else match.reachNow(p.coerceAtMost(1f))
-                g.text("about ${GolfMatch.fmt(d)}", box.cx, box.top + 140f, 40f, Colors.WHITE)
-                if (p > 1f) g.text("Overswing - less accurate", box.cx, box.top + 190f, 28f, Colors.WARN, bold = false)
+                g.text("about ${GolfMatch.fmt(d)}", r.cx, r.top + 175f, 46f, Colors.WHITE)
+                if (p > 1f) g.text("Overswing - less accurate", r.cx, r.top + 230f, 28f, Colors.WARN, bold = false)
             }
         }
+    }
+
+    /** The whole hole from above, with the ball and where it is aimed. */
+    private fun miniMap(g: Gfx, r: Rect, dt: Float) {
+        g.fillRoundRect(r.left - 6f, r.top - 6f, r.right + 6f, r.bottom + 6f, 16f, 0xAA0B1E3A.toInt())
+        val h = match.hole
+        view.frameHole(r, h, dt)
+        view.drawHole(g, h, app.time, false)
+        g.save(); g.clipRect(r.left, r.top, r.right, r.bottom)
+        view.drawFlag(g, h, app.time)
+        if (!extras.ballX.isNaN()) {
+            if (match.phase == GolfMatch.Phase.AIM) view.drawAim(g, match.ball, match.aim, extras.aimDist, extras.ringR, match.player.color, extras.aimStrong)
+            view.drawBall(g, Pt(extras.ballX, extras.ballY), 0f, match.player.color)
+        }
+        g.restore()
+        view.frameBorder(g)
     }
 
     /** Hands of the animated golfer (computer turns): address, backswing, strike and follow-through. */

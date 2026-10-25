@@ -93,4 +93,34 @@ class GolfSwingTest {
         val s = r.perform(GolfStroke.FULL) { t -> Motions.golfSwing(r.p1, t, rise = 0.8f) }.single()
         assertTrue(s.power > 0.85f, "a chest-high swing is full power in reduced-movement mode: ${s.power}")
     }
+
+    @Test
+    fun theSwingStartsOnlyFromAGripWithBothHandsTogether() {
+        val r = rig()
+        val c = r.controls[0]
+        c.golfStroke = GolfStroke.FULL
+        // hands low in front but apart (not holding a club): no address, and the guide says how far apart
+        r.seconds(1.5f) { r.p1.setWrist(LEFT, -0.45f, -1.1f); r.p1.setWrist(RIGHT, 0.45f, -1.1f) }
+        assertEquals(GolfSwingDetector.Phase.IDLE, c.golf.phase, "no grip, no address")
+        assertTrue(!c.golf.grip && c.golf.handsGap > 0.6f, "hands seen apart: ${c.golf.handsGap}")
+        // hands together: gripped, and the address follows
+        r.seconds(1.2f) { Motions.golfAddress(r.p1) }
+        assertTrue(c.golf.grip, "hands together = grip")
+        assertEquals(GolfSwingDetector.Phase.ADDRESS, c.golf.phase)
+    }
+
+    @Test
+    fun handsHiddenAtTheTopOfTheBackswingDoNotCancelIt() {
+        val r = rig()
+        val shots = r.perform(GolfStroke.FULL) { t ->
+            val going = Motions.golfSwing(r.p1, t, rise = 1.35f)
+            // around the top (0.75 - 1.1 s) both wrists are lost behind the head / out of shot
+            val hidden = t in 0.75..1.1
+            r.p1.wristVisibility[LEFT] = if (hidden) 0.05f else Float.NaN
+            r.p1.wristVisibility[RIGHT] = if (hidden) 0.05f else Float.NaN
+            going
+        }
+        assertEquals(1, shots.size, "the swing is still struck after the hands come back into view")
+        assertTrue(shots[0].power > 0.7f, "with the power of the backswing: ${shots[0].power}")
+    }
 }
