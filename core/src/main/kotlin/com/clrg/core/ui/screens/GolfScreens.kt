@@ -157,11 +157,13 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
     private val humanTurn: Boolean get() = !match.player.isCpu && !(app.settings.simulatedInput && app.sim.autoplay)
 
     override fun onEnter() {
+        app.objectKind = com.clrg.core.game.ObjectKind.CLUB
         app.startTurnTracking()
         particles.reduced = app.settings.reducedEffects
     }
 
     override fun onExit() {
+        app.objectKind = null
         app.controls.forEach { it.golfStroke = GolfStroke.NONE }
     }
 

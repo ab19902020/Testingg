@@ -77,8 +77,7 @@ class MotionScreensTest {
         assertNotNull(platform.heldModels[0], "the new object is looked for straight away, before keeping it")
         shot("app_held_learned")
         tap("heldKeep")
-        val id = app.activePlayers[0].id
-        assertTrue(app.settings.heldObjects.containsKey(id), "kept for ${app.activePlayers[0].name}")
+        assertTrue(app.hasHeldObject(0, com.clrg.core.game.ObjectKind.RACKET), "kept for ${app.activePlayers[0].name}")
         frames(5)
         assertNotNull(platform.heldModels[0], "and used from now on")
         assertTrue(app.controls[0].hasObject, "the player's object is followed")

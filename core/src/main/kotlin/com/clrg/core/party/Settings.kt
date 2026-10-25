@@ -64,6 +64,8 @@ data class Settings(
     var devOverlay: Boolean = false,
     /** Learned held objects (stick / toy racket) by player profile id: their encoded colour models. */
     val heldObjects: MutableMap<Int, String> = mutableMapOf(),
+    /** Learned objects per player and kind ("profileId:KIND" -> encoded colour model): a racket, a toy gun, a club. */
+    val heldObjectsByKind: MutableMap<String, String> = mutableMapOf(),
     /** Use the learned held objects in games (racket, bat, club follow the object). */
     var useHeldObjects: Boolean = true,
     /**
@@ -88,6 +90,7 @@ data class Settings(
             "showCameraInset" to showCameraInset, "devOverlay" to devOverlay, "skeletonOverlay" to skeletonOverlay,
             "heldObjects" to heldObjects.entries.joinToString("|") { "${it.key}=${it.value}" }, "useHeldObjects" to useHeldObjects,
             "sharpMotion" to sharpMotion, "mode" to mode,
+            "heldObjectsByKind" to heldObjectsByKind.entries.joinToString("|") { "${it.key}=${it.value}" },
         ),
     )
 
@@ -125,6 +128,7 @@ data class Settings(
                 showCameraInset = o.bool("showCameraInset", d.showCameraInset),
                 devOverlay = o.bool("devOverlay", d.devOverlay),
                 heldObjects = o.str("heldObjects").split("|").mapNotNull { e -> val i = e.indexOf('='); if (i <= 0) null else e.substring(0, i).toIntOrNull()?.let { it to e.substring(i + 1) } }.toMap().toMutableMap(),
+                heldObjectsByKind = o.str("heldObjectsByKind").split("|").mapNotNull { e -> val i = e.indexOf('='); if (i <= 0) null else e.substring(0, i) to e.substring(i + 1) }.toMap().toMutableMap(),
                 useHeldObjects = o.bool("useHeldObjects", d.useHeldObjects),
                 sharpMotion = o.bool("sharpMotion", d.sharpMotion),
                 skeletonOverlay = o.bool("skeletonOverlay", d.skeletonOverlay),

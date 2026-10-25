@@ -400,11 +400,38 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
     /** A just-learned object being tried out (slot, model) before the player decides to keep it. */
     var previewHeld: Pair<Int, com.clrg.core.pose.ObjectColorModel>? = null
 
-    /** The learned object of the player in slot [k] (when held objects are on), else null. */
+    /** The kind of object the game in play uses (set by the game and golf screens), or null in the menus. */
+    var objectKind: com.clrg.core.game.ObjectKind? = null
+    /** Per player: use their learned object in this game (chosen on the game's start screen). */
+    val useObject = booleanArrayOf(true, true)
+
+    /** Encoded object of the player in slot [k] for [kind]; a racket or club falls back to the object learned before kinds existed. */
+    fun heldObjectCode(k: Int, kind: com.clrg.core.game.ObjectKind): String? {
+        val id = activePlayers[k].id
+        return settings.heldObjectsByKind["$id:${kind.name}"] ?: if (kind != com.clrg.core.game.ObjectKind.GUN) settings.heldObjects[id] else null
+    }
+
+    fun hasHeldObject(k: Int, kind: com.clrg.core.game.ObjectKind) = heldObjectCode(k, kind) != null
+
+    fun saveHeldObject(k: Int, kind: com.clrg.core.game.ObjectKind, model: com.clrg.core.pose.ObjectColorModel) {
+        settings.heldObjectsByKind["${activePlayers[k].id}:${kind.name}"] = model.encode()
+        settings.useHeldObjects = true
+        useObject[k] = true
+        saveSettings()
+    }
+
+    fun forgetHeldObject(k: Int, kind: com.clrg.core.game.ObjectKind) {
+        val id = activePlayers[k].id
+        settings.heldObjectsByKind.remove("$id:${kind.name}")
+        if (kind != com.clrg.core.game.ObjectKind.GUN) settings.heldObjects.remove(id)
+        saveSettings()
+    }
+
+    /** The learned object of the player in slot [k] for the game in play (when held objects are on), else null. */
     fun heldModelFor(k: Int): com.clrg.core.pose.ObjectColorModel? {
         previewHeld?.let { if (it.first == k) return it.second }
-        if (!settings.useHeldObjects) return null
-        val enc = settings.heldObjects[activePlayers[k].id] ?: return null
+        if (!settings.useHeldObjects || !useObject[k]) return null
+        val enc = heldObjectCode(k, objectKind ?: com.clrg.core.game.ObjectKind.RACKET) ?: return null
         return heldCache.getOrPut(enc) { com.clrg.core.pose.ObjectColorModel.decode(enc) }
     }
 

@@ -77,7 +77,7 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
             ),
             controls = listOf("Point your hand" to "Aim", "Thumb down" to "Fire", "Toy gun: flick up" to "Fire"),
             gentleNotes = "Small hand movements cover the screen, the aim is more forgiving, and holding the crosshair on a clay fires for you.",
-            music = MusicTrack.GAME, scoreUnit = "points", goal = "Most clays out of the sky",
+            music = MusicTrack.GAME, scoreUnit = "points", goal = "Most clays out of the sky", objectKind = com.clrg.core.game.ObjectKind.GUN,
         )
 
         /** The fixed shooting-stand camera; logic uses view units (0, 0 = screen centre, 1080 high). */

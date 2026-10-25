@@ -72,7 +72,12 @@ class SettingsScreen(app: GameApp) : Screen(app) {
             }
             3 -> {
                 if (ui.button(g, "motionLab", row(), "Motion test - see what the camera sees of you", accent = Colors.GOOD, size = 36f)) app.push(MotionLabScreen(app))
-                if (ui.button(g, "heldObj", row(), "Use a real object as your racket / club", accent = Colors.GOOD, size = 36f)) app.push(HeldObjectScreen(app))
+                run {
+                    val rr = row()
+                    val half = Rect(rr.left, rr.top, rr.cx - 8f, rr.bottom)
+                    if (ui.button(g, "heldObj", half, "Teach a racket / club", "stick, toy racket, noodle", accent = Colors.GOOD, size = 32f)) app.push(HeldObjectScreen(app))
+                    if (ui.button(g, "heldGun", Rect(rr.cx + 8f, rr.top, rr.right, rr.bottom), "Teach a toy gun", "for the shooting games", accent = Colors.GOOD, size = 32f)) app.push(HeldObjectScreen(app, com.clrg.core.game.ObjectKind.GUN))
+                }
                 if (ui.toggle(g, "useHeld", row(), "Use learned objects in games", s.useHeldObjects)) { s.useHeldObjects = !s.useHeldObjects; changed = true }
                 if (ui.toggle(g, "sharp", row(), "Sharper fast movements (shorter camera exposure)", s.sharpMotion)) { s.sharpMotion = !s.sharpMotion; changed = true }
                 when (ui.stepper(g, "sens2", row(), "Gesture sensitivity", pct(s.gestureSensitivity))) { -1 -> { s.gestureSensitivity = (s.gestureSensitivity - 0.1f).coerceAtLeast(0.5f); changed = true }; 1 -> { s.gestureSensitivity = (s.gestureSensitivity + 0.1f).coerceAtMost(2f); changed = true } }

@@ -171,7 +171,16 @@ class GameInfo(
     val music: MusicTrack,
     val scoreUnit: String,
     val goal: String,
+    /** A real object the players can hold in this game (a toy racket, a toy gun), or null. */
+    val objectKind: ObjectKind? = null,
 )
+
+/** Kinds of real object a player can teach the game and then hold while playing. */
+enum class ObjectKind(val label: String, val examples: String, val replaces: String) {
+    RACKET("racket", "a toy racket, a bat, a stick or a pool noodle", "your arm swing"),
+    GUN("toy gun", "a toy gun, or anything gun-shaped", "your finger gun"),
+    CLUB("golf club", "a toy golf club, a stick or a pool noodle", "your hands"),
+}
 
 class MatchResult(
     val gameId: String,

@@ -238,7 +238,7 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
     companion object {
         val SPORTS_INFO by lazy { GameInfo(
             id = "tabletennis_s", title = "Table Tennis", tagline = INFO.tagline, howTo = INFO.howTo, controls = INFO.controls,
-            gentleNotes = INFO.gentleNotes, music = INFO.music, scoreUnit = INFO.scoreUnit, goal = INFO.goal,
+            gentleNotes = INFO.gentleNotes, music = INFO.music, scoreUnit = INFO.scoreUnit, goal = INFO.goal, objectKind = INFO.objectKind,
         ) }
         val INFO = GameInfo(
             id = "tabletennis", title = "Table Tennis", tagline = "Quick little forehands and backhands!",
@@ -250,7 +250,7 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
             ),
             controls = listOf("Small forehand swing" to "FOREHAND balls", "Small backhand swing" to "BACKHAND balls"),
             gentleNotes = "Reduced movement and seated: tiny wrist-and-forearm strokes are enough.",
-            music = MusicTrack.GAME, scoreUnit = "points", goal = "First to 11 points",
+            music = MusicTrack.GAME, scoreUnit = "points", goal = "First to 11 points", objectKind = com.clrg.core.game.ObjectKind.RACKET,
         )
     }
 }

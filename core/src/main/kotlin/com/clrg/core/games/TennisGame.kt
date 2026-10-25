@@ -195,7 +195,7 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
             ),
             controls = listOf("Swing either arm (or your held object)" to "Hit the ball", "Watch the shrinking ring" to "Swing when it turns green"),
             gentleNotes = "Reduced movement and seated players: a smaller, slower arm swing counts.",
-            music = MusicTrack.GAME, scoreUnit = "points", goal = "First to 7 points",
+            music = MusicTrack.GAME, scoreUnit = "points", goal = "First to 7 points", objectKind = com.clrg.core.game.ObjectKind.RACKET,
         )
 
         /** Shared instruction illustration: an arm swinging through a ball. */
@@ -208,7 +208,7 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
                 "Rallies get faster and the timing tighter. Serve by swinging. First to 7 points wins!",
             ),
             controls = INFO.controls, gentleNotes = INFO.gentleNotes,
-            music = MusicTrack.GAME, scoreUnit = "points", goal = "First to 7 points",
+            music = MusicTrack.GAME, scoreUnit = "points", goal = "First to 7 points", objectKind = com.clrg.core.game.ObjectKind.RACKET,
         )
 
         fun demoSwing(g: Gfx, r: Rect, t: Double, prop: Prop, color: Int, wide: Boolean, sporty: Boolean = false) {

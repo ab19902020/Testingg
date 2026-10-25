@@ -46,22 +46,28 @@ internal fun drawHeldOverlay(g: Gfx, app: GameApp, k: Int, r: Rect) {
  * and from then on follows it, so the racket, bat or club in the games points the way the real object does. The
  * line drawn over the camera picture shows what the game sees, before the player decides to keep it.
  */
-class HeldObjectScreen(app: GameApp) : Screen(app) {
+class HeldObjectScreen(app: GameApp, private val kind: com.clrg.core.game.ObjectKind = com.clrg.core.game.ObjectKind.RACKET, startPlayer: Int = 0) : Screen(app) {
     override val needsCamera = true
     private enum class Step { CHOOSE, COUNTDOWN, LEARNING, LEARNED, FAILED }
     private var step = Step.CHOOSE
-    private var player = 0
+    private var player = startPlayer.coerceIn(0, 1)
+    private val gun = kind == com.clrg.core.game.ObjectKind.GUN
     private var t = 0f
     private var result: HeldLearnStatus? = null
+
+    private var prevKind: com.clrg.core.game.ObjectKind? = null
+
+    override fun onEnter() { prevKind = app.objectKind; app.objectKind = kind }
 
     override fun onExit() {
         app.platform.cancelHeldLearning()
         app.previewHeld = null
+        app.objectKind = prevKind
     }
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
-        Common.header(g, ui, "Use a real object", app = app)
+        Common.header(g, ui, if (gun) "Use a toy gun" else "Use a real ${kind.label}", app = app)
         t += dt
         val view = Rect(40f, 160f, g.width * 0.6f, 900f)
         PreviewView.draw(g, app, view, showAreas = false, labels = false)
@@ -82,19 +88,28 @@ class HeldObjectScreen(app: GameApp) : Screen(app) {
         val slot = app.tracker.slots[player]
         when (step) {
             Step.CHOOSE -> {
-                line("A stick, a toy racket, a rolled-up", 34f)
-                line("magazine or a pool noodle becomes", 34f)
-                line("your racket, bat or golf club.", 34f)
-                y += 20f
-                line("Bright, single-coloured objects work best.", 28f, app.theme.dim)
-                line("Hold it straight up in one hand, beside", 28f, app.theme.dim)
-                line("your shoulder, and keep still.", 28f, app.theme.dim)
-                val has = app.settings.heldObjects.containsKey(prof.id)
-                if (ui.button(g, "heldLearn", Rect(side.left + 40f, side.bottom - 360f, side.right - 40f, side.bottom - 250f), if (has) "Learn a new object" else "Learn my object", "for ${prof.name}", accent = Colors.GOOD, size = 40f)) {
+                if (gun) {
+                    line("A toy gun (or anything gun-shaped)", 34f)
+                    line("becomes your gun in shooting games.", 34f)
+                    line("Flick it up to fire, like a recoil.", 34f)
+                    y += 20f
+                    line("Bright, single-coloured toys work best.", 28f, app.theme.dim)
+                    line("Hold it pointing straight up in one hand,", 28f, app.theme.dim)
+                    line("beside your shoulder, and keep still.", 28f, app.theme.dim)
+                } else {
+                    line("${kind.examples.replaceFirstChar { it.uppercase() }}", 32f)
+                    line("becomes your ${kind.label} - it replaces ${kind.replaces}.", 32f)
+                    y += 20f
+                    line("Bright, single-coloured objects work best.", 28f, app.theme.dim)
+                    line("Hold it straight up in one hand, beside", 28f, app.theme.dim)
+                    line("your shoulder, and keep still.", 28f, app.theme.dim)
+                }
+                val has = app.hasHeldObject(player, kind)
+                if (ui.button(g, "heldLearn", Rect(side.left + 40f, side.bottom - 360f, side.right - 40f, side.bottom - 250f), if (has) "Learn a new ${kind.label}" else "Learn my ${kind.label}", "for ${prof.name}", accent = Colors.GOOD, size = 40f)) {
                     step = Step.COUNTDOWN; t = 0f
                 }
-                if (has && ui.button(g, "heldForget", Rect(side.left + 40f, side.bottom - 230f, side.right - 40f, side.bottom - 130f), "Forget ${prof.name}'s object", accent = Colors.BAD, size = 32f)) {
-                    app.settings.heldObjects.remove(prof.id); app.saveSettings(); app.notify("Forgotten - games use your arm again")
+                if (has && ui.button(g, "heldForget", Rect(side.left + 40f, side.bottom - 230f, side.right - 40f, side.bottom - 130f), "Forget ${prof.name}'s ${kind.label}", accent = Colors.BAD, size = 32f)) {
+                    app.forgetHeldObject(player, kind); app.notify("Forgotten - games use ${kind.replaces} again")
                 }
                 if (ui.toggle(g, "heldUse", Rect(side.left + 40f, side.bottom - 110f, side.right - 40f, side.bottom - 20f), "Use objects in games", app.settings.useHeldObjects)) {
                     app.settings.useHeldObjects = !app.settings.useHeldObjects; app.saveSettings()
@@ -102,7 +117,7 @@ class HeldObjectScreen(app: GameApp) : Screen(app) {
             }
             Step.COUNTDOWN -> {
                 line("Get ready...", 48f, Colors.GOLD, true)
-                line("Hold your object straight up,", 34f)
+                line(if (gun) "Hold your toy gun pointing up," else "Hold your ${kind.label} straight up,", 34f)
                 line("beside your shoulder", 34f)
                 val n = 3 - t.toInt()
                 g.text("$n", side.cx, side.cy + 120f, 160f, Colors.GOLD, outline = Colors.BLACK, outlineWidth = 10f)
@@ -130,10 +145,11 @@ class HeldObjectScreen(app: GameApp) : Screen(app) {
                 val seen = slot.metrics?.pose?.held != null
                 line(if (seen) "Seeing it now" else "Not seeing it right now", 30f, if (seen) Colors.GOOD else Colors.WARN)
                 if (ui.button(g, "heldKeep", Rect(side.left + 40f, side.bottom - 250f, side.right - 40f, side.bottom - 140f), "Keep it", "for ${prof.name}", accent = Colors.GOOD, size = 42f)) {
-                    result?.model?.let { app.settings.heldObjects[prof.id] = it.encode(); app.settings.useHeldObjects = true; app.saveSettings() }
+                    result?.model?.let { app.saveHeldObject(player, kind, it) }
                     app.previewHeld = null
-                    app.notify("${prof.name}'s object will be used in tennis, table tennis and golf")
+                    app.notify(if (gun) "${prof.name}'s toy gun is ready for the shooting games" else "${prof.name}'s ${kind.label} is ready")
                     reset()
+                    if (returnWhenKept) { app.pop(); return }
                 }
                 if (ui.button(g, "heldAgain", Rect(side.left + 40f, side.bottom - 120f, side.right - 40f, side.bottom - 20f), "Try again", accent = Colors.ICE, size = 34f)) reset()
             }
@@ -149,6 +165,9 @@ class HeldObjectScreen(app: GameApp) : Screen(app) {
     }
 
     private fun reset() { app.platform.cancelHeldLearning(); app.previewHeld = null; step = Step.CHOOSE; t = 0f; result = null }
+
+    /** Opened from a game's start screen: go straight back once the object is kept. */
+    var returnWhenKept = false
 
     private fun wrap(g: Gfx, text: String, size: Float, maxW: Float): List<String> {
         val out = ArrayList<String>()

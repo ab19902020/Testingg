@@ -35,7 +35,8 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
     override val allowCursors: Boolean get() = !::session.isInitialized || session.phase != Phase.PLAYING
 
     override fun onEnter() {
-        if (::session.isInitialized) return
+        app.objectKind = entry.info.objectKind
+        if (::session.isInitialized) { applyControls(); return }
         val level = app.cpuLevel
         val players = (0..1).map { k ->
             val prof = app.activePlayers[k]
@@ -53,12 +54,20 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
         session.beforeStep = {
             if (app.settings.simulatedInput && app.sim.autoplay) for (k in 0..1) if (!session.cpu[k]) game.autoplay(k, session.inputs[k], 0.85f - 0.25f * k, autoRng[k])
         }
-        app.controls.forEach { it.compactSwings = game.compactSwings; it.wantFingers = game.usesFingers }
+        applyControls()
+        // a learned object for this kind of game is used unless the player picks their hands on the start screen
+        for (k in 0..1) app.useObject[k] = true
         app.audio.playMusic(MusicTrack.CALM)
+    }
+
+    private fun applyControls() {
+        val game = session.game
+        app.controls.forEach { it.compactSwings = game.compactSwings; it.wantFingers = game.usesFingers }
     }
 
     override fun onExit() {
         app.controls.forEach { it.compactSwings = false; it.swingBoost = 0f; it.wantFingers = false }
+        app.objectKind = null
     }
 
     override fun onBack(): Boolean {
@@ -97,7 +106,7 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
         Draw.panel(g, r, app.theme.panel, app.theme.panelBorder)
         g.text(info.title, r.cx, r.top + 70f, 76f * app.theme.textScale, Colors.GOLD)
         g.text(info.goal, r.cx, r.top + 135f, 38f, Colors.WHITE, bold = false)
-        val demo = Rect(r.left + 40f, r.top + 180f, r.left + 760f, r.top + 640f)
+        val demo = Rect(r.left + 40f, r.top + 180f, r.left + 760f, r.top + if (info.objectKind != null) 520f else 640f)
         g.fillRoundRect(demo.left, demo.top, demo.right, demo.bottom, 20f, 0xFF0E2A4F.toInt())
         g.save(); g.clipRect(demo.left, demo.top, demo.right, demo.bottom)
         session.game.demo(g, demo.inset(20f), app.time)
@@ -115,6 +124,7 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
             g.text("->  $action", r.left + 1290f, y, 30f, Colors.WHITE, Align.LEFT, bold = false)
             y += 76f
         }
+        info.objectKind?.let { kind -> objectChoice(g, ui, Rect(demo.left, demo.bottom + 60f, demo.right, r.bottom - 185f), kind) }
         if (session.env.players.any { it.mode != MovementMode.STANDARD }) {
             g.text(info.gentleNotes, r.left + 800f, y + 10f, ui.fit(g, info.gentleNotes, 28f, r.right - r.left - 840f, false), Colors.ICE, Align.LEFT, bold = false)
         }
@@ -137,6 +147,30 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
         }
         if (ui.button(g, "start", Rect(r.cx - 200f, r.bottom - 170f, r.cx + 200f, r.bottom - 70f), "Start", accent = Colors.GOOD)) session.startNow()
         if (ui.button(g, "quitIntro", Rect(r.right - 260f, r.top + 30f, r.right - 30f, r.top + 110f), "Back", size = 34f, accent = Colors.ICE)) app.pop()
+    }
+
+    /** "Play with": each camera player picks their hands or their learned object, or teaches one now. */
+    private fun objectChoice(g: Gfx, ui: Ui, r: Rect, kind: com.clrg.core.game.ObjectKind) {
+        val gun = kind == com.clrg.core.game.ObjectKind.GUN
+        g.text("Play with:", r.left + 10f, r.top + 16f, 30f, Colors.GOLD, Align.LEFT)
+        val rows = (0..1).filter { !session.cpu[it] }
+        val rowH = ((r.height - 40f) / rows.size.coerceAtLeast(1)).coerceAtMost(96f)
+        rows.forEachIndexed { i, k ->
+            val y = r.top + 40f + i * rowH
+            val c = app.playerColor(k)
+            g.text(app.activePlayers[k].name, r.left + 10f, y + rowH / 2f - 4f, 28f, c, Align.LEFT)
+            val has = app.hasHeldObject(k, kind)
+            val bw = (r.width - 170f) / 2f
+            val b1 = Rect(r.left + 160f, y, r.left + 160f + bw - 8f, y + rowH - 12f)
+            val b2 = Rect(b1.right + 16f, y, r.right, y + rowH - 12f)
+            val handsLabel = if (gun) "Finger gun" else "My arm"
+            if (ui.button(g, "objHands$k", b1, handsLabel, size = 28f, selected = !has || !app.useObject[k], accent = c)) app.useObject[k] = false
+            if (has) {
+                if (ui.button(g, "objUse$k", b2, "My ${kind.label}", size = 28f, selected = app.useObject[k], accent = c)) app.useObject[k] = true
+            } else if (ui.button(g, "objTeach$k", b2, "Teach my ${kind.label}", size = 28f, accent = Colors.GOOD)) {
+                app.push(HeldObjectScreen(app, kind, k).also { it.returnWhenKept = true })
+            }
+        }
     }
 
     private fun trackingLost(g: Gfx, ui: Ui) {
