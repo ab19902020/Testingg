@@ -122,10 +122,7 @@ class CameraSetupScreen(app: GameApp, private val then: () -> Unit, private val 
             val label = "${o.label} (~${o.horizontalFovDeg.toInt()}°)"
             val w = 360f
             val sel = (app.settings.cameraId ?: st.activeId) == o.id
-            if (ui.button(g, "cam_${o.id}", Rect(x, 690f, x + w, 770f), label, size = 28f, selected = sel)) {
-                app.settings.cameraId = o.id
-                app.saveSettings()
-            }
+            if (ui.button(g, "cam_${o.id}", Rect(x, 690f, x + w, 770f), label, size = 28f, selected = sel)) app.selectCamera(o.id)
             x += w + 16f
         }
         val wideAvail = opts.any { it.wideAvailable && it.id == (app.settings.cameraId ?: st.activeId) }
@@ -172,6 +169,11 @@ class FramingScreen(app: GameApp, private val then: () -> Unit, private val full
         if (both) Draw.progressRing(g, g.width / 2f, 1010f, 34f, stable / 1.5f, Colors.GOOD, 9f)
         if (!app.solo && ui.button(g, "swap", Rect(40f, 980f, 420f, 1060f), "Swap sides", size = 34f)) {
             val a = app.activePlayers[0]; app.activePlayers[0] = app.activePlayers[1]; app.activePlayers[1] = a
+        }
+        val camX = if (app.solo) 40f else 440f
+        if (app.canSwitchCamera && ui.button(g, "camSwitch", Rect(camX, 980f, camX + 420f, 1060f), if (app.currentCamera()?.front == true) "Use back camera" else "Use front camera", size = 32f, accent = Colors.ICE)) {
+            app.switchCamera()
+            stable = 0f
         }
         val go = stable >= 1.5f
         if (ui.button(g, "next", Rect(g.width - 480f, 980f, g.width - 40f, 1060f), "Continue", accent = Colors.GOOD, enabled = both, size = 36f) || go) {

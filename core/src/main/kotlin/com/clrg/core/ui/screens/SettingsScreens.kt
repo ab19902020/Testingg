@@ -51,7 +51,7 @@ class SettingsScreen(app: GameApp) : Screen(app) {
                 g.text("Camera", r.left, r.cy, 40f, Colors.WHITE, Align.LEFT)
                 var x = r.left + 220f
                 for (o in opts.take(3)) {
-                    if (ui.button(g, "c${o.id}", Rect(x, r.top, x + 420f, r.bottom), "${o.label} ~${o.horizontalFovDeg.toInt()}°", size = 30f, selected = o.id == cur)) { s.cameraId = o.id; changed = true }
+                    if (ui.button(g, "c${o.id}", Rect(x, r.top, x + 420f, r.bottom), "${o.label} ~${o.horizontalFovDeg.toInt()}°", size = 30f, selected = o.id == cur)) app.selectCamera(o.id)
                     x += 440f
                 }
                 if (ui.toggle(g, "wide", row(), "Wide angle (when the camera supports zooming out)", s.wideAngle)) { s.wideAngle = !s.wideAngle; changed = true }

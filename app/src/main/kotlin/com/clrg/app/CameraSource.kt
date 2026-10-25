@@ -89,8 +89,14 @@ class CameraSource(private val context: Context) {
         emptyList()
     }
 
-    fun options(): List<CameraOption> = infos.map {
-        CameraOption(it.id, it.front, if (it.front) "Front camera" else "Back camera ${it.id}", it.hFovDeg * (if (it.zoomMin < 0.99f) 1f else 1f), it.zoomMin < 0.99f)
+    fun options(): List<CameraOption> {
+        var backs = 0
+        var fronts = 0
+        return infos.map {
+            val n = if (it.front) ++fronts else ++backs
+            val label = (if (it.front) "Front camera" else "Back camera") + if (n > 1) " $n" else ""
+            CameraOption(it.id, it.front, label, it.hFovDeg, it.zoomMin < 0.99f)
+        }
     }
 
     /** Default: the widest back camera (it can be placed facing the players), otherwise the front one. */

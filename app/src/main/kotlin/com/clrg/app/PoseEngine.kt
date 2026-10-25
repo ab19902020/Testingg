@@ -163,6 +163,8 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     /** GPU is skipped for good once it failed (or crashed the app) on this phone. */
     private var gpuFailed = prefs.getBoolean(KEY_GPU_OFF, false)
     private var initFailures = 0
+    /** Camera the pipeline's tracked regions belong to; a different camera means a different picture. */
+    private var lastCameraId: String? = null
     private var nextInitAttemptNs = 0L
     /** Plain-language reason when pose tracking cannot run (shown on screen), or null. */
     @Volatile var problem: String? = null
@@ -311,6 +313,7 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         }
         ensureRunner()
         val pipe = pipeline ?: return
+        if (info.id != lastCameraId) { pipe.reset(); lastCameraId = info.id }
         val rot = FrameOrientation.rotationFor(info.sensorOrientation, displayRotationDeg, info.front)
         val orient = FrameOrientation(w, h, rot)
         val t0 = System.nanoTime()

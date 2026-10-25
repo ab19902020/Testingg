@@ -163,15 +163,19 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
 
     private fun pauseMenu(g: Gfx, ui: Ui) {
         g.fillRect(0f, 0f, g.width, g.height, 0xCC000000.toInt())
-        ui.title(g, "Paused", 200f, 90f)
+        ui.title(g, "Paused", 170f, 90f)
         val w = 620f
-        var y = 320f
+        var y = 270f
         fun b(id: String, label: String, accent: Int = Colors.GOLD): Boolean { val r = Rect(g.width / 2f - w / 2f, y, g.width / 2f + w / 2f, y + 110f); y += 130f; return ui.button(g, id, r, label, accent = accent) }
         if (b("resume", "Resume", Colors.GOOD)) session.userResume()
         if (b("restart", "Restart match")) app.replace(GameScreen(app, gameId, match))
         if (b("recalibrate", "Recalibrate players")) app.replace(FramingScreen(app, { app.replace(GameScreen(app, gameId, match)) }))
+        if (app.canSwitchCamera && b("camSwitch", if (app.currentCamera()?.front == true) "Switch to back camera" else "Switch to front camera", Colors.ICE)) {
+            app.switchCamera()
+            app.replace(FramingScreen(app, { app.replace(GameScreen(app, gameId, match)) }))
+        }
         if (b("quit", if (match != null) "Back to tournament" else "Quit to menu", Colors.BAD)) app.pop()
-        if (app.displayLost) g.text("The TV was disconnected", g.width / 2f, 860f, 36f, Colors.WARN)
+        if (app.displayLost) g.text("The TV was disconnected", g.width / 2f, y + 10f, 36f, Colors.WARN)
     }
 
     private fun finish() {

@@ -61,6 +61,7 @@ class MainMenuScreen(app: GameApp) : Screen(app) {
         if (ui.button(g, "settings", st, "Settings", "Sound, accessibility, camera", accent = Colors.ICE)) app.push(SettingsScreen(app))
         val help = Rect(g.width / 2f - bw / 2f, y, g.width / 2f + bw / 2f, y + bh); y += bh + gap
         if (ui.button(g, "help", help, "How to Play", "Controls for every game", accent = Colors.GOOD)) app.push(HelpScreen(app))
+        if (app.canSwitchCamera && ui.button(g, "camSwitch", Rect(30f, 70f, 440f, 160f), app.cameraLabel(), "tap to switch", accent = Colors.ICE, size = 34f)) app.switchCamera()
         val dev = app.platform.deviceInfo()
         if (dev.meetsTarget == false) {
             g.text("Note: this phone is below the recommended Snapdragon 8 Gen 3 class - tracking may be slower.", g.width / 2f, y + 20f, 28f, Colors.WARN, bold = false)

@@ -156,6 +156,49 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
 
     fun playerColor(i: Int) = PlayerColors.get(activePlayers[i].colorIndex)
 
+    // ------------------------------------------------------------------ camera choice
+
+    /** The camera in use: the one chosen in settings, else the one the platform opened by default. */
+    fun currentCamera(): CameraOption? {
+        val opts = platform.cameraOptions()
+        val id = settings.cameraId ?: platform.cameraStatus().activeId
+        return opts.firstOrNull { it.id == id } ?: opts.firstOrNull { !it.front } ?: opts.firstOrNull()
+    }
+
+    /** True when the phone has both a front and a back camera to switch between. */
+    val canSwitchCamera: Boolean get() = platform.cameraOptions().let { o -> o.any { it.front } && o.any { !it.front } }
+
+    /** Short label for the camera in use ("Front camera" / "Back camera"). */
+    fun cameraLabel(): String = currentCamera()?.let { if (it.front) "Front camera" else "Back camera" } ?: "Camera"
+
+    /**
+     * Front <-> back camera. The picture changes completely (different position, angle and field of view), so player
+     * identities and calibrations are reset and the next match starts with framing again.
+     */
+    fun switchCamera(): Boolean {
+        val opts = platform.cameraOptions()
+        val cur = currentCamera()
+        val target = (if (cur?.front == true) opts.filter { !it.front }.maxByOrNull { it.horizontalFovDeg } else opts.firstOrNull { it.front }) ?: return false
+        selectCamera(target.id)
+        return true
+    }
+
+    /** Uses camera [id] from now on (resets identities and calibrations if it is a different camera). */
+    fun selectCamera(id: String) {
+        val opt = platform.cameraOptions().firstOrNull { it.id == id } ?: return
+        if (currentCamera()?.id == id && settings.cameraId == id) return
+        settings.cameraId = id
+        saveSettings()
+        resetTracking()
+        notify("Switched to the ${opt.label.lowercase()}")
+    }
+
+    private var noticeText: String? = null
+    private var noticeTime = 0f
+
+    /** Shows a short message at the top of the screen for a few seconds. */
+    fun notify(text: String) { noticeText = text; noticeTime = 0f }
+
     /** Solo mode: Player 2 is a computer opponent at this level; null when two people play at the camera. */
     var cpuLevel: CpuLevel? = null
         private set
@@ -340,6 +383,17 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
                 g.fillRoundRect(g.width / 2 - w / 2, g.height - 140f, g.width / 2 + w / 2, g.height - 60f, 30f, 0xEE7A1F1F.toInt())
                 g.text(msg, g.width / 2, g.height - 100f, ui.fit(g, msg, size, w - 60f), Colors.WHITE)
             }
+        }
+        noticeText?.let { msg ->
+            noticeTime += 1f / 60f
+            if (noticeTime > 2.8f) { noticeText = null; return@let }
+            val a = (if (noticeTime < 0.25f) noticeTime / 0.25f else if (noticeTime > 2.4f) (2.8f - noticeTime) / 0.4f else 1f).coerceIn(0f, 1f)
+            val w = g.measureText(msg, 38f) + 90f
+            g.save(); g.setAlpha(a)
+            g.fillRoundRect(g.width / 2 - w / 2, 70f, g.width / 2 + w / 2, 140f, 35f, 0xEE0B2A4F.toInt())
+            g.strokeRoundRect(g.width / 2 - w / 2, 70f, g.width / 2 + w / 2, 140f, 35f, 3f, Colors.ICE)
+            g.text(msg, g.width / 2, 105f, 38f, Colors.WHITE)
+            g.restore()
         }
         if (displayLost) {
             g.fillRect(0f, 0f, g.width, g.height, 0xCC000000.toInt())
