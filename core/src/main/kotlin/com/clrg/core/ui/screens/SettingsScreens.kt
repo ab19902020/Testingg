@@ -119,7 +119,7 @@ class SettingsScreen(app: GameApp) : Screen(app) {
                 ui.paragraph(g, listOf(
                     "Device: ${d.manufacturer} ${d.model}, Android ${d.androidRelease} (API ${d.sdkInt})",
                     "Chipset: ${d.soc ?: "unknown"} - ${d.note}",
-                    "Games in this build: ${GameRegistry.all.size}",
+                    "Games in this build: ${GameRegistry.sports.size} sports & arcade, ${GameRegistry.christmas.size} Christmas, plus golf",
                 ), 160f, y + 20f, 30f, app.theme.dim)
             }
         }
@@ -140,18 +140,21 @@ class HelpScreen(app: GameApp) : Screen(app) {
         val body = Rect(60f, 270f, g.width - 60f, g.height - 40f)
         when (tab) {
             0 -> {
-                GameRegistry.all.forEachIndexed { i, e ->
-                    if (ui.button(g, "hg$i", Rect(60f, 270f + i * 76f, 560f, 336f + i * 76f), e.info.title, size = 28f, selected = game == i)) game = i
+                val list = GameRegistry.forMode(app.mode)
+                if (game >= list.size) game = 0
+                val rowH = minOf(76f, (g.height - 310f) / list.size)
+                list.forEachIndexed { i, e ->
+                    if (ui.button(g, "hg$i", Rect(60f, 270f + i * rowH, 560f, 270f + (i + 1) * rowH - 10f), e.info.title, size = 28f, selected = game == i)) game = i
                 }
-                val info = GameRegistry.all[game].info
+                val info = list[game].info
                 val r = Rect(600f, 270f, g.width - 60f, g.height - 40f)
                 infoPanel(g, app, r, info.title, info.howTo + listOf("") + info.controls.map { "${it.first}  ->  ${it.second}" } + listOf("", info.gentleNotes), 32f)
             }
-            1 -> infoPanel(g, app, body, "Christmas Golf (1 to 4 players, taking turns)", listOf(
+            1 -> infoPanel(g, app, body, (if (app.christmasMode) "Christmas Golf" else "Golf") + " (1 to 4 players, taking turns)", listOf(
                 "Take turns: only the golfer whose turn it is stands in front of the camera. Raise a hand to start.",
                 "Choose a club or turn your aim: raise a hand and hold it over the button (hold on an arrow to keep turning).",
                 "Grip: put your hands together as if holding a club (the mittens on screen join up), low and still.",
-                "Swing: then swing back and through like a real golf swing - your snowman copies it.",
+                "Swing: then swing back and through like a real golf swing - your golfer copies it.",
                 "     The higher your backswing, the further the ball goes. Swing back down quickly.",
                 "     Bring your hands back through where they started for a straight shot.",
                 "Putt: grip, draw your hands back sideways (further = harder) and stroke through.",
@@ -169,7 +172,8 @@ class HelpScreen(app: GameApp) : Screen(app) {
                 "Calibration measures each player's size and comfortable reach so everybody plays fairly.",
                 "Hands-free menus: lift a hand to chest height to point, and hold it over a button to choose.",
                 "     Small, relaxed movements are enough - the right hand points from your right side, the left from your left.",
-                "A real object (toy racket, stick, pool noodle) can be your racket or club: Settings > Motion.",
+                "A real object (toy racket, stick, toy gun) can be used in games: Settings > Motion, or before a game.",
+                "Shooting games: make a finger gun and drop your thumb to fire (the camera follows your fingers).",
                 "Motion test (Settings > Motion) shows what the camera sees of you - handy when something isn't picked up.",
                 "If someone steps away the game pauses and waits for them - spectators can't take over.",
                 "On your own? Play Solo: you against a computer player (Easy, Medium or Hard). Stand in the middle.",
@@ -183,8 +187,9 @@ class HelpScreen(app: GameApp) : Screen(app) {
                 "not a picture) are saved. You can switch the camera permission off in Android settings.",
             ), 34f)
             4 -> infoPanel(g, app, body, "About", listOf(
-                "Christmas Living Room Games - an original family party game.",
-                "Pose tracking: MediaPipe BlazePose models (Apache 2.0) run with TensorFlow Lite (Apache 2.0).",
+                "Living Room Games - an original family motion-game console: Sports & Arcade, and Christmas.",
+                "Body tracking: MediaPipe BlazePose models; finger tracking: MediaPipe hand landmark model (both Apache 2.0),",
+                "     run with TensorFlow Lite (Apache 2.0).",
                 "All characters, artwork, music and sound effects are original and generated in code.",
                 "See LICENSES.md in the source project for full licence information.",
                 "Recommended: Snapdragon 8 Gen 3 class phone or better, with USB-C video output for wired TV.",

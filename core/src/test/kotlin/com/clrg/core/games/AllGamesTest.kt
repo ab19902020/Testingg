@@ -47,7 +47,10 @@ class AllGamesTest {
 
     @Test
     fun registryHasTheTenAgreedGames() {
-        assertEquals(listOf("tennis", "snowball", "catch", "reindeer", "bowling", "tabletennis", "dance", "slalom", "goalie", "tree"), GameRegistry.ids)
+        assertEquals(listOf("tennis", "snowball", "catch", "reindeer", "bowling", "tabletennis", "dance", "slalom", "goalie", "tree"), GameRegistry.christmas.map { it.info.id })
+        assertTrue(GameRegistry.christmas.all { it.mode == GameMode.CHRISTMAS })
+        assertTrue(GameRegistry.sports.all { it.mode == GameMode.SPORTS })
+        assertEquals(GameRegistry.ids.size, GameRegistry.ids.toSet().size, "ids are unique")
         for (e in GameRegistry.all) {
             assertTrue(e.info.howTo.size >= 3, "${e.info.id} instructions")
             assertTrue(e.info.controls.isNotEmpty())
@@ -68,7 +71,7 @@ class AllGamesTest {
 
     @Test
     fun activePlayerBeatsIdlePlayer() {
-        for (id in listOf("tennis", "tabletennis", "catch", "reindeer", "bowling", "dance", "slalom", "goalie", "tree", "snowball")) {
+        for (id in listOf("tennis", "tabletennis", "catch", "reindeer", "bowling", "dance", "slalom", "goalie", "tree", "snowball", "clays")) {
             val d = play(id, floatArrayOf(0.95f, -1f))
             val r = d.game.result()
             assertEquals(0, r.winner, "$id: active player should win, got ${r.scores.toList()} ${r.details}")

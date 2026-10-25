@@ -485,6 +485,160 @@ object Draw {
         }
     }
 
+    /** The player's character: the snowman buddy (Christmas) or the athlete (sports). Same arguments as [buddy]. */
+    fun person(
+        g: Gfx, sporty: Boolean, x: Float, y: Float, h: Float, color: Int, pose: AvatarPose?, expr: Expression = Expression.HAPPY,
+        prop: Prop = Prop.NONE, propHand: Int = 1, t: Double = 0.0, shielded: Boolean = false, squash: Float = 0f,
+        handTargets: FloatArray? = null, mittenScale: Float = 1f, look: Int = 0,
+    ) = if (sporty) athlete(g, x, y, h, color, pose, expr, prop, propHand, t, shielded, squash, handTargets, mittenScale, look)
+        else buddy(g, x, y, h, color, pose, expr, prop, propHand, t, shielded, squash, handTargets, mittenScale)
+
+    private val SKIN = intArrayOf(0xFFF6D2B4.toInt(), 0xFFE0AC85.toInt(), 0xFFC68A62.toInt(), 0xFF8D5A3B.toInt())
+    private val HAIR = intArrayOf(0xFF4E342E.toInt(), 0xFF212121.toInt(), 0xFFD7A54A.toInt(), 0xFF8D3B1F.toInt(), 0xFF6D4C41.toInt())
+
+    /**
+     * A sporty cartoon person (for the non-Christmas games): round head and hair, team shirt in the player's colour,
+     * shorts and trainers. Arms follow the player exactly like [buddy]; [look] picks skin and hair.
+     */
+    fun athlete(
+        g: Gfx, x: Float, y: Float, h: Float, color: Int, pose: AvatarPose?, expr: Expression = Expression.HAPPY,
+        prop: Prop = Prop.NONE, propHand: Int = 1, t: Double = 0.0, shielded: Boolean = false, squash: Float = 0f,
+        handTargets: FloatArray? = null, mittenScale: Float = 1f, look: Int = 0,
+    ) {
+        val skin = SKIN[((look % SKIN.size) + SKIN.size) % SKIN.size]
+        val hair = HAIR[((look / 2 % HAIR.size) + HAIR.size) % HAIR.size]
+        val skinDark = Colors.darker(skin, 0.82f)
+        val rise = pose?.rise ?: 0f
+        val crouch = (-rise).coerceIn(0f, 0.9f)
+        val lift = (-rise * h * 0.16f).coerceIn(-h * 0.08f, h * 0.12f)
+        softShadow(g, x, y, h * 0.3f, h * 0.06f, 0.5f)
+        // legs and trainers (bend when crouching)
+        val hipY = y - h * 0.42f + lift + crouch * h * 0.1f
+        for (s in intArrayOf(-1, 1)) {
+            val fx = x + s * h * (0.09f + crouch * 0.05f)
+            val kx = x + s * h * (0.07f + crouch * 0.12f)
+            val ky = (hipY + y) / 2f
+            g.line(x + s * h * 0.06f, hipY, kx, ky, h * 0.07f, skin)
+            g.line(kx, ky, fx, y - h * 0.03f, h * 0.065f, skin)
+            g.fillRoundRect(fx - h * 0.055f + s * h * 0.02f, y - h * 0.06f, fx + h * 0.055f + s * h * 0.02f, y, h * 0.03f, Colors.WHITE)
+            g.fillRect(fx - h * 0.05f + s * h * 0.02f, y - h * 0.02f, fx + h * 0.05f + s * h * 0.02f, y, Colors.darker(color, 0.6f))
+        }
+        // shorts
+        g.fillRoundRect(x - h * 0.15f, hipY - h * 0.06f, x + h * 0.15f, hipY + h * 0.09f, h * 0.03f, 0xFF263238.toInt())
+        g.save()
+        val tilt = pose?.tilt ?: 0f
+        g.translate(0f, lift)
+        g.translate(x, y - h * 0.42f)
+        g.rotate(tilt)
+        g.translate(-x, -(y - h * 0.42f))
+        // torso: team shirt with a stripe
+        val sy0 = y - h * 0.74f
+        val sy1 = y - h * 0.4f
+        g.fillRoundRectGradient(x - h * 0.16f, sy0, x + h * 0.16f, sy1, h * 0.06f, Colors.lighter(color, 0.2f), Colors.darker(color, 0.75f))
+        g.fillRect(x - h * 0.16f, sy0 + h * 0.12f, x + h * 0.16f, sy0 + h * 0.15f, 0xCCFFFFFF.toInt())
+        g.fillOval(x - h * 0.05f, sy0 - h * 0.01f, x + h * 0.05f, sy0 + h * 0.04f, skinDark) // neck line
+        // arms (same joint solving as the buddy's)
+        val sxL = x - h * 0.15f
+        val sxR = x + h * 0.15f
+        val sy = sy0 + h * 0.04f
+        val ua = h * 0.17f
+        val fa = h * 0.16f
+        val armW = h * 0.055f
+        var handX = 0f; var handY = 0f; var foreAng = 0f
+        val bothX = FloatArray(2); val bothY = FloatArray(2)
+        for (side in 0..1) {
+            val sx = if (side == 0) sxL else sxR
+            var up = pose?.upper?.get(side) ?: if (side == 0) -2.0f else -1.14f
+            var fo = pose?.fore?.get(side) ?: if (side == 0) -1.9f else -1.24f
+            var ex: Float; var ey: Float; var wx: Float; var wy: Float
+            if (handTargets != null) {
+                val tx0 = handTargets[side * 2]; val ty0 = handTargets[side * 2 + 1] - lift
+                val px0 = x; val py0 = y - h * 0.42f
+                val c = cos(-tilt); val s0 = sin(-tilt)
+                val tx = px0 + (tx0 - px0) * c - (ty0 - py0) * s0
+                val ty = py0 + (tx0 - px0) * s0 + (ty0 - py0) * c
+                val d = len(tx - sx, ty - sy).coerceAtLeast(1f)
+                val k = if (d > (ua + fa) * 0.98f) d / ((ua + fa) * 0.98f) else 1f
+                val l1 = ua * k; val l2 = fa * k
+                val base = kotlin.math.atan2(ty - sy, tx - sx)
+                val cosA = ((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)).coerceIn(-1f, 1f)
+                val a = kotlin.math.acos(cosA) * (if (side == 0) -1f else 1f) * (if (ty < sy) -1f else 1f)
+                ex = sx + l1 * cos(base + a); ey = sy + l1 * sin(base + a)
+                wx = tx; wy = ty
+                up = kotlin.math.atan2(-(ey - sy), ex - sx); fo = kotlin.math.atan2(-(wy - ey), wx - ex)
+            } else {
+                ex = sx + ua * cos(up); ey = sy - ua * sin(up)
+                wx = ex + fa * cos(fo); wy = ey - fa * sin(fo)
+            }
+            // sleeve, upper arm, forearm, hand
+            g.line(sx, sy, ex, ey, armW * 1.15f, skinDark)
+            g.line(ex, ey, wx, wy, armW * 1.0f, skinDark)
+            g.line(sx, sy, ex, ey, armW, skin)
+            g.line(ex, ey, wx, wy, armW * 0.85f, skin)
+            g.line(sx, sy, sx + (ex - sx) * 0.45f, sy + (ey - sy) * 0.45f, armW * 1.3f, color)
+            val hr = h * 0.045f * mittenScale
+            g.fillCircleRadial(wx, wy, hr, wx - hr * 0.3f, wy - hr * 0.3f, hr * 1.4f, Colors.lighter(skin, 0.15f), skinDark)
+            if (side == propHand) { handX = wx; handY = wy; foreAng = fo }
+            bothX[side] = wx; bothY[side] = wy
+        }
+        // head
+        val hr = h * 0.14f
+        val hy = sy0 - hr * 0.95f
+        val headTilt = pose?.head ?: 0f
+        g.save()
+        g.translate(x, sy0)
+        g.rotate(headTilt)
+        g.translate(-x, -sy0)
+        g.fillCircleRadial(x, hy, hr, x - hr * 0.35f, hy - hr * 0.4f, hr * 1.5f, Colors.lighter(skin, 0.12f), skinDark)
+        g.fillCircle(x - hr * 0.98f, hy + hr * 0.05f, hr * 0.2f, skin) // ears
+        g.fillCircle(x + hr * 0.98f, hy + hr * 0.05f, hr * 0.2f, skin)
+        // hair: a cap of hair over the top of the head
+        g.save(); g.clipRect(x - hr * 1.2f, hy - hr * 1.3f, x + hr * 1.2f, hy - hr * 0.25f)
+        g.fillCircle(x, hy - hr * 0.08f, hr * 1.04f, hair)
+        g.restore()
+        g.fillOval(x - hr * 0.9f, hy - hr * 0.55f, x - hr * 0.1f, hy - hr * 0.15f, hair)
+        // face
+        val ink = 0xFF1E272C.toInt()
+        val blink = (t % 3.9) < 0.12
+        for (s2 in intArrayOf(-1, 1)) {
+            val ex = x + s2 * hr * 0.36f; val eyeY = hy + hr * 0.02f
+            if (blink) g.line(ex - hr * 0.1f, eyeY, ex + hr * 0.1f, eyeY, hr * 0.06f, ink)
+            else { g.fillOval(ex - hr * 0.1f, eyeY - hr * 0.15f, ex + hr * 0.1f, eyeY + hr * 0.15f, ink); g.fillCircle(ex + hr * 0.03f, eyeY - hr * 0.06f, hr * 0.04f, Colors.WHITE) }
+            when (expr) {
+                Expression.FOCUSED -> g.line(ex - s2 * hr * 0.14f, eyeY - hr * 0.26f, ex + s2 * hr * 0.12f, eyeY - hr * 0.2f, hr * 0.06f, hair)
+                Expression.OOPS -> g.line(ex - s2 * hr * 0.14f, eyeY - hr * 0.2f, ex + s2 * hr * 0.12f, eyeY - hr * 0.28f, hr * 0.06f, hair)
+                else -> g.line(ex - hr * 0.12f, eyeY - hr * 0.27f, ex + hr * 0.12f, eyeY - hr * 0.27f, hr * 0.05f, hair)
+            }
+            g.glow(x + s2 * hr * 0.55f, hy + hr * 0.32f, hr * 0.2f, 0x66FF8A80)
+        }
+        g.fillOval(x - hr * 0.07f, hy + hr * 0.12f, x + hr * 0.07f, hy + hr * 0.3f, skinDark) // nose
+        val mouthY = hy + hr * 0.5f
+        when (expr) {
+            Expression.HAPPY -> g.arc(x, mouthY - hr * 0.12f, hr * 0.25f, 0.4f, PI_F - 0.8f, hr * 0.07f, 0xFF8D3B3B.toInt())
+            Expression.EXCITED -> { g.fillOval(x - hr * 0.2f, mouthY - hr * 0.1f, x + hr * 0.2f, mouthY + hr * 0.2f, 0xFF4E1A1A.toInt()); g.fillOval(x - hr * 0.1f, mouthY + hr * 0.06f, x + hr * 0.1f, mouthY + hr * 0.18f, 0xFFE57373.toInt()) }
+            Expression.OOPS -> g.arc(x, mouthY + hr * 0.12f, hr * 0.2f, PI_F + 0.5f, PI_F - 1f, hr * 0.06f, 0xFF8D3B3B.toInt())
+            Expression.FOCUSED -> g.line(x - hr * 0.16f, mouthY, x + hr * 0.16f, mouthY, hr * 0.06f, 0xFF8D3B3B.toInt())
+        }
+        // sweatband in the team colour
+        g.fillRoundRect(x - hr * 0.98f, hy - hr * 0.42f, x + hr * 0.98f, hy - hr * 0.26f, hr * 0.08f, color)
+        g.restore()
+        g.restore()
+        if (prop == Prop.GOLF_CLUB || prop == Prop.PUTTER) {
+            val hx = (bothX[0] + bothX[1]) / 2f; val hy2 = (bothY[0] + bothY[1]) / 2f + lift
+            golfClub(g, hx, hy2, hx - x, hy2 - (sy + lift), h, prop == Prop.PUTTER)
+        } else if (prop != Prop.NONE) {
+            val pa = pose?.propAngle ?: Float.NaN
+            val ph = pose?.propHand ?: -1
+            if (!pa.isNaN() && ph in 0..1) drawProp(g, prop, bothX[ph], bothY[ph] + lift, pa, h, tilt)
+            else drawProp(g, prop, handX, handY + lift, foreAng, h, tilt)
+        }
+        if (shielded) {
+            val cy = y - h * 0.55f
+            g.fillCircleRadial(x, cy, h * 0.62f, x - h * 0.2f, cy - h * 0.25f, h * 0.9f, 0x1880D8FF, 0x5540C4FF)
+            g.strokeCircle(x, cy, h * 0.62f, 6f, 0xCC80D8FF.toInt())
+        }
+    }
+
     private fun face(g: Gfx, x: Float, hy: Float, hr: Float, expr: Expression, t: Double) {
         val blink = (t % 3.7) < 0.12
         val eyeY = hy - hr * 0.12f

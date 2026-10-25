@@ -23,7 +23,7 @@ import kotlin.math.sin
  * matching compact stroke gives a solid return, the wrong one pops the ball up and lets your opponent SMASH.
  */
 class TableTennisGame(env: GameEnv) : RallyGame(env) {
-    override val info = INFO
+    override val info: GameInfo get() = if (env.sporty) SPORTS_INFO else INFO
     override val compactSwings = true
 
     override val cfg = Config(
@@ -92,7 +92,32 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
     override fun render(g: Gfx, inputs: Array<PlayerInput>, time: Double) {
         screenW = g.width
         val w = g.width
-        // cosy hall: warm wall, windows with snow, garlands
+        if (env.sporty) sportsHall(g, w, time) else christmasHall(g, w, time)
+        g.gradientRect(0f, 860f, w, g.height, if (env.sporty) 0xFFC8935A.toInt() else 0xFF6D4C41.toInt(), if (env.sporty) 0xFF8D5E2A.toInt() else 0xFF3E2723.toInt())
+        for (i in 0 until 16) g.line(i * w / 16f, 860f, i * w / 16f - 60f, g.height, 3f, 0x33000000)
+        if (env.sporty) g.line(0f, 950f, w, 950f, 5f, 0xAAFFFFFF.toInt())
+        tableAndLamp(g, w, inputs, time)
+    }
+
+    /** Daylight sports hall: pale walls, high windows, banners. */
+    private fun sportsHall(g: Gfx, w: Float, time: Double) {
+        g.gradientRect(0f, 0f, w, 860f, 0xFFE3E9F0.toInt(), 0xFFB9C5D3.toInt())
+        g.gradientRect(0f, 640f, w, 860f, 0xFF5C7A99.toInt(), 0xFF3F5A78.toInt())
+        for (i in 0 until 5) {
+            val wx = w * (0.1f + i * 0.2f)
+            g.fillRoundRect(wx - 110f, 120f, wx + 110f, 330f, 10f, 0xFFBFE3FF.toInt())
+            g.gradientRect(wx - 100f, 130f, wx + 100f, 320f, 0xFF7FB8EA.toInt(), 0xFFD6EEFF.toInt())
+            g.line(wx, 120f, wx, 330f, 6f, 0xFF90A4AE.toInt())
+        }
+        for (i in 0 until 3) {
+            val bx = w * (0.2f + i * 0.3f)
+            g.fillRect(bx - 120f, 400f, bx + 120f, 480f, if (i == 1) 0xFFE53935.toInt() else 0xFF1E88E5.toInt())
+            g.text(if (i == 1) "TABLE TENNIS" else "LRG CLUB", bx, 440f, 30f, Colors.WHITE)
+        }
+    }
+
+    /** Cosy Christmas hall: warm wall, windows with snow, garlands. */
+    private fun christmasHall(g: Gfx, w: Float, time: Double) {
         g.gradientRect(0f, 0f, w, 860f, 0xFF4A2433.toInt(), 0xFF26121F.toInt())
         // wainscot panels along the wall
         g.gradientRect(0f, 640f, w, 860f, 0xFF3A1A12.toInt(), 0xFF2A120C.toInt())
@@ -109,8 +134,9 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
             Draw.wreathSmall(g, wx, 160f, 30f, time + i)
         }
         Draw.stringLights(g, 0f, w, 120f, time, sag = 40f)
-        g.gradientRect(0f, 860f, w, g.height, 0xFF6D4C41.toInt(), 0xFF3E2723.toInt())
-        for (i in 0 until 16) g.line(i * w / 16f, 860f, i * w / 16f - 60f, g.height, 3f, 0x33000000)
+    }
+
+    private fun tableAndLamp(g: Gfx, w: Float, inputs: Array<PlayerInput>, time: Double) {
         // the lamp over the table
         val lampX = w / 2f
         g.line(lampX, 0f, lampX, 170f, 4f, 0xFF2A1A20.toInt())
@@ -179,7 +205,7 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
         }
         val pose = if (input.avatar.valid) input.avatar else idle
         val expr = if (state == State.POINT_OVER) (if (pointWinner == k) Expression.EXCITED else Expression.OOPS) else if (isReceiver) Expression.FOCUSED else Expression.HAPPY
-        Draw.buddy(g, x, 900f, 330f, c, pose, expr, Prop.PADDLE, input.dominant, time)
+        Draw.person(g, env.sporty, x, 900f, 330f, c, pose, expr, Prop.PADDLE, input.dominant, time, look = k * 3 + 2)
         if (swingAge[k] < 0.2f) {
             val a = 1f - swingAge[k] / 0.2f
             g.strokeCircle(x + (if (k == 0) 70f else -70f), 640f, 60f + 40f * (1f - a), 6f, Colors.withAlpha(Colors.WHITE, 0.6f * a))
@@ -201,7 +227,7 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
         val a = if (fh) -0.3f + 1.6f * swing else 1.3f - 1.6f * swing
         p.upper[1] = -0.6f + a * 0.3f; p.fore[1] = a
         p.valid = true
-        Draw.buddy(g, r.cx, r.bottom - 10f, r.height * 0.8f, env.color(1), p, Expression.FOCUSED, Prop.PADDLE, 1, t)
+        Draw.person(g, env.sporty, r.cx, r.bottom - 10f, r.height * 0.8f, env.color(1), p, Expression.FOCUSED, Prop.PADDLE, 1, t)
         g.text(if (fh) "FOREHAND" else "BACKHAND", r.cx, r.top + 36f, 40f, if (fh) Colors.GOLD else Colors.ICE)
     }
 
@@ -210,6 +236,10 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
     }
 
     companion object {
+        val SPORTS_INFO by lazy { GameInfo(
+            id = "tabletennis_s", title = "Table Tennis", tagline = INFO.tagline, howTo = INFO.howTo, controls = INFO.controls,
+            gentleNotes = INFO.gentleNotes, music = INFO.music, scoreUnit = INFO.scoreUnit, goal = INFO.goal,
+        ) }
         val INFO = GameInfo(
             id = "tabletennis", title = "Table Tennis", tagline = "Quick little forehands and backhands!",
             howTo = listOf(

@@ -2,26 +2,50 @@ package com.clrg.core.games
 
 import com.clrg.core.game.GameEnv
 import com.clrg.core.game.GameInfo
+import com.clrg.core.game.GameStyle
 import com.clrg.core.game.MiniGame
 
-/** The agreed initial collection: ten complete two-player minigames. */
-object GameRegistry {
-    class Entry(val info: GameInfo, val create: (GameEnv) -> MiniGame)
+/** The two halves of the console: everyday sports and arcade games, and the Christmas collection. */
+enum class GameMode(val title: String, val blurb: String) {
+    SPORTS("Sports & Arcade", "Shooting, boxing, archery, tennis and more"),
+    CHRISTMAS("Christmas", "Snowball fights, sleighs, reindeer and festive sports"),
+}
 
-    val all: List<Entry> = listOf(
-        Entry(TennisGame.INFO, ::TennisGame),
-        Entry(SnowballGame.INFO, ::SnowballGame),
-        Entry(PresentCatchGame.INFO, ::PresentCatchGame),
-        Entry(ReindeerRaceGame.INFO, ::ReindeerRaceGame),
-        Entry(BowlingGame.INFO, ::BowlingGame),
-        Entry(TableTennisGame.INFO, ::TableTennisGame),
-        Entry(DanceOffGame.INFO, ::DanceOffGame),
-        Entry(SleighSlalomGame.INFO, ::SleighSlalomGame),
-        Entry(GoalkeeperGame.INFO, ::GoalkeeperGame),
-        Entry(DecorateTreeGame.INFO, ::DecorateTreeGame),
+/** Every minigame, by mode. Some sports appear in both modes with a different look (and their own id). */
+object GameRegistry {
+    class Entry(val info: GameInfo, val mode: GameMode, val style: GameStyle, private val make: (GameEnv) -> MiniGame) {
+        fun create(env: GameEnv): MiniGame { env.style = style; return make(env) }
+    }
+
+    private fun xmas(info: GameInfo, make: (GameEnv) -> MiniGame) = Entry(info, GameMode.CHRISTMAS, GameStyle.CHRISTMAS, make)
+    private fun sport(info: GameInfo, make: (GameEnv) -> MiniGame) = Entry(info, GameMode.SPORTS, GameStyle.SPORTS, make)
+
+    /** The original ten Christmas minigames (ids unchanged, so saved tournaments keep working). */
+    val christmas: List<Entry> = listOf(
+        xmas(TennisGame.INFO, ::TennisGame),
+        xmas(SnowballGame.INFO, ::SnowballGame),
+        xmas(PresentCatchGame.INFO, ::PresentCatchGame),
+        xmas(ReindeerRaceGame.INFO, ::ReindeerRaceGame),
+        xmas(BowlingGame.INFO, ::BowlingGame),
+        xmas(TableTennisGame.INFO, ::TableTennisGame),
+        xmas(DanceOffGame.INFO, ::DanceOffGame),
+        xmas(SleighSlalomGame.INFO, ::SleighSlalomGame),
+        xmas(GoalkeeperGame.INFO, ::GoalkeeperGame),
+        xmas(DecorateTreeGame.INFO, ::DecorateTreeGame),
     )
 
+    val sports: List<Entry> = listOf(
+        sport(ClayShootingGame.INFO, ::ClayShootingGame),
+        sport(TennisGame.SPORTS_INFO, ::TennisGame),
+        sport(TableTennisGame.SPORTS_INFO, ::TableTennisGame),
+        sport(BowlingGame.SPORTS_INFO, ::BowlingGame),
+    )
+
+    val all: List<Entry> = christmas + sports
+
     val ids: List<String> get() = all.map { it.info.id }
+
+    fun forMode(mode: GameMode): List<Entry> = all.filter { it.mode == mode }
 
     fun byId(id: String): Entry? = all.firstOrNull { it.info.id == id }
 }

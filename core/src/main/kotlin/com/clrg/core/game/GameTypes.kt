@@ -90,6 +90,9 @@ class PlayerInput(val index: Int) {
     }
 }
 
+/** How a game looks: the Christmas version, or the everyday sports version (daytime, athletes instead of snowmen). */
+enum class GameStyle { CHRISTMAS, SPORTS }
+
 /** Services a minigame can use. */
 class GameEnv(
     val players: List<PlayerInfo>,
@@ -100,7 +103,11 @@ class GameEnv(
     val clock: () -> Long = System::nanoTime,
     /** Camera and display delays, for judging timing by when a movement was made (off by default). */
     val timing: InputTiming = InputTiming(),
+    /** Christmas or sports look (set by the game registry entry that creates the game). */
+    var style: GameStyle = GameStyle.CHRISTMAS,
 ) {
+    val sporty: Boolean get() = style == GameStyle.SPORTS
+
     val particles = Particles().also { it.reduced = settings.reducedEffects }
     val popups = Popups()
     val shake = Shake().also { it.reduced = settings.reducedEffects }
@@ -133,6 +140,8 @@ class Captions {
             Sfx.WHISTLE -> "whistle"; Sfx.CHEER -> "crowd cheers"; Sfx.WIN -> "victory bells"; Sfx.BAD -> "bonk"
             Sfx.MISS -> "miss"; Sfx.SPLAT -> "splat"; Sfx.PINS -> "pins crash"; Sfx.GO -> "go!"; Sfx.BEEP -> "beep"
             Sfx.CATCH -> "catch chime"; Sfx.SAVE -> "save!"; Sfx.CRASH -> "crash"; Sfx.SHIELD -> "shield up"
+            Sfx.BANG -> "bang"; Sfx.SHATTER -> "clay shatters"; Sfx.PUNCH -> "punch lands"; Sfx.BLOCK -> "blocked"
+            Sfx.RING -> "bell rings"; Sfx.TWANG -> "bow twangs"; Sfx.THUNK -> "arrow hits"
             else -> return
         }
         lines.removeAll { it.text == text }

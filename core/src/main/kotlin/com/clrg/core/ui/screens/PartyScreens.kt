@@ -21,7 +21,8 @@ import com.clrg.core.ui.Ui
 class TournamentSetupScreen(app: GameApp) : Screen(app) {
     private val chosen = app.roster.players.map { it.id }.toMutableSet()
     private var length = TournamentLength.FULL
-    private val games = GameRegistry.ids.toMutableSet()
+    private val modeGames = GameRegistry.forMode(app.mode)
+    private val games = modeGames.map { it.info.id }.toMutableSet()
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
@@ -40,17 +41,17 @@ class TournamentSetupScreen(app: GameApp) : Screen(app) {
             val r = Rect(1040f, 230f + i * 110f, 1800f, 320f + i * 110f)
             if (ui.button(g, "len$i", r, l.label, l.description, selected = length == l, size = 38f)) length = l
         }
-        g.text("Games (tap to include)", 1420f, 600f, 34f, Colors.WHITE)
-        GameRegistry.all.forEachIndexed { i, e ->
+        g.text("${app.mode.title} games (tap to include)", 1420f, 600f, 34f, Colors.WHITE)
+        modeGames.forEachIndexed { i, e ->
             val r = Rect(1040f + (i % 2) * 385f, 630f + (i / 2) * 64f, 1040f + (i % 2) * 385f + 375f, 686f + (i / 2) * 64f)
             val on = e.info.id in games
             if (ui.button(g, "g$i", r, e.info.title, size = 26f, selected = on, accent = Colors.GOOD)) { if (on) { if (games.size > 1) games.remove(e.info.id) } else games.add(e.info.id) }
         }
         val parts = app.roster.players.filter { it.id in chosen }.map { it.id }
-        val preview = Tournament.create(parts, length, GameRegistry.ids.filter { it in games }, 1)
+        val preview = Tournament.create(parts, length, modeGames.map { it.info.id }.filter { it in games }, 1)
         g.text("${parts.size} players - ${preview.matches.size} matches - pairs rotate every match", 520f, 820f, 32f, Colors.GOLD, bold = false)
         if (ui.button(g, "start", Rect(60f, 870f, 980f, 990f), "Start tournament", accent = Colors.GOOD, enabled = parts.size >= 2)) {
-            app.tournament = Tournament.create(parts, length, GameRegistry.ids.filter { it in games }, app.platform.nowNanos())
+            app.tournament = Tournament.create(parts, length, modeGames.map { it.info.id }.filter { it in games }, app.platform.nowNanos())
             app.saveTournament()
             app.replace(TournamentHubScreen(app))
         }

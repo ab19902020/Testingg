@@ -154,7 +154,7 @@ class Voice {
 }
 
 /** Short sound effects, rendered once at start-up into sample buffers. */
-enum class Sfx { HIT, BOUNCE, SWOOSH, CATCH, BAD, THROW, SPLAT, SHIELD, PINS, ROLL, WHISTLE, BEEP, GO, CHEER, POINT, MISS, SELECT, TICK, SPARKLE, JINGLE, GATE, CRASH, PICKUP, PLACE, SAVE, WIN }
+enum class Sfx { HIT, BOUNCE, SWOOSH, CATCH, BAD, THROW, SPLAT, SHIELD, PINS, ROLL, WHISTLE, BEEP, GO, CHEER, POINT, MISS, SELECT, TICK, SPARKLE, JINGLE, GATE, CRASH, PICKUP, PLACE, SAVE, WIN, BANG, SHATTER, PUNCH, BLOCK, RING, TWANG, THUNK, LAUNCH }
 
 object SfxSynth {
     fun render(sfx: Sfx, sr: Int): FloatArray {
@@ -192,6 +192,14 @@ object SfxSynth {
             Sfx.PICKUP -> buf(0.3f).also { note(Instrument.PLUCK, 72f, 0.8f, 0.1f, 0f, it); note(Instrument.PLUCK, 79f, 0.8f, 0.15f, 0.05f, it) }
             Sfx.PLACE -> buf(0.6f).also { note(Instrument.BELL, 79f, 0.6f, 0.1f, 0f, it); note(Instrument.BELL, 84f, 0.7f, 0.3f, 0.07f, it) }
             Sfx.SAVE -> buf(0.5f).also { note(Instrument.KICK, 45f, 0.8f, 0.05f, 0f, it); note(Instrument.GLOCK, 84f, 0.6f, 0.1f, 0.03f, it); note(Instrument.GLOCK, 91f, 0.5f, 0.1f, 0.09f, it) }
+            Sfx.BANG -> burst(sr, 0.45f, 0.9f, 0.012f, 0.35f).also { note(Instrument.KICK, 34f, 1f, 0.12f, 0f, it) }
+            Sfx.SHATTER -> burst(sr, 0.35f, 0.5f, 0.05f, 0.9f).also { for (k in 0..4) note(Instrument.GLOCK, 94f + (k % 3) * 3, 0.3f, 0.03f, 0.01f + k * 0.035f, it) }
+            Sfx.PUNCH -> buf(0.3f).also { note(Instrument.KICK, 33f, 1f, 0.08f, 0f, it); note(Instrument.SNARE, 48f, 0.45f, 0.04f, 0f, it) }
+            Sfx.BLOCK -> buf(0.25f).also { note(Instrument.SNARE, 62f, 0.45f, 0.03f, 0f, it); note(Instrument.KICK, 52f, 0.35f, 0.03f, 0f, it) }
+            Sfx.RING -> buf(1.4f).also { for (k in 0..2) note(Instrument.BELL, 89f, 0.9f, 0.18f, k * 0.28f, it) }
+            Sfx.TWANG -> buf(0.45f).also { note(Instrument.PLUCK, 47f, 0.9f, 0.3f, 0f, it); note(Instrument.PLUCK, 59f, 0.4f, 0.2f, 0f, it) }
+            Sfx.THUNK -> buf(0.35f).also { note(Instrument.KICK, 46f, 0.9f, 0.05f, 0f, it); note(Instrument.PLUCK, 62f, 0.5f, 0.08f, 0.005f, it) }
+            Sfx.LAUNCH -> noiseSweep(sr, 0.3f, 0.35f).also { note(Instrument.KICK, 55f, 0.4f, 0.03f, 0f, it) }
             Sfx.WIN -> buf(2.2f).also {
                 val mel = floatArrayOf(72f, 76f, 79f, 84f, 79f, 84f)
                 val at = floatArrayOf(0f, 0.15f, 0.3f, 0.45f, 0.8f, 0.95f)
@@ -204,6 +212,25 @@ object SfxSynth {
         for (s in b) peak = maxOf(peak, kotlin.math.abs(s))
         val g = minOf(1f, 0.85f / peak)
         for (i in b.indices) b[i] *= g
+        return b
+    }
+
+    /** A sharp noise burst (gunshot, breaking): instant attack, exponential decay [decay] s, low-passed by [bright] 0..1. */
+    private fun burst(sr: Int, sec: Float, vol: Float, decay: Float, bright: Float): FloatArray {
+        val n = (sec * sr).toInt()
+        val b = FloatArray(n)
+        var seed = 7
+        var lp = 0f
+        var lp2 = 0f
+        for (i in 0 until n) {
+            seed = seed * 1103515245 + 12345
+            val w = ((seed ushr 9) and 0xFFFF) / 32768f - 1f
+            val t = i.toFloat() / sr
+            lp += (0.05f + 0.6f * bright) * (w - lp)
+            lp2 += 0.02f * (lp - lp2)
+            val body = lp * exp(-t / decay) + lp2 * 3f * exp(-t / (decay * 6f))
+            b[i] = body * vol
+        }
         return b
     }
 

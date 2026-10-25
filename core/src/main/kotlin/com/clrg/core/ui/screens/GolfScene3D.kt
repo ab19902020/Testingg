@@ -7,6 +7,7 @@ import com.clrg.core.golf.Hole
 import com.clrg.core.golf.Pt
 import com.clrg.core.math.Rect
 import com.clrg.core.math.Rng
+import com.clrg.core.render.Cam3
 import com.clrg.core.render.Colors
 import com.clrg.core.render.Gfx
 import kotlin.math.PI
@@ -22,69 +23,6 @@ import kotlin.math.sqrt
 import kotlin.math.tan
 
 /**
- * A pinhole camera in hole coordinates (metres): x to the right of the tee, y towards the green, z up.
- * No roll: the horizon is always level.
- */
-class Cam3 {
-    var ex = 0f; var ey = 0f; var ez = 2f
-    var fx = 0f; var fy = 1f; var fz = 0f
-    var rx = 1f; var ry = 0f; var rz = 0f
-    var ux = 0f; var uy = 0f; var uz = 1f
-    var focal = 900f
-    var cx = 960f
-    var cy = 540f
-    val near = 0.35f
-
-    fun lookAt(eyeX: Float, eyeY: Float, eyeZ: Float, tx: Float, ty: Float, tz: Float) {
-        ex = eyeX; ey = eyeY; ez = eyeZ
-        var dx = tx - eyeX; var dy = ty - eyeY; var dz = tz - eyeZ
-        val l = sqrt(dx * dx + dy * dy + dz * dz).coerceAtLeast(1e-4f)
-        dx /= l; dy /= l; dz /= l
-        fx = dx; fy = dy; fz = dz
-        // right = forward x up(0,0,1), up = right x forward
-        var r0 = dy; var r1 = -dx
-        val rl = hypot(r0, r1).coerceAtLeast(1e-4f)
-        r0 /= rl; r1 /= rl
-        rx = r0; ry = r1; rz = 0f
-        ux = ry * fz - rz * fy; uy = rz * fx - rx * fz; uz = rx * fy - ry * fx
-    }
-
-    fun viewport(r: Rect, vfovDeg: Float) {
-        cx = r.cx; cy = r.cy
-        focal = (r.height / 2f) / tan((vfovDeg * PI / 360.0).toFloat())
-    }
-
-    fun depth(x: Float, y: Float, z: Float) = (x - ex) * fx + (y - ey) * fy + (z - ez) * fz
-    fun camX(x: Float, y: Float, z: Float) = (x - ex) * rx + (y - ey) * ry + (z - ez) * rz
-    fun camY(x: Float, y: Float, z: Float) = (x - ex) * ux + (y - ey) * uy + (z - ez) * uz
-
-    /** Screen y of the horizon (where the flat ground meets the sky). */
-    fun horizonY(): Float {
-        val hl = hypot(fx, fy).coerceAtLeast(1e-4f)
-        val hx = fx / hl; val hy = fy / hl
-        val d = hx * fx + hy * fy
-        val u = hx * ux + hy * uy
-        return cy - focal * u / d.coerceAtLeast(1e-3f)
-    }
-
-    /** Heading of the camera (radians, 0 = towards the green). */
-    val yaw: Float get() = atan2(fx, fy)
-
-    // last projection
-    var px = 0f; var py = 0f; var pd = 0f
-
-    /** Projects a point; false when it is behind the camera. */
-    fun project(x: Float, y: Float, z: Float): Boolean {
-        val d = depth(x, y, z)
-        pd = d
-        if (d < near) return false
-        px = cx + focal * camX(x, y, z) / d
-        py = cy - focal * camY(x, y, z) / d
-        return true
-    }
-}
-
-/**
  * Christmas Golf in 3D: the hole seen from behind the ball, a camera that follows the shot down the fairway, a
  * green you look along when putting, and a snowman golfer copying the player's swing. Drawn with the ordinary 2D
  * drawing calls (polygons projected through [Cam3]), so it works on every phone the rest of the game runs on.
@@ -98,6 +36,8 @@ class GolfScene3D {
     private val wantLook = floatArrayOf(0f, 40f, 0f)
     private var snapNext = true
     var vfov = 52f
+    /** Summer course (sports mode): green land and hills, no snow, a golfer in a polo shirt instead of a snowman. */
+    var summer = false
     private var wantVfov = 52f
 
     /** What to show besides the course. */
@@ -260,7 +200,8 @@ class GolfScene3D {
         val hy = cam.horizonY()
         sky(g, r, hy, time)
         // the snowy land all around, lighter towards the horizon
-        g.gradientRect(r.left, max(r.top, hy), r.right, r.bottom, 0xFFDDE9F6.toInt(), 0xFFF7FBFF.toInt())
+        if (summer) g.gradientRect(r.left, max(r.top, hy), r.right, r.bottom, 0xFF86B46A.toInt(), 0xFF5F9447.toInt())
+        else g.gradientRect(r.left, max(r.top, hy), r.right, r.bottom, 0xFFDDE9F6.toInt(), 0xFFF7FBFF.toInt())
         ground(g, h, time, x)
         objects(g, h, time, x)
         g.restore()
@@ -279,7 +220,7 @@ class GolfScene3D {
         // two ranges of snowy mountains, far away (they turn with the camera, they do not come closer)
         for (layer in 0..1) {
             val amp = if (layer == 0) 120f else 70f
-            val col = if (layer == 0) 0xFF8FB0D6.toInt() else 0xFFB9CFE8.toInt()
+            val col = if (summer) (if (layer == 0) 0xFF6F9A78.toInt() else 0xFF94B89A.toInt()) else if (layer == 0) 0xFF8FB0D6.toInt() else 0xFFB9CFE8.toInt()
             val n = 48
             var k = 0
             val w = r.width
@@ -292,8 +233,10 @@ class GolfScene3D {
             screen[k++] = r.right; screen[k++] = hz + 2f
             screen[k++] = r.left; screen[k++] = hz + 2f
             // snowy tops fading into blue-grey slopes
-            g.fillPolygonGradient(screen, n + 3, hz - amp * 1.1f, hz, if (layer == 0) 0xFFF2F7FF.toInt() else 0xFFE3EEFA.toInt(), col)
+            val topCol = if (summer) (if (layer == 0) 0xFF8FB496.toInt() else 0xFFB4CDB6.toInt()) else if (layer == 0) 0xFFF2F7FF.toInt() else 0xFFE3EEFA.toInt()
+            g.fillPolygonGradient(screen, n + 3, hz - amp * 1.1f, hz, topCol, col)
         }
+        if (summer) return
         // light falling snow
         val rng = Rng(5)
         for (i in 0 until 40) {
@@ -527,6 +470,7 @@ class GolfScene3D {
             val tw = w * (1f - tier * 0.24f)
             screen[0] = bx - tw; screen[1] = tb; screen[2] = bx + tw; screen[3] = tb; screen[4] = bx; screen[5] = tt
             g.fillPolygon(screen, 3, if (tier == 1) mid else dark)
+            if (summer) continue
             // snow resting on the tier
             screen[0] = bx - tw * 0.45f; screen[1] = tt + (tb - tt) * 0.45f; screen[2] = bx + tw * 0.45f; screen[3] = tt + (tb - tt) * 0.45f; screen[4] = bx; screen[5] = tt
             g.fillPolygon(screen, 3, snow)
@@ -631,12 +575,26 @@ class GolfScene3D {
         val cz0 = (hz + clubLen * (cos(ca) * e1z - sin(ca) * e2z)).coerceAtLeast(0.02f)
         val handsNearer = cam.depth(hx, hy, hz) < cam.depth(gx, gy, 0.9f)
         if (!handsNearer) clubAndArms(g, sx, sy, sz, face, hx, hy, hz, cx0, cy0, cz0, x.club)
-        for (p in parts) {
+        for ((i, p) in parts.withIndex()) {
             if (!pt(face.x * p[0], face.y * p[0], p[1])) continue
             val r = p[2] * cam.focal / cam.pd
-            g.fillCircleRadial(cam.px, cam.py, r, cam.px - r * 0.35f, cam.py - r * 0.4f, r * 1.5f, Colors.WHITE, 0xFFC5D5E8.toInt())
+            if (summer) {
+                // trousers, polo shirt in the player's colour, head
+                val (c0, c1) = when (i) { 0 -> 0xFF5D6D7E.toInt() to 0xFF2E3B48.toInt(); 1 -> Colors.lighter(col, 0.25f) to Colors.darker(col, 0.7f); else -> 0xFFF6D2B4.toInt() to 0xFFC99A78.toInt() }
+                if (i == 0) g.fillRoundRect(cam.px - r * 0.7f, cam.py - r, cam.px + r * 0.7f, cam.py + r, r * 0.3f, c1)
+                else g.fillCircleRadial(cam.px, cam.py, r, cam.px - r * 0.35f, cam.py - r * 0.4f, r * 1.5f, c0, c1)
+            } else g.fillCircleRadial(cam.px, cam.py, r, cam.px - r * 0.35f, cam.py - r * 0.4f, r * 1.5f, Colors.WHITE, 0xFFC5D5E8.toInt())
         }
-        // scarf and hat in the player's colour
+        // summer: a cap in the player's colour; winter: scarf and hat
+        if (summer) {
+            if (pt(face.x * lean * 1.6f, face.y * lean * 1.6f, 1.47f)) {
+                val r = 0.18f * cam.focal / cam.pd
+                g.fillOval(cam.px - r, cam.py - r * 0.6f, cam.px + r, cam.py + r * 0.2f, col)
+                g.fillOval(cam.px - r * 0.2f, cam.py - r * 0.05f, cam.px + r * 1.3f, cam.py + r * 0.25f, Colors.darker(col, 0.7f))
+            }
+            if (handsNearer) clubAndArms(g, sx, sy, sz, face, hx, hy, hz, cx0, cy0, cz0, x.club)
+            return
+        }
         if (pt(face.x * lean * 1.4f, face.y * lean * 1.4f, 1.18f)) {
             val r = 0.2f * cam.focal / cam.pd
             g.fillRoundRect(cam.px - r, cam.py - r * 0.25f, cam.px + r, cam.py + r * 0.25f, r * 0.2f, col)
@@ -656,7 +614,7 @@ class GolfScene3D {
             if (!cam.project(sx + across.x * 0.2f * s, sy + across.y * 0.2f * s, sz)) continue
             val ax = cam.px; val ay = cam.py
             if (!cam.project(hx, hy, hz)) continue
-            g.line(ax, ay, cam.px, cam.py, max(2f, 0.05f * cam.focal / cam.pd), 0xFF6D4C41.toInt())
+            g.line(ax, ay, cam.px, cam.py, max(2f, 0.05f * cam.focal / cam.pd), if (summer) 0xFFE8BC98.toInt() else 0xFF6D4C41.toInt())
         }
         if (!cam.project(hx, hy, hz)) return
         val hxs = cam.px; val hys = cam.py
@@ -665,7 +623,7 @@ class GolfScene3D {
         g.line(hxs, hys, cam.px, cam.py, max(1.5f, 0.02f * cam.focal / cam.pd), 0xFFCFD8DC.toInt())
         val head = max(2.5f, (if (club == Club.PUTTER) 0.05f else 0.07f) * cam.focal / cam.pd)
         g.fillCircle(cam.px, cam.py, head, if (club == Club.DRIVER || club == Club.WOOD) 0xFF37474F.toInt() else 0xFF90A4AE.toInt())
-        g.fillCircle(hxs, hys, mitt, Colors.CANDY)
+        g.fillCircle(hxs, hys, mitt, if (summer) 0xFFF5F5F5.toInt() else Colors.CANDY)
     }
 
     companion object {

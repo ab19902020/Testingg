@@ -29,7 +29,7 @@ class CrashReportFlowTest {
     """.trimIndent() + "\n" + (1..40).joinToString("\n") { "  at some.long.package.name.ClassNumber$it.methodWithAVeryLongNameThatNeedsWrapping(SourceFile.kt:$it)" }
 
     private val platform = NullPlatform(MemoryStore()).also { it.crash = report }
-    private val app = GameApp(platform, AudioEngine())
+    private val app = GameApp(platform, AudioEngine()).also { it.mode = com.clrg.core.games.GameMode.CHRISTMAS }
     private var now = 0L
 
     private fun frames(n: Int, g: com.clrg.core.render.Gfx = NullGfx()) = repeat(n) { now += 16_666_667L; platform.clock = now; app.frame(g, now) }

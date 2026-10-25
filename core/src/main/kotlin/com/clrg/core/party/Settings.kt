@@ -73,6 +73,8 @@ data class Settings(
     var sharpMotion: Boolean = true,
     var skeletonOverlay: Boolean = false,
     var simulatedInput: Boolean = false,
+    /** Which half of the console the menus show: "SPORTS" or "CHRISTMAS". */
+    var mode: String = "SPORTS",
 ) {
     fun toJson(): String = Json.stringify(
         mapOf(
@@ -85,7 +87,7 @@ data class Settings(
             "displayDelayMs" to displayDelayMs, "timingMeasured" to timingMeasured, "preferTvAsSecondScreen" to preferTvAsSecondScreen,
             "showCameraInset" to showCameraInset, "devOverlay" to devOverlay, "skeletonOverlay" to skeletonOverlay,
             "heldObjects" to heldObjects.entries.joinToString("|") { "${it.key}=${it.value}" }, "useHeldObjects" to useHeldObjects,
-            "sharpMotion" to sharpMotion,
+            "sharpMotion" to sharpMotion, "mode" to mode,
         ),
     )
 
@@ -126,6 +128,7 @@ data class Settings(
                 useHeldObjects = o.bool("useHeldObjects", d.useHeldObjects),
                 sharpMotion = o.bool("sharpMotion", d.sharpMotion),
                 skeletonOverlay = o.bool("skeletonOverlay", d.skeletonOverlay),
+                mode = o.str("mode", d.mode).takeIf { it == "SPORTS" || it == "CHRISTMAS" } ?: d.mode,
                 // simulated input is never restored from storage: it must be switched on deliberately each session
                 simulatedInput = false,
             )

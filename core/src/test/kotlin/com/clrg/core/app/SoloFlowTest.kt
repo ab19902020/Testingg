@@ -31,7 +31,7 @@ import kotlin.test.assertTrue
 class SoloFlowTest {
     private val store = MemoryStore()
     private val platform = NullPlatform(store)
-    private val app = GameApp(platform, AudioEngine())
+    private val app = GameApp(platform, AudioEngine()).also { it.mode = com.clrg.core.games.GameMode.CHRISTMAS }
     private val g = NullGfx()
     private var now = 0L
 

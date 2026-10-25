@@ -32,7 +32,7 @@ import kotlin.math.sin
  * every pin = 1 point, STRIKE = 15 for the frame, SPARE = 13 for the frame (no carry-over bonuses).
  */
 class BowlingGame(env: GameEnv) : MiniGame(env) {
-    override val info = INFO
+    override val info: GameInfo get() = if (env.sporty) SPORTS_INFO else INFO
 
     companion object {
         const val FRAMES = 5
@@ -57,6 +57,11 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
             gentleNotes = "Reduced movement: a small low-to-chest swing rolls the ball. Seated: swing from your lap up to your chest.",
             music = MusicTrack.GAME, scoreUnit = "points", goal = "Highest total after 5 frames",
         )
+
+        val SPORTS_INFO by lazy { GameInfo(
+            id = "bowling_s", title = "Bowling", tagline = INFO.tagline, howTo = INFO.howTo, controls = INFO.controls,
+            gentleNotes = INFO.gentleNotes, music = INFO.music, scoreUnit = INFO.scoreUnit, goal = INFO.goal,
+        ) }
 
         fun pinSpots(): List<Pair<Float, Float>> {
             val out = ArrayList<Pair<Float, Float>>()
@@ -267,8 +272,17 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
     // ---------------------------------------------------------------- rendering
     override fun render(g: Gfx, inputs: Array<PlayerInput>, time: Double) {
         screenW = g.width
-        g.gradientRect(0f, 0f, g.width, g.height, 0xFF2E1636.toInt(), 0xFF0E0818.toInt())
-        Draw.stringLights(g, 0f, g.width, 130f, time, sag = 30f)
+        if (env.sporty) {
+            // bowling alley: dark hall with neon strips
+            g.gradientRect(0f, 0f, g.width, g.height, 0xFF141B33.toInt(), 0xFF070A14.toInt())
+            for ((i, c) in listOf(0xFF00E5FF.toInt(), 0xFFFF4081.toInt(), 0xFFFFEA00.toInt()).withIndex()) {
+                val y = 128f + i * 9f
+                g.line(0f, y, g.width, y, 4f, Colors.withAlpha(c, 0.7f + 0.3f * kotlin.math.sin(time.toFloat() * 2f + i)))
+            }
+        } else {
+            g.gradientRect(0f, 0f, g.width, g.height, 0xFF2E1636.toInt(), 0xFF0E0818.toInt())
+            Draw.stringLights(g, 0f, g.width, 130f, time, sag = 30f)
+        }
         for (k in 0..1) renderLane(g, lanes[k], inputs[k], time)
         Hud.divider(g)
         Hud.topBar(g, env, intArrayOf(lanes[0].total, lanes[1].total), "Frame ${minOf(FRAMES, maxOf(lanes[0].frame, lanes[1].frame) + 1)} of $FRAMES", "Strike = 15, Spare = 13", inputs)
@@ -308,7 +322,7 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
         Draw.lightPool(g, cx, sy(HEAD_PIN_Y + 0.4f), scale(HEAD_PIN_Y) * 0.9f, scale(HEAD_PIN_Y) * 0.2f, 0x55FFF3D6)
         // aiming arrows
         for (i in -2..2) Draw.tri(g, sx(i * 0.12f - 0.03f, 4.5f), sy(4.5f), sx(i * 0.12f + 0.03f, 4.5f), sy(4.5f), sx(i * 0.12f, 4.2f), sy(4.2f), 0xAA8D3B3B.toInt())
-        g.fillRect(sx(-LANE_HALF, 0.02f), sy(0.02f) - 3f, sx(LANE_HALF, 0.02f), sy(0.02f) + 3f, Colors.CANDY)
+        g.fillRect(sx(-LANE_HALF, 0.02f), sy(0.02f) - 3f, sx(LANE_HALF, 0.02f), sy(0.02f) + 3f, if (env.sporty) 0xFF263238.toInt() else Colors.CANDY)
         // back wall of the pin deck and the light falling on the pins
         g.gradientRect(r.left, sy(far) - 160f, r.right, sy(far), 0xFF2A1830.toInt(), 0xFF120A16.toInt())
         g.glow(cx, sy(far) - 40f, scale(far) * 1.6f, 0x40FFE7B0)
@@ -334,9 +348,9 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
         }
         // bowler (mirrors the player's arms) in the corner
         val pose = if (inp.avatar.valid) inp.avatar else AvatarPose().apply { valid = true; upper[1] = -1.4f; fore[1] = -1.5f; upper[0] = -1.9f; fore[0] = -1.8f }
-        Draw.buddy(g, r.left + 120f + (lane.startX / 0.3f) * 40f, r.bottom - 30f, 260f, env.color(lane.k), pose,
+        Draw.person(g, env.sporty, r.left + 120f + (lane.startX / 0.3f) * 40f, r.bottom - 30f, 260f, env.color(lane.k), pose,
             if (lane.message.startsWith("STRIKE") || lane.message.startsWith("SPARE")) Expression.EXCITED else Expression.FOCUSED,
-            if (lane.state == LaneState.AIM) Prop.BOWLING_BALL else Prop.NONE, inp.dominant, time)
+            if (lane.state == LaneState.AIM) Prop.BOWLING_BALL else Prop.NONE, inp.dominant, time, look = lane.k * 3)
         // scorecard
         drawCard(g, lane, Rect(r.left + 30f, 160f, r.right - 30f, 250f))
         if (lane.state == LaneState.DONE) g.text(if (lanes.all { it.state == LaneState.DONE }) "Total ${lane.total}" else "Total ${lane.total} - waiting...", cx, 520f, 56f, env.color(lane.k), outline = Colors.BLACK, outlineWidth = 6f)
@@ -403,7 +417,7 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
         val a = if (phase < 0.45f) -1.57f - 0.6f * (phase / 0.45f) else -2.17f + 2.0f * ((phase - 0.45f) / 0.25f).coerceIn(0f, 1f)
         p.upper[1] = a; p.fore[1] = a + 0.1f
         p.valid = true
-        Draw.buddy(g, r.cx - r.width * 0.2f, r.bottom - 10f, r.height * 0.8f, env.color(1), p, Expression.FOCUSED, if (phase < 0.6f) Prop.BOWLING_BALL else Prop.NONE, 1, t)
+        Draw.person(g, env.sporty, r.cx - r.width * 0.2f, r.bottom - 10f, r.height * 0.8f, env.color(1), p, Expression.FOCUSED, if (phase < 0.6f) Prop.BOWLING_BALL else Prop.NONE, 1, t)
         if (phase >= 0.6f) {
             val k = (phase - 0.6f) / 0.4f
             drawBall(g, r.cx - r.width * 0.1f + r.width * 0.4f * k, r.bottom - 30f, 22f, env.color(1), k * 10f)

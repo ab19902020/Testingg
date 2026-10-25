@@ -15,7 +15,7 @@ class PointerLookTest {
     fun pointerHalfWayThroughAChoice() {
         val store = MemoryStore()
         val platform = NullPlatform(store)
-        val app = GameApp(platform, AudioEngine())
+        val app = GameApp(platform, AudioEngine()).also { it.mode = com.clrg.core.games.GameMode.CHRISTMAS }
         app.settings.simulatedInput = true
         app.applySettings()
         app.sim.controlsVisible = false

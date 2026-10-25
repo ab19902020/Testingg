@@ -14,7 +14,9 @@ import com.clrg.core.ui.Ui
 
 /** Shared drawing for menu screens. */
 object Common {
-    fun backdrop(g: Gfx, app: GameApp) = Draw.festiveBackdrop(g, app.time, !app.settings.reducedEffects)
+    fun backdrop(g: Gfx, app: GameApp) =
+        if (app.christmasMode) Draw.festiveBackdrop(g, app.time, !app.settings.reducedEffects)
+        else com.clrg.core.render.SportsDraw.backdrop(g, app.time, !app.settings.reducedEffects)
 
     fun header(g: Gfx, ui: Ui, title: String, back: Boolean = true, app: GameApp? = null): Boolean {
         g.gradientRect(0f, 0f, g.width, 140f, 0xEE06122A.toInt(), 0x0006122A)

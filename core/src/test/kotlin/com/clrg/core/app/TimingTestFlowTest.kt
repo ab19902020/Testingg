@@ -29,7 +29,7 @@ import kotlin.test.assertTrue
 class TimingTestFlowTest {
     private val store = MemoryStore()
     private val platform = NullPlatform(store)
-    private val app = GameApp(platform, AudioEngine())
+    private val app = GameApp(platform, AudioEngine()).also { it.mode = com.clrg.core.games.GameMode.CHRISTMAS }
     private val g = NullGfx()
     private var now = 1_000_000_000L
     private val p1 = Puppet(0.55f, 0.35f, 0.25f).apply { trackHint = 11; appearance = floatArrayOf(0.8f, 0.1f, 0.1f, 0.8f, 0.1f, 0.7f, 0.1f, 0.1f, 0.8f, 0.1f) }

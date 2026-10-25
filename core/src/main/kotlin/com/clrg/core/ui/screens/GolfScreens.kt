@@ -49,7 +49,7 @@ class GolfSetupScreen(app: GameApp) : Screen(app) {
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
-        Common.header(g, ui, "Christmas Golf", app = app)
+        Common.header(g, ui, if (app.christmasMode) "Christmas Golf" else "Golf", app = app)
         g.text("Take turns - only the player whose turn it is needs to stand in front of the camera.", g.width / 2f, 165f, 32f, app.theme.dim, bold = false)
 
         // players, in turn order
@@ -285,7 +285,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
 
     // ------------------------------------------------------------------ drawing
 
-    private val scene = GolfScene3D()
+    private val scene = GolfScene3D().also { it.summer = !app.christmasMode }
     private val extras = GolfScene3D.Extras()
     private var shownAngle = 0f
 

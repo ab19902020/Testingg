@@ -12,6 +12,7 @@ import com.clrg.core.math.clamp01
 import com.clrg.core.render.Align
 import com.clrg.core.render.Colors
 import com.clrg.core.render.Draw
+import com.clrg.core.render.SportsDraw
 import com.clrg.core.render.Expression
 import com.clrg.core.render.Gfx
 import com.clrg.core.render.Prop
@@ -20,7 +21,7 @@ import kotlin.math.sin
 
 /** 1. Christmas Tennis - side-on festive court, first to seven points. */
 class TennisGame(env: GameEnv) : RallyGame(env) {
-    override val info = INFO
+    override val info: GameInfo get() = if (env.sporty) SPORTS_INFO else INFO
 
     override val cfg = Config(
         // a big court and unhurried shots: plenty of time to see the ball coming and swing
@@ -49,27 +50,43 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
     override fun render(g: Gfx, inputs: Array<PlayerInput>, time: Double) {
         screenW = g.width
         val w = g.width
-        Draw.nightSky(g, Rect(0f, 0f, w, g.height), time)
-        Draw.aurora(g, Rect(0f, 0f, w, 600f), time, 0.8f)
-        Draw.moon(g, w * 0.5f, 210f, 44f)
-        Draw.pineRow(g, -30f, w, 610f, 0xFF0F2E25.toInt(), 110f, 5)
-        Draw.pineRow(g, 0f, w, 640f, 0xFF143A2E.toInt(), 150f, 3)
-        Draw.snowHills(g, Rect(0f, 0f, w, g.height), 700f)
-        Draw.floodlight(g, w * 0.04f, 760f, 260f, toScreenX(-0.45f), groundY + 40f)
-        Draw.floodlight(g, w * 0.96f, 760f, 260f, toScreenX(0.45f), groundY + 40f)
-        // crowd of snowmen behind the court
-        for (i in 0 until 9) {
-            val cx = w * (0.08f + i * 0.105f)
-            val bob = sin((time * 3 + i).toFloat()) * 4f
-            Draw.buddy(g, cx, 742f + bob, 110f, com.clrg.core.render.PlayerColors.get(i + 2), null, Expression.HAPPY, t = time + i)
+        if (env.sporty) {
+            // summer centre court: blue sky, packed stands, sponsor boards
+            SportsDraw.daySky(g, 0f, 0f, w, 470f, time)
+            SportsDraw.crowd(g, 0f, w, 380f, 690f, time, rows = 5)
+            g.gradientRect(0f, 690f, w, 752f, 0xFF1B5E20.toInt(), 0xFF0D3B12.toInt())
+            for (i in 0 until 6) {
+                val bx = w * (0.02f + i * 0.165f)
+                g.fillRoundRect(bx, 700f, bx + w * 0.14f, 742f, 6f, if (i % 2 == 0) 0xFF0D47A1.toInt() else 0xFF2E7D32.toInt())
+                g.text(if (i % 2 == 0) "LIVING ROOM OPEN" else "ACE!", bx + w * 0.07f, 721f, 24f, Colors.WHITE)
+            }
+        } else {
+            Draw.nightSky(g, Rect(0f, 0f, w, g.height), time)
+            Draw.aurora(g, Rect(0f, 0f, w, 600f), time, 0.8f)
+            Draw.moon(g, w * 0.5f, 210f, 44f)
+            Draw.pineRow(g, -30f, w, 610f, 0xFF0F2E25.toInt(), 110f, 5)
+            Draw.pineRow(g, 0f, w, 640f, 0xFF143A2E.toInt(), 150f, 3)
+            Draw.snowHills(g, Rect(0f, 0f, w, g.height), 700f)
+            Draw.floodlight(g, w * 0.04f, 760f, 260f, toScreenX(-0.45f), groundY + 40f)
+            Draw.floodlight(g, w * 0.96f, 760f, 260f, toScreenX(0.45f), groundY + 40f)
+            // crowd of snowmen behind the court
+            for (i in 0 until 9) {
+                val cx = w * (0.08f + i * 0.105f)
+                val bob = sin((time * 3 + i).toFloat()) * 4f
+                Draw.buddy(g, cx, 742f + bob, 110f, com.clrg.core.render.PlayerColors.get(i + 2), null, Expression.HAPPY, t = time + i)
+            }
+            Draw.stringLights(g, 0f, w, 10f, time)
         }
-        Draw.stringLights(g, 0f, w, 10f, time)
         // court
         val l = toScreenX(-1f); val r = toScreenX(1f)
         val apron = floatArrayOf(l - 150f, groundY + front + 40f, r + 150f, groundY + front + 40f, r + 10f, groundY - back - 28f, l - 10f, groundY - back - 28f)
-        g.fillPolygonGradient(apron, 4, groundY - back - 28f, groundY + front + 40f, 0xFF2E6F8E.toInt(), 0xFF1B4F6B.toInt())
+        if (env.sporty) {
+            g.fillRect(0f, 752f, w, g.height, 0xFF2E7D4F.toInt())
+            g.fillPolygonGradient(apron, 4, groundY - back - 28f, groundY + front + 40f, 0xFF3C9A5F.toInt(), 0xFF2B7A48.toInt())
+        } else g.fillPolygonGradient(apron, 4, groundY - back - 28f, groundY + front + 40f, 0xFF2E6F8E.toInt(), 0xFF1B4F6B.toInt())
         val pts = floatArrayOf(l - 85f, groundY + front, r + 85f, groundY + front, r - 36f, groundY - back, l + 36f, groundY - back)
-        g.fillPolygonGradient(pts, 4, groundY - back, groundY + front, 0xFFD24B43.toInt(), 0xFF962A2A.toInt())
+        if (env.sporty) g.fillPolygonGradient(pts, 4, groundY - back, groundY + front, 0xFF2F6DB5.toInt(), 0xFF1F4F8A.toInt())
+        else g.fillPolygonGradient(pts, 4, groundY - back, groundY + front, 0xFFD24B43.toInt(), 0xFF962A2A.toInt())
         Draw.lightPool(g, w / 2f, groundY - 5f, (r - l) * 0.55f, 85f, 0x33FFF6D8)
         g.polyline(pts, 4, 6f, Colors.WHITE, closed = true)
         g.line(l - 36f, groundY - back * 0.57f, r + 36f, groundY - back * 0.57f, 3f, 0x66FFFFFF)
@@ -101,8 +118,11 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
         }
         g.line(bxN + 12f, backY - nh - 16f, bxN + 12f, backY + 4f, 8f, 0xFFECEFF1.toInt())
         g.line(bxN - 12f, frontY - nh - 16f, bxN - 12f, frontY + 4f, 8f, 0xFFECEFF1.toInt())
-        g.line(bxN + 12f, backY - nh, bxN - 12f, frontY - nh, 12f, Colors.GOLD)
-        for (i in 0..8) { val f = i / 8f; g.fillCircle(bxN + 12f - 24f * f, backY + (frontY - backY) * f - nh, 6f, if (i % 2 == 0) Colors.CANDY else Colors.PINE) }
+        if (env.sporty) g.line(bxN + 12f, backY - nh, bxN - 12f, frontY - nh, 10f, Colors.WHITE)
+        else {
+            g.line(bxN + 12f, backY - nh, bxN - 12f, frontY - nh, 12f, Colors.GOLD)
+            for (i in 0..8) { val f = i / 8f; g.fillCircle(bxN + 12f - 24f * f, backY + (frontY - backY) * f - nh, 6f, if (i % 2 == 0) Colors.CANDY else Colors.PINE) }
+        }
         // ball, shadow, timing ring
         if (ballVisible) {
             val sx = toScreenX(bx)
@@ -146,7 +166,7 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
             isReceiver -> Expression.FOCUSED
             else -> Expression.HAPPY
         }
-        Draw.buddy(g, x, groundY, 320f, c, pose, expr, Prop.RACKET, input.dominant, time)
+        Draw.person(g, env.sporty, x, groundY, 320f, c, pose, expr, Prop.RACKET, input.dominant, time, look = k * 3 + 1)
         if (swingAge[k] < 0.25f) {
             val a = 1f - swingAge[k] / 0.25f
             val dir = if (k == 0) 1f else -1f
@@ -162,7 +182,7 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
         return p
     }
 
-    override fun demo(g: Gfx, r: Rect, t: Double) = demoSwing(g, r, t, Prop.RACKET, env.color(0), wide = true)
+    override fun demo(g: Gfx, r: Rect, t: Double) = demoSwing(g, r, t, Prop.RACKET, env.color(0), wide = true, sporty = env.sporty)
 
     companion object {
         val INFO = GameInfo(
@@ -179,7 +199,19 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
         )
 
         /** Shared instruction illustration: an arm swinging through a ball. */
-        fun demoSwing(g: Gfx, r: Rect, t: Double, prop: Prop, color: Int, wide: Boolean) {
+        val SPORTS_INFO = GameInfo(
+            id = "tennis_s", title = "Tennis", tagline = "Swing your arm like a racket!",
+            howTo = listOf(
+                "Your player runs to the ball for you - you just swing.",
+                "When the ball comes to YOUR side, swing your arm as the ring closes. Swing like a racket: back, then through.",
+                "The swing nearest the right moment counts. On time = fast, deep shot. Way too early = OUT, way too late = NET.",
+                "Rallies get faster and the timing tighter. Serve by swinging. First to 7 points wins!",
+            ),
+            controls = INFO.controls, gentleNotes = INFO.gentleNotes,
+            music = MusicTrack.GAME, scoreUnit = "points", goal = "First to 7 points",
+        )
+
+        fun demoSwing(g: Gfx, r: Rect, t: Double, prop: Prop, color: Int, wide: Boolean, sporty: Boolean = false) {
             val phase = (t % 1.6).toFloat() / 1.6f
             val p = AvatarPose()
             val swingK = clamp01((phase - 0.45f) / 0.2f)
@@ -188,7 +220,7 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
             p.upper[1] = -ang * 0.7f; p.fore[1] = -ang * 0.5f + 0.4f
             p.valid = true
             val cx = r.cx - r.width * 0.12f
-            Draw.buddy(g, cx, r.bottom - 20f, r.height * 0.8f, color, p, Expression.FOCUSED, prop, 1, t)
+            Draw.person(g, sporty, cx, r.bottom - 20f, r.height * 0.8f, color, p, Expression.FOCUSED, prop, 1, t)
             val bxp = r.right - r.width * (0.1f + 0.5f * phase.coerceAtMost(0.55f) / 0.55f)
             if (phase < 0.6f) g.fillCircle(bxp, r.bottom - r.height * 0.45f, r.height * 0.05f, 0xFFE6FF5C.toInt())
             else g.fillCircle(r.right - r.width * 0.1f * (phase - 0.6f) * 10f, r.bottom - r.height * (0.45f + (phase - 0.6f)), r.height * 0.05f, 0xFFE6FF5C.toInt())

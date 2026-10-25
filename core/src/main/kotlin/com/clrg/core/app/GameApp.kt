@@ -161,6 +161,13 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
 
     fun playerColor(i: Int) = PlayerColors.get(activePlayers[i].colorIndex)
 
+    /** Sports & Arcade or Christmas: which games the menus offer (remembered between sessions). */
+    var mode: com.clrg.core.games.GameMode
+        get() = if (settings.mode == "CHRISTMAS") com.clrg.core.games.GameMode.CHRISTMAS else com.clrg.core.games.GameMode.SPORTS
+        set(m) { if (settings.mode != m.name) { settings.mode = m.name; settings.save(store) } }
+
+    val christmasMode: Boolean get() = mode == com.clrg.core.games.GameMode.CHRISTMAS
+
     // ------------------------------------------------------------------ camera choice
 
     /** The camera in use: the one chosen in settings, else the one the platform opened by default. */

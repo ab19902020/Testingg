@@ -27,11 +27,13 @@ class MainMenuScreen(app: GameApp) : Screen(app) {
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
         val t = app.time
+        val xmas = app.christmasMode
         // title
-        val bob = sin(t * 1.5).toFloat() * 6f
-        g.text("Christmas", g.width / 2f, 120f + bob, 92f * app.theme.textScale, Colors.GOLD, outline = 0xFF6D2B00.toInt(), outlineWidth = 10f)
-        g.text("Living Room Games", g.width / 2f, 215f + bob, 76f * app.theme.textScale, Colors.WHITE, outline = 0xFF0B1A33.toInt(), outlineWidth = 9f)
-        // two buddies waving on either side
+        val bob = sin(t * 1.5).toFloat() * 5f
+        if (xmas) g.text("Christmas", g.width / 2f, 78f + bob, 66f * app.theme.textScale, Colors.GOLD, outline = 0xFF6D2B00.toInt(), outlineWidth = 9f)
+        else g.text("Sports & Arcade", g.width / 2f, 78f + bob, 56f * app.theme.textScale, 0xFF80D8FF.toInt(), outline = 0xFF0B1A33.toInt(), outlineWidth = 8f)
+        g.text("Living Room Games", g.width / 2f, 152f + bob, 76f * app.theme.textScale, Colors.WHITE, outline = 0xFF0B1A33.toInt(), outlineWidth = 9f)
+        // two players waving on either side
         for (k in 0..1) {
             val x = if (k == 0) g.width * 0.1f else g.width * 0.9f
             val p = com.clrg.core.gesture.AvatarPose().apply {
@@ -40,19 +42,26 @@ class MainMenuScreen(app: GameApp) : Screen(app) {
                 upper[k] = 1.2f + 0.2f * wave; fore[k] = 1.8f + 0.4f * wave
                 upper[1 - k] = if (k == 0) -1.2f else -1.9f; fore[1 - k] = if (k == 0) -1.3f else -1.8f
             }
-            Draw.buddy(g, x, g.height - 170f, 330f, app.playerColor(k), p, Expression.HAPPY, t = t + k)
+            Draw.person(g, !xmas, x, g.height - 170f, 330f, app.playerColor(k), p, Expression.HAPPY, t = t + k, look = k * 3 + 1)
             g.text(app.activePlayers[k].name, x, g.height - 120f, 34f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 5f)
         }
-        val bw = 640f; val bh = 112f; val gap = 22f
+        // mode switch: the two halves of the console
+        val tabW = 560f; val tabH = 92f; val tabY = 205f
+        val sportsTab = Rect(g.width / 2f - tabW - 10f, tabY, g.width / 2f - 10f, tabY + tabH)
+        val xmasTab = Rect(g.width / 2f + 10f, tabY, g.width / 2f + tabW + 10f, tabY + tabH)
+        if (ui.button(g, "modeSports", sportsTab, com.clrg.core.games.GameMode.SPORTS.title, "Shooting, boxing, archery, tennis...", accent = 0xFF40C4FF.toInt(), selected = !xmas, size = 38f)) app.mode = com.clrg.core.games.GameMode.SPORTS
+        if (ui.button(g, "modeXmas", xmasTab, com.clrg.core.games.GameMode.CHRISTMAS.title, "Snowballs, sleighs, reindeer...", accent = Colors.CANDY, selected = xmas, size = 38f)) app.mode = com.clrg.core.games.GameMode.CHRISTMAS
+        val bw = 640f; val bh = 100f; val gap = 18f
         val left = g.width / 2f - bw - gap / 2f
         val right = g.width / 2f + gap / 2f
-        var y = 280f
+        var y = 322f
         fun row(): Pair<Rect, Rect> { val a = Rect(left, y, left + bw, y + bh); val b = Rect(right, y, right + bw, y + bh); y += bh + gap; return a to b }
+        val count = com.clrg.core.games.GameRegistry.forMode(app.mode).size
         val (qm, solo) = row()
-        if (ui.button(g, "quick", qm, "Quick Match", "Two players, pick a game", accent = Colors.GOLD)) app.push(GameSelectScreen(app))
+        if (ui.button(g, "quick", qm, "Quick Match", "Two players, $count games", accent = Colors.GOLD)) app.push(GameSelectScreen(app))
         if (ui.button(g, "solo", solo, "Play Solo", "You against the computer", accent = Colors.GOLD)) app.push(SoloSetupScreen(app))
         val (golf, pt) = row()
-        if (ui.button(g, "golf", golf, "Christmas Golf", "1 to 4 players, taking turns", accent = Colors.GOOD)) app.push(GolfSetupScreen(app))
+        if (ui.button(g, "golf", golf, if (xmas) "Christmas Golf" else "Golf", "1 to 4 players, taking turns", accent = Colors.GOOD)) app.push(GolfSetupScreen(app))
         if (ui.button(g, "tournament", pt, "Party Tournament", app.tournament?.let { if (it.isComplete) "Last tournament finished" else "Continue: match ${it.currentIndex + 1} of ${it.matches.size}" } ?: "Whole-family scoreboard", accent = Colors.CANDY)) {
             if (app.tournament != null) app.push(TournamentHubScreen(app)) else app.push(TournamentSetupScreen(app))
         }
@@ -60,7 +69,7 @@ class MainMenuScreen(app: GameApp) : Screen(app) {
         if (ui.button(g, "players", pl, "Players", "${app.roster.players.size} family members", accent = Colors.ICE)) app.push(PlayersScreen(app))
         if (ui.button(g, "setup", tv, "TV & Camera Setup", if (app.calibrated) "Players calibrated" else "Connect, place, calibrate", accent = Colors.GOOD)) SetupFlow.startFull(app)
         val (st, help) = row()
-        if (ui.button(g, "settings", st, "Settings", "Sound, accessibility, camera", accent = Colors.ICE)) app.push(SettingsScreen(app))
+        if (ui.button(g, "settings", st, "Settings", "Sound, motion, objects, camera", accent = Colors.ICE)) app.push(SettingsScreen(app))
         if (ui.button(g, "help", help, "How to Play", "Controls for every game", accent = Colors.GOOD)) app.push(HelpScreen(app))
         // hands-free: anyone in front of the camera can steer the menus with a raised hand
         run {
@@ -75,7 +84,7 @@ class MainMenuScreen(app: GameApp) : Screen(app) {
             g.text(hint, g.width / 2f, y + 31f, 30f, Colors.GOLD, bold = false)
             y += 62f
         }
-        if (app.canSwitchCamera && ui.button(g, "camSwitch", Rect(30f, 70f, 440f, 160f), app.cameraLabel(), "tap to switch", accent = Colors.ICE, size = 34f)) app.switchCamera()
+        if (app.canSwitchCamera && ui.button(g, "camSwitch", Rect(30f, 40f, 440f, 130f), app.cameraLabel(), "tap to switch", accent = Colors.ICE, size = 34f)) app.switchCamera()
         val dev = app.platform.deviceInfo()
         if (dev.meetsTarget == false) {
             g.text("Note: this phone is below the recommended Snapdragon 8 Gen 3 class - tracking may be slower.", g.width / 2f, y + 20f, 28f, Colors.WARN, bold = false)
@@ -111,37 +120,43 @@ class PermissionScreen(app: GameApp) : Screen(app) {
     }
 }
 
-/** Grid of the ten games with live instruction animations. */
+/** Grid of the current mode's games with live instruction animations. */
 class GameSelectScreen(app: GameApp, private val onPick: ((String) -> Unit)? = null) : Screen(app) {
+    private val entries = GameRegistry.forMode(app.mode)
     private val demoGames: List<MiniGame> by lazy {
-        val env = GameEnv(
-            listOf(PlayerInfo(0, 0, "P1", app.playerColor(0), Hand.RIGHT, MovementMode.STANDARD), PlayerInfo(1, 0, "P2", app.playerColor(1), Hand.RIGHT, MovementMode.STANDARD)),
-            Settings(), 1,
-        )
-        GameRegistry.all.map { it.create(env) }
+        entries.map { e ->
+            val env = GameEnv(
+                listOf(PlayerInfo(0, 0, "P1", app.playerColor(0), Hand.RIGHT, MovementMode.STANDARD), PlayerInfo(1, 0, "P2", app.playerColor(1), Hand.RIGHT, MovementMode.STANDARD)),
+                Settings(), 1,
+            )
+            e.create(env)
+        }
     }
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
-        Common.header(g, ui, "Choose a game", app = app)
+        Common.header(g, ui, "Choose a game - ${app.mode.title}", app = app)
         val cols = 5
+        val rows = (entries.size + cols - 1) / cols
         val margin = 40f
         val cw = (g.width - margin * 2 - (cols - 1) * 24f) / cols
-        val ch = 400f
-        GameRegistry.all.forEachIndexed { i, e ->
+        val avail = g.height - 170f - 70f
+        val ch = minOf(400f, (avail - (rows - 1) * 24f) / rows)
+        val artH = ch - 150f
+        entries.forEachIndexed { i, e ->
             val c = i % cols; val rr = i / cols
             val x = margin + c * (cw + 24f)
-            val y = 170f + rr * (ch + 30f)
+            val y = 160f + rr * (ch + 24f)
             val r = Rect(x, y, x + cw, y + ch)
             val act = ui.button(g, "game_${e.info.id}", r, "", accent = Colors.GOLD)
-            val art = Rect(r.left + 16f, r.top + 16f, r.right - 16f, r.top + 250f)
+            val art = Rect(r.left + 14f, r.top + 14f, r.right - 14f, r.top + artH)
             g.save(); g.clipRect(art.left, art.top, art.right, art.bottom)
             g.fillRoundRect(art.left, art.top, art.right, art.bottom, 18f, 0xFF0E2A4F.toInt())
             demoGames[i].demo(g, art.inset(10f), app.time)
             g.restore()
-            g.text("${i + 1}. ${e.info.title}", r.cx, r.top + 290f, ui.fit(g, "${i + 1}. ${e.info.title}", 36f * app.theme.textScale, cw - 30f), Colors.WHITE)
-            g.text(e.info.tagline, r.cx, r.top + 340f, ui.fit(g, e.info.tagline, 26f, cw - 30f, false), app.theme.dim, bold = false)
-            g.text(e.info.goal, r.cx, r.top + 374f, ui.fit(g, e.info.goal, 22f, cw - 30f, false), Colors.GOLD, bold = false)
+            g.text(e.info.title, r.cx, art.bottom + 34f, ui.fit(g, e.info.title, 36f * app.theme.textScale, cw - 30f), Colors.WHITE)
+            g.text(e.info.tagline, r.cx, art.bottom + 76f, ui.fit(g, e.info.tagline, 26f, cw - 30f, false), app.theme.dim, bold = false)
+            g.text(e.info.goal, r.cx, art.bottom + 108f, ui.fit(g, e.info.goal, 22f, cw - 30f, false), Colors.GOLD, bold = false)
             if (act) {
                 if (onPick != null) onPick.invoke(e.info.id) else app.push(PlayerPickScreen(app, e.info.id))
             }
