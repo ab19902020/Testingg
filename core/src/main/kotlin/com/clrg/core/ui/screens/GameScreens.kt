@@ -22,6 +22,8 @@ import com.clrg.core.tracking.Hand
 import com.clrg.core.tracking.LostReason
 import com.clrg.core.tracking.MovementMode
 import com.clrg.core.tracking.SlotState
+import com.clrg.core.ui.Icon
+import com.clrg.core.ui.Icons
 import com.clrg.core.ui.Screen
 import com.clrg.core.ui.Ui
 
@@ -99,59 +101,99 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
             else -> Unit
         }
         if (session.phase == Phase.PLAYING || session.phase == Phase.COUNTDOWN || session.phase == Phase.RESUMING) {
-            if (ui.button(g, "pause", Rect(g.width / 2f - 300f, g.height - 96f, g.width / 2f - 160f, g.height - 20f), "II", size = 36f, accent = Colors.ICE)) session.userPause()
+            if (ui.button(g, "pause", Rect(g.width / 2f - 300f, g.height - 96f, g.width / 2f - 160f, g.height - 20f), "", size = 36f, accent = Colors.ICE, icon = Icon.PAUSE)) session.userPause()
             if (app.settings.showCameraInset) PreviewView.draw(g, app, Rect(g.width / 2f - 125f, g.height - 150f, g.width / 2f + 125f, g.height - 12f), labels = false)
         }
     }
 
     private fun instructions(g: Gfx, ui: Ui) {
         val info = entry.info
-        g.fillRect(0f, 0f, g.width, g.height, 0xCC06122A.toInt())
-        val r = Rect(60f, 40f, g.width - 60f, g.height - 40f)
-        Draw.panel(g, r, app.theme.panel, app.theme.panelBorder)
-        g.text(info.title, r.cx, r.top + 70f, 76f * app.theme.textScale, Colors.GOLD)
-        g.text(info.goal, r.cx, r.top + 135f, 38f, Colors.WHITE, bold = false)
-        val demo = Rect(r.left + 40f, r.top + 180f, r.left + 760f, r.top + if (info.objectKind != null) 520f else 640f)
+        val accent = if (app.christmasMode) Colors.CANDY else 0xFF40C4FF.toInt()
+        g.fillRect(0f, 0f, g.width, g.height, 0xD006122A.toInt())
+        val r = Rect(50f, 30f, g.width - 50f, g.height - 30f)
+        g.fillRoundRect(r.left + 6f, r.top + 14f, r.right + 6f, r.bottom + 16f, 34f, 0x55000000)
+        g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, 34f, 0xF2132B52.toInt(), 0xF20A1630.toInt())
+        g.strokeRoundRect(r.left, r.top, r.right, r.bottom, 34f, 3f, Colors.withAlpha(accent, 0.6f))
+        // title band
+        g.fillRoundRectGradient(r.left, r.top, r.right, r.top + 150f, 34f, Colors.withAlpha(accent, 0.28f), 0x00000000)
+        g.text(info.title, r.left + 60f, r.top + 62f, 70f * app.theme.textScale, Colors.GOLD, Align.LEFT, outline = 0xAA000000.toInt(), outlineWidth = 6f)
+        g.text(info.goal, r.left + 62f, r.top + 120f, 34f, Colors.WHITE, Align.LEFT, bold = false)
+        var cx = r.left + 70f + g.measureText(info.title, 70f * app.theme.textScale) + 30f
+        for (t in GameRegistry.tags(gameId)) { cx += ui.chip(g, cx, r.top + 62f, t, accent, 24f) + 10f }
+        if (ui.button(g, "quitIntro", Rect(r.right - 250f, r.top + 30f, r.right - 30f, r.top + 110f), "Back", size = 34f, accent = Colors.ICE, icon = Icon.BACK)) app.pop()
+        // left: the live preview, and the "play with" choice
+        val hasObj = info.objectKind != null
+        val demo = Rect(r.left + 40f, r.top + 175f, r.left + 820f, r.top + if (hasObj) 590f else 760f)
+        g.fillRoundRect(demo.left - 4f, demo.top - 4f, demo.right + 4f, demo.bottom + 4f, 24f, Colors.withAlpha(accent, 0.5f))
         g.fillRoundRect(demo.left, demo.top, demo.right, demo.bottom, 20f, 0xFF0E2A4F.toInt())
         g.save(); g.clipRect(demo.left, demo.top, demo.right, demo.bottom)
         session.game.demo(g, demo.inset(20f), app.time)
         g.restore()
-        g.text("How to play", demo.cx, demo.bottom + 30f, 26f, app.theme.dim, bold = false)
-        var y = r.top + 210f
-        for (line in info.howTo) {
-            g.text(line, r.left + 800f, y, ui.fit(g, line, 36f * app.theme.textScale, r.right - r.left - 840f, false), Colors.WHITE, Align.LEFT, bold = false)
-            y += 66f
+        val wl = "Watch how to play"
+        val ww = g.measureText(wl, 24f, false) + 70f
+        g.fillRoundRect(demo.left + 16f, demo.top + 16f, demo.left + 16f + ww, demo.top + 58f, 21f, 0xAA000000.toInt())
+        Icons.draw(g, Icon.PLAY, demo.left + 42f, demo.top + 37f, 22f, Colors.GOLD)
+        g.text(wl, demo.left + 16f + ww / 2f + 14f, demo.top + 37f, 24f, Colors.WHITE, bold = false)
+        info.objectKind?.let { kind -> objectChoice(g, ui, Rect(demo.left, demo.bottom + 26f, demo.right, r.bottom - 175f), kind) }
+        // right: steps and controls, scaled down to fit when a game has a lot to explain
+        val tx = r.left + 880f
+        val tw = r.right - 60f - tx
+        val bottomLimit = r.bottom - 200f
+        val gentle = session.env.players.any { it.mode != MovementMode.STANDARD }
+        var f = 1f
+        var stepLines: List<List<String>> = emptyList()
+        for (attempt in 0 until 6) {
+            stepLines = info.howTo.map { Common.wrap(g, it, 30f * f * app.theme.textScale, tw - 70f, false).take(3) }
+            val need = 50f * f + stepLines.sumOf { (38f * f * it.size + 16f * f).toDouble() }.toFloat() + 56f * f + info.controls.size * 64f * f + (if (gentle) 70f * f else 0f)
+            if (r.top + 200f + need <= bottomLimit || f <= 0.66f) break
+            f -= 0.07f
         }
-        y += 10f
+        g.text("How to play", tx, r.top + 200f, 34f * f, accent, Align.LEFT)
+        var y = r.top + 200f + 50f * f
+        stepLines.forEachIndexed { i, lines ->
+            g.fillCircle(tx + 20f, y, 20f * f, Colors.withAlpha(accent, 0.85f))
+            g.text("${i + 1}", tx + 20f, y, 24f * f, Colors.BLACK)
+            for ((j, l) in lines.withIndex()) g.text(l, tx + 58f, y + j * 38f * f, 30f * f * app.theme.textScale, Colors.WHITE, Align.LEFT, bold = false)
+            y += 38f * f * lines.size + 16f * f
+        }
+        y += 8f * f
+        g.text("Moves", tx, y, 34f * f, accent, Align.LEFT)
+        y += 48f * f
+        val gw = minOf(470f, tw * 0.52f)
+        val rh = 28f * f
         for ((gesture, action) in info.controls) {
-            g.fillRoundRect(r.left + 800f, y - 30f, r.left + 1260f, y + 30f, 20f, 0xFF1C3A66.toInt())
-            g.text(gesture, r.left + 1030f, y, ui.fit(g, gesture, 30f, 440f), Colors.GOLD)
-            g.text("->  $action", r.left + 1290f, y, 30f, Colors.WHITE, Align.LEFT, bold = false)
-            y += 76f
+            g.fillRoundRectGradient(tx, y - rh, tx + gw, y + rh, rh, 0xFF24497F.toInt(), 0xFF16305A.toInt())
+            g.strokeRoundRect(tx, y - rh, tx + gw, y + rh, rh, 2f, Colors.withAlpha(Colors.GOLD, 0.5f))
+            g.text(gesture, tx + gw / 2f, y, ui.fit(g, gesture, 28f * f, gw - 30f), Colors.GOLD)
+            Icons.draw(g, Icon.PLAY, tx + gw + 30f, y, 22f * f, Colors.withAlpha(Colors.WHITE, 0.7f))
+            g.text(action, tx + gw + 56f, y, ui.fit(g, action, 28f * f, tw - gw - 60f, false), Colors.WHITE, Align.LEFT, bold = false)
+            y += 64f * f
         }
-        info.objectKind?.let { kind -> objectChoice(g, ui, Rect(demo.left, demo.bottom + 60f, demo.right, r.bottom - 185f), kind) }
-        if (session.env.players.any { it.mode != MovementMode.STANDARD }) {
-            g.text(info.gentleNotes, r.left + 800f, y + 10f, ui.fit(g, info.gentleNotes, 28f, r.right - r.left - 840f, false), Colors.ICE, Align.LEFT, bold = false)
+        if (gentle) {
+            for ((j, l) in Common.wrap(g, info.gentleNotes, 26f * f, tw, false).take(2).withIndex()) g.text(l, tx, y + 4f + j * 32f * f, 26f * f, Colors.ICE, Align.LEFT, bold = false)
         }
-        // readiness
+        // readiness: a card per player, and Start in the middle
+        val by = r.bottom - 110f
         for (k in 0..1) {
-            val x = if (k == 0) r.left + 90f else r.cx + 260f
             val c = app.playerColor(k)
+            val card = if (k == 0) Rect(r.left + 40f, by - 60f, r.cx - 230f, by + 60f) else Rect(r.cx + 230f, by - 60f, r.right - 40f, by + 60f)
+            val ready = session.ready[k]
+            g.fillRoundRect(card.left, card.top, card.right, card.bottom, 30f, if (ready) Colors.withAlpha(Colors.GOOD, 0.18f) else 0x66000000)
+            g.strokeRoundRect(card.left, card.top, card.right, card.bottom, 30f, 3f, Colors.withAlpha(if (ready) Colors.GOOD else c, 0.8f))
             val slot = app.tracker.slots[k]
-            val prog = if (session.ready[k]) 1f else app.controls[k].raiseProgress
-            Draw.progressRing(g, x, r.bottom - 120f, 50f, prog, if (session.ready[k]) Colors.GOOD else c, 12f)
-            g.text(if (session.ready[k]) "OK" else "P${k + 1}", x, r.bottom - 120f, 34f, if (session.ready[k]) Colors.GOOD else c)
+            val prog = if (ready) 1f else app.controls[k].raiseProgress
+            val rx = card.left + 66f
+            Draw.progressRing(g, rx, card.cy, 42f, prog, if (ready) Colors.GOOD else c, 11f)
+            if (ready) Icons.draw(g, Icon.CHECK, rx, card.cy, 44f, Colors.GOOD) else Icons.draw(g, Icon.HAND, rx, card.cy, 40f, c)
             val msg = when {
                 session.cpu[k] -> "${app.activePlayers[k].name} (CPU, ${app.cpuLevel?.label ?: ""}) is ready"
-                session.ready[k] -> "${app.activePlayers[k].name} is ready"
+                ready -> "${app.activePlayers[k].name} is ready"
                 !slot.isPlaying -> "${app.activePlayers[k].name}: step into view"
                 else -> "${app.activePlayers[k].name}: raise a hand to start"
             }
-            val maxW = if (k == 0) r.cx - 230f - (x + 80f) else r.right - 40f - (x + 80f)
-            g.text(msg, x + 80f, r.bottom - 120f, ui.fit(g, msg, 34f, maxW, false), Colors.WHITE, Align.LEFT, bold = false)
+            g.text(msg, rx + 66f, card.cy, ui.fit(g, msg, 32f, card.right - rx - 90f, false), Colors.WHITE, Align.LEFT, bold = false)
         }
-        if (ui.button(g, "start", Rect(r.cx - 200f, r.bottom - 170f, r.cx + 200f, r.bottom - 70f), "Start", accent = Colors.GOOD)) session.startNow()
-        if (ui.button(g, "quitIntro", Rect(r.right - 260f, r.top + 30f, r.right - 30f, r.top + 110f), "Back", size = 34f, accent = Colors.ICE)) app.pop()
+        if (ui.button(g, "start", Rect(r.cx - 200f, by - 58f, r.cx + 200f, by + 58f), "Start", accent = Colors.GOOD, size = 50f, icon = Icon.PLAY)) session.startNow()
     }
 
     /** "Play with": each camera player picks their hands or their learned object, or teaches one now. */
@@ -201,20 +243,28 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
     }
 
     private fun pauseMenu(g: Gfx, ui: Ui) {
-        g.fillRect(0f, 0f, g.width, g.height, 0xCC000000.toInt())
-        ui.title(g, "Paused", 170f, 90f)
-        val w = 620f
-        var y = 270f
-        fun b(id: String, label: String, accent: Int = Colors.GOLD): Boolean { val r = Rect(g.width / 2f - w / 2f, y, g.width / 2f + w / 2f, y + 110f); y += 130f; return ui.button(g, id, r, label, accent = accent) }
-        if (b("resume", "Resume", Colors.GOOD)) session.userResume()
-        if (b("restart", "Restart match")) app.replace(GameScreen(app, gameId, match))
-        if (b("recalibrate", "Recalibrate players")) app.replace(FramingScreen(app, { app.replace(GameScreen(app, gameId, match)) }))
-        if (app.canSwitchCamera && b("camSwitch", if (app.currentCamera()?.front == true) "Switch to back camera" else "Switch to front camera", Colors.ICE)) {
+        g.fillRect(0f, 0f, g.width, g.height, 0xC0000814.toInt())
+        val w = 700f
+        val items = if (app.canSwitchCamera) 5 else 4
+        val ph = 210f + items * 122f
+        val p = Rect(g.width / 2f - w / 2f - 50f, (g.height - ph) / 2f - 20f, g.width / 2f + w / 2f + 50f, (g.height + ph) / 2f - 20f)
+        g.fillRoundRect(p.left + 8f, p.top + 16f, p.right + 8f, p.bottom + 18f, 36f, 0x66000000)
+        g.fillRoundRectGradient(p.left, p.top, p.right, p.bottom, 36f, 0xF2183563.toInt(), 0xF20B1A36.toInt())
+        g.strokeRoundRect(p.left, p.top, p.right, p.bottom, 36f, 3f, 0x885D8BC9.toInt())
+        Icons.draw(g, Icon.PAUSE, g.width / 2f - 150f, p.top + 80f, 56f, Colors.GOLD)
+        g.text("Paused", g.width / 2f + 30f, p.top + 80f, 76f * app.theme.textScale, Colors.WHITE)
+        g.text("${entry.info.title}  -  ${session.game.status() ?: "match on hold"}", g.width / 2f, p.top + 145f, 28f, app.theme.dim, bold = false)
+        var y = p.top + 190f
+        fun b(id: String, label: String, icon: Icon, accent: Int = Colors.GOLD): Boolean { val r = Rect(g.width / 2f - w / 2f, y, g.width / 2f + w / 2f, y + 104f); y += 122f; return ui.button(g, id, r, label, accent = accent, icon = icon, size = 42f) }
+        if (b("resume", "Resume", Icon.PLAY, Colors.GOOD)) session.userResume()
+        if (b("restart", "Restart match", Icon.RESTART)) app.replace(GameScreen(app, gameId, match))
+        if (b("recalibrate", "Recalibrate players", Icon.CALIBRATE)) app.replace(FramingScreen(app, { app.replace(GameScreen(app, gameId, match)) }))
+        if (app.canSwitchCamera && b("camSwitch", if (app.currentCamera()?.front == true) "Switch to back camera" else "Switch to front camera", Icon.CAMERA, Colors.ICE)) {
             app.switchCamera()
             app.replace(FramingScreen(app, { app.replace(GameScreen(app, gameId, match)) }))
         }
-        if (b("quit", if (match != null) "Back to tournament" else "Quit to menu", Colors.BAD)) app.pop()
-        if (app.displayLost) g.text("The TV was disconnected", g.width / 2f, y + 10f, 36f, Colors.WARN)
+        if (b("quit", if (match != null) "Back to tournament" else "Quit to menu", if (match != null) Icon.TROPHY else Icon.HOME, Colors.BAD)) app.pop()
+        if (app.displayLost) g.text("The TV was disconnected", g.width / 2f, p.bottom + 40f, 36f, Colors.WARN)
     }
 
     private fun finish() {
@@ -238,33 +288,64 @@ class ResultsScreen(app: GameApp, val result: MatchResult, private val gameId: S
     override val ambience: Ambience? = null
     override val room: Room? = null
 
+    private var age = 0f
+
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
+        age += dt
         Common.backdrop(g, app)
         val info = GameRegistry.byId(gameId)!!.info
-        g.text(info.title, g.width / 2f, 70f, 44f, app.theme.dim)
-        val head = if (result.winner < 0) "It's a tie!" else "${app.activePlayers[result.winner].name} wins!"
-        val hc = if (result.winner < 0) Colors.GOLD else app.playerColor(result.winner)
-        g.text(head, g.width / 2f, 170f, 110f * app.theme.textScale, hc, outline = Colors.BLACK, outlineWidth = 10f)
+        val tie = result.winner < 0
+        val head = if (tie) "It's a tie!" else "${app.activePlayers[result.winner].name} wins!"
+        val hc = if (tie) Colors.GOLD else app.playerColor(result.winner)
+        g.text(info.title.uppercase(), g.width / 2f, 62f, 34f, app.theme.dim)
+        val pop = (age / 0.35f).coerceAtMost(1f).let { 0.6f + 0.4f * it + 0.08f * kotlin.math.sin(it * 3.14f) }
+        g.save(); g.translate(g.width / 2f, 150f); g.scale(pop); g.translate(-g.width / 2f, -150f)
+        g.glow(g.width / 2f, 150f, 420f, Colors.withAlpha(hc, 0.25f))
+        g.text(head, g.width / 2f, 150f, 104f * app.theme.textScale, hc, outline = Colors.BLACK, outlineWidth = 10f)
+        g.restore()
+        // podium on the left, match stats on the right
+        val baseY = 880f
         for (k in 0..1) {
-            val x = if (k == 0) g.width * 0.3f else g.width * 0.7f
+            val x = if (k == 0) 380f else 760f
             val win = result.winner == k
-            Draw.person(g, !app.christmasMode, x, 720f, 380f, app.playerColor(k), null, if (win || result.winner < 0) com.clrg.core.render.Expression.EXCITED else com.clrg.core.render.Expression.OOPS, t = app.time + k)
-            if (win) Draw.star(g, x, 300f, 50f, Colors.GOLD, app.time.toFloat())
-            g.text(app.activePlayers[k].name, x, 780f, 50f, app.playerColor(k))
-            g.text("${result.scores[k]} ${result.scoreUnit}", x, 845f, 54f, Colors.WHITE)
+            val bh = if (tie) 170f else if (win) 230f else 130f
+            val rise = (age / 0.6f).coerceAtMost(1f)
+            val top = baseY - bh * rise
+            val col = if (win || tie) Colors.GOLD else 0xFFB0BEC5.toInt()
+            g.fillRoundRect(x - 165f + 6f, top + 10f, x + 165f + 6f, baseY + 10f, 16f, 0x55000000)
+            g.fillRoundRectGradient(x - 165f, top, x + 165f, baseY, 16f, Colors.lighter(col, 0.2f), Colors.darker(col, 0.6f))
+            g.fillRoundRectGradient(x - 165f, top, x + 165f, top + 26f, 16f, Colors.lighter(col, 0.5f), Colors.lighter(col, 0.1f))
+            g.text(if (tie) "=" else if (win) "1" else "2", x, top + (baseY - top) * 0.45f + 10f, minOf(110f, bh * 0.6f), Colors.withAlpha(Colors.BLACK, 0.35f))
+            Draw.person(g, !app.christmasMode, x, top, 330f, app.playerColor(k), null,
+                if (win || tie) com.clrg.core.render.Expression.EXCITED else com.clrg.core.render.Expression.OOPS, t = app.time + k)
+            if (win) {
+                Icons.draw(g, Icon.TROPHY, x, top - 420f + 6f * kotlin.math.sin(app.time.toFloat() * 3f), 110f, Colors.GOLD)
+                Draw.star(g, x - 90f, top - 380f, 18f, Colors.GOLD, app.time.toFloat())
+                Draw.star(g, x + 92f, top - 360f, 14f, Colors.GOLD, -app.time.toFloat())
+            }
+            g.text(app.activePlayers[k].name, x, baseY + 44f, 40f, app.playerColor(k), outline = Colors.BLACK, outlineWidth = 5f)
+            g.text("${result.scores[k]} ${result.scoreUnit}", x, baseY + 92f, 40f, Colors.WHITE)
         }
-        var y = 300f
-        for (d in result.details) { g.text(d, g.width / 2f, y, 32f, Colors.WHITE, bold = false); y += 52f }
-        val by = 930f
+        val sp = Rect(1020f, 250f, g.width - 80f, 880f)
+        g.fillRoundRectGradient(sp.left, sp.top, sp.right, sp.bottom, 30f, 0xCC16305A.toInt(), 0xCC0A1630.toInt())
+        g.strokeRoundRect(sp.left, sp.top, sp.right, sp.bottom, 30f, 3f, 0x885D8BC9.toInt())
+        g.text("Match stats", sp.left + 40f, sp.top + 50f, 36f, Colors.GOLD, Align.LEFT)
+        var y = sp.top + 110f
+        for (d in result.details.take(8)) {
+            g.fillCircle(sp.left + 52f, y, 8f, Colors.GOLD)
+            g.text(d, sp.left + 76f, y, ui.fit(g, d, 32f, sp.width - 110f, false), Colors.WHITE, Align.LEFT, bold = false)
+            y += 60f
+        }
+        val by = 960f
         if (match != null) {
-            if (ui.button(g, "continue", Rect(g.width / 2f - 320f, by, g.width / 2f + 320f, by + 110f), "Continue tournament", accent = Colors.GOOD)) app.pop()
+            if (ui.button(g, "continue", Rect(g.width / 2f - 340f, by, g.width / 2f + 340f, by + 100f), "Continue tournament", accent = Colors.GOOD, icon = Icon.TROPHY)) app.pop()
         } else {
-            if (ui.button(g, "rematch", Rect(g.width / 2f - 960f + 100f, by, g.width / 2f - 340f, by + 110f), "Rematch", accent = Colors.GOOD)) {
+            if (ui.button(g, "rematch", Rect(80f, by, 620f, by + 100f), "Rematch", accent = Colors.GOOD, icon = Icon.RESTART)) {
                 app.pop()
                 SetupFlow.start(app) { app.replace(GameScreen(app, gameId, null)) }
             }
-            if (ui.button(g, "another", Rect(g.width / 2f - 310f, by, g.width / 2f + 310f, by + 110f), "Choose another game")) app.replace(if (app.solo) SoloFlow.gameSelect(app) else GameSelectScreen(app))
-            if (ui.button(g, "menu", Rect(g.width / 2f + 340f, by, g.width / 2f + 860f, by + 110f), "Main menu", accent = Colors.ICE)) app.popToRoot()
+            if (ui.button(g, "another", Rect(g.width / 2f - 320f, by, g.width / 2f + 320f, by + 100f), "Choose another game", icon = Icon.VERSUS)) app.replace(if (app.solo) SoloFlow.gameSelect(app) else GameSelectScreen(app))
+            if (ui.button(g, "menu", Rect(g.width - 620f, by, g.width - 80f, by + 100f), "Main menu", accent = Colors.ICE, icon = Icon.HOME)) app.popToRoot()
         }
     }
 

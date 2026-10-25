@@ -8,6 +8,7 @@ import com.clrg.core.math.Rng
 import com.clrg.core.math.clamp01
 import com.clrg.core.math.easeOutBack
 import com.clrg.core.render.Colors
+import com.clrg.core.render.Draw
 import com.clrg.core.render.Gfx
 import com.clrg.core.tracking.PlayerSlot
 
@@ -206,9 +207,14 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
                 val n = left.toInt() + 1
                 val k = clamp01((1.0 - (left - left.toInt())).toFloat() * 3f)
                 val s = 220f * easeOutBack(k)
-                g.fillRect(0f, 0f, g.width, g.height, 0x33000000)
-                if (phase == Phase.RESUMING) g.text("Get ready!", g.width / 2, g.height / 2 - 230f, 64f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 8f)
-                g.text(n.coerceIn(1, 3).toString(), g.width / 2, g.height / 2, s.coerceAtLeast(10f), Colors.GOLD, outline = 0xFF7A3B00.toInt(), outlineWidth = 16f)
+                g.fillRect(0f, 0f, g.width, g.height, 0x40000000)
+                if (phase == Phase.RESUMING) g.text("Get ready!", g.width / 2, g.height / 2 - 250f, 64f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 8f)
+                // a disc behind the number, and a ring that sweeps round each second
+                val frac = (left - left.toInt()).toFloat()
+                g.glow(g.width / 2, g.height / 2, 300f, 0x55FFD54F)
+                g.fillCircle(g.width / 2, g.height / 2, 170f * easeOutBack(clamp01(k)), 0xCC0B1A36.toInt())
+                Draw.progressRing(g, g.width / 2, g.height / 2, 170f, frac, Colors.GOLD, 14f, 0x33FFFFFF)
+                g.text(n.coerceIn(1, 3).toString(), g.width / 2, g.height / 2 + 6f, s.coerceAtLeast(10f), Colors.GOLD, outline = 0xFF7A3B00.toInt(), outlineWidth = 16f)
             }
             Phase.PLAYING -> if (game.playTime < 0.7) {
                 val k = (game.playTime / 0.7).toFloat()

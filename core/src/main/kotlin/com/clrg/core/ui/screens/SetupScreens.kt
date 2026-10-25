@@ -343,9 +343,9 @@ class ReadyScreen(app: GameApp, private val then: () -> Unit, private val full: 
         }
         if (app.settings.simulatedInput && app.sim.autoplay) { ready[0] = true; ready[1] = true } // developer soak mode
         g.text(if (app.solo) "Raise a hand and hold it to start" else "Both players: raise a hand and hold", g.width / 2f, 190f, 50f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 6f)
-        if (ui.button(g, "recal", Rect(40f, 980f, 460f, 1060f), "Recalibrate", size = 32f)) app.replace(FramingScreen(app, then, full))
+        if (ui.button(g, "recal", Rect(40f, 970f, 480f, 1060f), "Recalibrate", size = 32f, icon = com.clrg.core.ui.Icon.CALIBRATE)) app.replace(FramingScreen(app, then, full))
         val go = ready[0] && ready[1]
-        if (ui.button(g, "start", Rect(g.width - 460f, 980f, g.width - 40f, 1060f), "Start now", accent = Colors.GOOD, size = 34f) || go) {
+        if (ui.button(g, "start", Rect(g.width - 480f, 970f, g.width - 40f, 1060f), "Start now", accent = Colors.GOOD, size = 36f, icon = com.clrg.core.ui.Icon.PLAY) || go) {
             for (c in app.controls) c.discardEvents()
             then()
         }

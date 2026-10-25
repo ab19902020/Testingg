@@ -119,6 +119,8 @@ class GameEnv(
     val popups = Popups()
     val shake = Shake().also { it.reduced = settings.reducedEffects }
     val captions = Captions()
+    /** Scoreboard animation state (score "bumps"). */
+    val hud = HudState()
 
     fun rng(salt: Long = 0) = Rng(seed * 31 + salt)
 
@@ -132,10 +134,18 @@ class GameEnv(
         popups.update(dt)
         shake.update(dt)
         captions.update(dt)
+        hud.time += dt
     }
 
     fun color(i: Int) = players[i].color
     fun name(i: Int) = players[i].name
+}
+
+/** What the scoreboard remembers between frames: last scores and when each changed. */
+class HudState {
+    var time = 0.0
+    val last = IntArray(2) { Int.MIN_VALUE }
+    val changedAt = DoubleArray(2) { -9.0 }
 }
 
 /** On-screen captions for sound effects (accessibility: visual equivalent of audio cues). */

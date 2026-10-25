@@ -17,7 +17,8 @@ object Icons {
     /** Draws [icon] centred on ([cx], [cy]), [s] pixels tall, in [color]. */
     fun draw(g: Gfx, icon: Icon, cx: Float, cy: Float, s: Float, color: Int) {
         val w = s * 0.09f
-        val dark = Colors.darker(color, 0.55f)
+        val lum = (((color shr 16) and 0xFF) * 0.3f + ((color shr 8) and 0xFF) * 0.59f + (color and 0xFF) * 0.11f) / 255f
+        val dark = if (lum < 0.35f) Colors.lighter(color, 0.55f) else Colors.darker(color, 0.55f)
         when (icon) {
             Icon.PLAY -> tri(g, cx - s * 0.28f, cy - s * 0.38f, cx - s * 0.28f, cy + s * 0.38f, cx + s * 0.4f, cy, color)
             Icon.VERSUS -> {

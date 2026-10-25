@@ -19,11 +19,51 @@ object Common {
         else com.clrg.core.render.SportsDraw.backdrop(g, app.time, !app.settings.reducedEffects)
 
     fun header(g: Gfx, ui: Ui, title: String, back: Boolean = true, app: GameApp? = null): Boolean {
-        g.gradientRect(0f, 0f, g.width, 140f, 0xEE06122A.toInt(), 0x0006122A)
-        ui.title(g, title, 72f, 70f)
+        g.gradientRect(0f, 0f, g.width, 150f, 0xEE06122A.toInt(), 0x0006122A)
+        ui.title(g, title, 72f, 66f)
+        // a short accent underline under the title
+        val tw = minOf(g.measureText(title, 66f * ui.theme.textScale), g.width - 600f)
+        val acc = if (app?.christmasMode == true) Colors.CANDY else 0xFF40C4FF.toInt()
+        g.fillRoundRect(g.width / 2f - tw * 0.3f, 118f, g.width / 2f + tw * 0.3f, 124f, 3f, Colors.withAlpha(acc, 0.85f))
         val b = back && ui.backButton(g)
         if (b) app?.current?.onBack()
         return b
+    }
+
+    /** Splits [text] into lines no wider than [maxW] at [size]. */
+    fun wrap(g: Gfx, text: String, size: Float, maxW: Float, bold: Boolean = true): List<String> {
+        val out = ArrayList<String>()
+        var line = ""
+        for (w in text.split(" ")) {
+            val next = if (line.isEmpty()) w else "$line $w"
+            if (line.isNotEmpty() && g.measureText(next, size, bold) > maxW) { out.add(line); line = w } else line = next
+        }
+        if (line.isNotEmpty()) out.add(line)
+        return out
+    }
+
+    /** The console's emblem: a TV with motion arcs (and a snowflake in Christmas mode). */
+    fun logo(g: Gfx, cx: Float, cy: Float, r: Float, xmas: Boolean, t: Double) {
+        val acc = if (xmas) Colors.CANDY else 0xFF40C4FF.toInt()
+        g.glow(cx, cy, r * 1.5f, Colors.withAlpha(acc, 0.35f))
+        g.fillCircleRadial(cx, cy, r, cx - r * 0.3f, cy - r * 0.4f, r * 1.4f, Colors.lighter(acc, 0.35f), Colors.darker(acc, 0.55f))
+        g.strokeCircle(cx, cy, r, 4f, Colors.WHITE)
+        com.clrg.core.ui.Icons.draw(g, if (xmas) com.clrg.core.ui.Icon.SNOWFLAKE else com.clrg.core.ui.Icon.TV, cx, cy + 2f, r * 1.1f, Colors.WHITE)
+        // motion arcs sweeping round the badge
+        val a = (t * 1.6).toFloat()
+        g.arc(cx, cy, r + 12f, a, 1.1f, 5f, Colors.withAlpha(Colors.WHITE, 0.8f))
+        g.arc(cx, cy, r + 12f, a + 3.14f, 1.1f, 5f, Colors.withAlpha(acc, 0.9f))
+    }
+
+    /** Capsule switch between the two halves of the console. */
+    fun modeSwitch(g: Gfx, ui: Ui, app: GameApp, r: Rect) {
+        g.fillRoundRect(r.left - 6f, r.top - 6f, r.right + 6f, r.bottom + 6f, (r.height + 12f) / 2f, 0x88000000.toInt())
+        val half = (r.width - 12f) / 2f
+        val xmas = app.christmasMode
+        val a = Rect(r.left, r.top, r.left + half, r.bottom)
+        val b = Rect(r.right - half, r.top, r.right, r.bottom)
+        if (ui.button(g, "modeSports", a, com.clrg.core.games.GameMode.SPORTS.title, accent = 0xFF40C4FF.toInt(), selected = !xmas, size = 32f, icon = com.clrg.core.ui.Icon.BALL)) app.mode = com.clrg.core.games.GameMode.SPORTS
+        if (ui.button(g, "modeXmas", b, com.clrg.core.games.GameMode.CHRISTMAS.title, accent = Colors.CANDY, selected = xmas, size = 32f, icon = com.clrg.core.ui.Icon.SNOWFLAKE)) app.mode = com.clrg.core.games.GameMode.CHRISTMAS
     }
 
     /** Live tracking-quality meter for player [k]: five bars, a word and the most useful tip (wrapped to [w]). */

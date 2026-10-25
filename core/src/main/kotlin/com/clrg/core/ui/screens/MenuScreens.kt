@@ -17,6 +17,8 @@ import com.clrg.core.render.Gfx
 import com.clrg.core.render.PlayerColors
 import com.clrg.core.tracking.Hand
 import com.clrg.core.tracking.MovementMode
+import com.clrg.core.ui.Icon
+import com.clrg.core.ui.Icons
 import com.clrg.core.ui.Screen
 import com.clrg.core.ui.Ui
 import kotlin.math.sin
@@ -24,72 +26,130 @@ import kotlin.math.sin
 class MainMenuScreen(app: GameApp) : Screen(app) {
     override fun onBack(): Boolean { app.platform.quit(); return true }
 
+    /** Little live previews of the current mode's games, shown in turn on the Quick Match card. */
+    private val featured = HashMap<com.clrg.core.games.GameMode, List<Pair<String, MiniGame>>>()
+
+    private fun featuredFor(mode: com.clrg.core.games.GameMode): List<Pair<String, MiniGame>> = featured.getOrPut(mode) {
+        GameRegistry.forMode(mode).map { e ->
+            val env = GameEnv(
+                listOf(PlayerInfo(0, 0, "P1", app.playerColor(0), Hand.RIGHT, MovementMode.STANDARD), PlayerInfo(1, 0, "P2", app.playerColor(1), Hand.RIGHT, MovementMode.STANDARD)),
+                Settings(), 1,
+            )
+            e.info.title to e.create(env)
+        }
+    }
+
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
         val t = app.time
         val xmas = app.christmasMode
-        // title
-        val bob = sin(t * 1.5).toFloat() * 5f
-        if (xmas) g.text("Christmas", g.width / 2f, 78f + bob, 66f * app.theme.textScale, Colors.GOLD, outline = 0xFF6D2B00.toInt(), outlineWidth = 9f)
-        else g.text("Sports & Arcade", g.width / 2f, 78f + bob, 56f * app.theme.textScale, 0xFF80D8FF.toInt(), outline = 0xFF0B1A33.toInt(), outlineWidth = 8f)
-        g.text("Living Room Games", g.width / 2f, 152f + bob, 76f * app.theme.textScale, Colors.WHITE, outline = 0xFF0B1A33.toInt(), outlineWidth = 9f)
-        // two players waving on either side
-        for (k in 0..1) {
-            val x = if (k == 0) g.width * 0.1f else g.width * 0.9f
-            val p = com.clrg.core.gesture.AvatarPose().apply {
-                valid = true
-                val wave = sin(t * 4 + k).toFloat()
-                upper[k] = 1.2f + 0.2f * wave; fore[k] = 1.8f + 0.4f * wave
-                upper[1 - k] = if (k == 0) -1.2f else -1.9f; fore[1 - k] = if (k == 0) -1.3f else -1.8f
-            }
-            Draw.person(g, !xmas, x, g.height - 170f, 330f, app.playerColor(k), p, Expression.HAPPY, t = t + k, look = k * 3 + 1)
-            g.text(app.activePlayers[k].name, x, g.height - 120f, 34f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 5f)
+        val accent = if (xmas) Colors.CANDY else 0xFF40C4FF.toInt()
+        // logo and title
+        Common.logo(g, 118f, 96f, 58f, xmas, t)
+        g.text("Living Room Games", 200f, 78f, 64f * app.theme.textScale, Colors.WHITE, Align.LEFT, outline = 0xFF0B1A33.toInt(), outlineWidth = 8f)
+        g.text(if (xmas) "Christmas" else "Sports & Arcade", 204f, 136f, 32f * app.theme.textScale, if (xmas) Colors.GOLD else 0xFF80D8FF.toInt(), Align.LEFT)
+        // top right: camera and the mode switch
+        var right = g.width - 40f
+        if (app.canSwitchCamera) {
+            if (ui.button(g, "camSwitch", Rect(right - 270f, 44f, right, 136f), app.cameraLabel(), "tap to switch", accent = Colors.ICE, size = 30f, icon = Icon.CAMERA)) app.switchCamera()
+            right -= 290f
         }
-        // mode switch: the two halves of the console
-        val tabW = 560f; val tabH = 92f; val tabY = 205f
-        val sportsTab = Rect(g.width / 2f - tabW - 10f, tabY, g.width / 2f - 10f, tabY + tabH)
-        val xmasTab = Rect(g.width / 2f + 10f, tabY, g.width / 2f + tabW + 10f, tabY + tabH)
-        if (ui.button(g, "modeSports", sportsTab, com.clrg.core.games.GameMode.SPORTS.title, "Shooting, boxing, archery, tennis...", accent = 0xFF40C4FF.toInt(), selected = !xmas, size = 38f)) app.mode = com.clrg.core.games.GameMode.SPORTS
-        if (ui.button(g, "modeXmas", xmasTab, com.clrg.core.games.GameMode.CHRISTMAS.title, "Snowballs, sleighs, reindeer...", accent = Colors.CANDY, selected = xmas, size = 38f)) app.mode = com.clrg.core.games.GameMode.CHRISTMAS
-        val bw = 640f; val bh = 100f; val gap = 18f
-        val left = g.width / 2f - bw - gap / 2f
-        val right = g.width / 2f + gap / 2f
-        var y = 322f
-        fun row(): Pair<Rect, Rect> { val a = Rect(left, y, left + bw, y + bh); val b = Rect(right, y, right + bw, y + bh); y += bh + gap; return a to b }
-        val count = com.clrg.core.games.GameRegistry.forMode(app.mode).size
-        val (qm, solo) = row()
-        if (ui.button(g, "quick", qm, "Quick Match", "Two players, $count games", accent = Colors.GOLD)) app.push(GameSelectScreen(app))
-        if (ui.button(g, "solo", solo, "Play Solo", "You against the computer", accent = Colors.GOLD)) app.push(SoloSetupScreen(app))
-        val (golf, pt) = row()
-        if (ui.button(g, "golf", golf, if (xmas) "Christmas Golf" else "Golf", "1 to 4 players, taking turns", accent = Colors.GOOD)) app.push(GolfSetupScreen(app))
-        if (ui.button(g, "tournament", pt, "Party Tournament", app.tournament?.let { if (it.isComplete) "Last tournament finished" else "Continue: match ${it.currentIndex + 1} of ${it.matches.size}" } ?: "Whole-family scoreboard", accent = Colors.CANDY)) {
+        Common.modeSwitch(g, ui, app, Rect(right - 640f, 44f, right, 136f))
+        // hero cards
+        val count = GameRegistry.forMode(app.mode).size
+        val top = 190f; val heroH = 400f
+        val demos = featuredFor(app.mode)
+        val slot = ((t / 6.0).toInt()) % demos.size
+        val fadeK = ((t % 6.0) / 6.0).toFloat()
+        if (ui.tile(g, "quick", Rect(80f, top, 820f, top + heroH), "Quick Match", "Two players, $count games", Colors.GOLD,
+                art = { gg, r -> featuredArt(gg, r, demos, slot, fadeK) }, titleSize = 52f, badge = "2 PLAYERS")) app.push(GameSelectScreen(app))
+        if (ui.tile(g, "solo", Rect(850f, top, 1350f, top + heroH), "Play Solo", "You against the computer", accent, icon = Icon.SOLO, titleSize = 48f)) app.push(SoloSetupScreen(app))
+        if (ui.tile(g, "golf", Rect(1380f, top, g.width - 80f, top + heroH), if (xmas) "Christmas Golf" else "Golf", "1 to 4 players, taking turns", Colors.GOOD,
+                art = { gg, r -> golfArt(gg, r, xmas, t) }, titleSize = 48f, badge = "3D")) app.push(GolfSetupScreen(app))
+        // the rest of the console
+        val y2 = top + heroH + 30f; val h2 = 236f
+        val n = 5; val gap = 24f
+        val w2 = (g.width - 160f - gap * (n - 1)) / n
+        fun r2(i: Int) = Rect(80f + i * (w2 + gap), y2, 80f + i * (w2 + gap) + w2, y2 + h2)
+        val tourSub = app.tournament?.let { if (it.isComplete) "Last one finished" else "Match ${it.currentIndex + 1} of ${it.matches.size}" } ?: "Family scoreboard"
+        if (ui.tile(g, "tournament", r2(0), "Tournament", tourSub, Colors.CANDY, icon = Icon.TROPHY, titleSize = 34f)) {
             if (app.tournament != null) app.push(TournamentHubScreen(app)) else app.push(TournamentSetupScreen(app))
         }
-        val (pl, tv) = row()
-        if (ui.button(g, "players", pl, "Players", "${app.roster.players.size} family members", accent = Colors.ICE)) app.push(PlayersScreen(app))
-        if (ui.button(g, "setup", tv, "TV & Camera Setup", if (app.calibrated) "Players calibrated" else "Connect, place, calibrate", accent = Colors.GOOD)) SetupFlow.startFull(app)
-        val (st, help) = row()
-        if (ui.button(g, "settings", st, "Settings", "Sound, motion, objects, camera", accent = Colors.ICE)) app.push(SettingsScreen(app))
-        if (ui.button(g, "help", help, "How to Play", "Controls for every game", accent = Colors.GOOD)) app.push(HelpScreen(app))
+        if (ui.tile(g, "players", r2(1), "Players", "${app.roster.players.size} family members", Colors.ICE, icon = Icon.PLAYERS, titleSize = 34f)) app.push(PlayersScreen(app))
+        if (ui.tile(g, "setup", r2(2), "TV & Camera", if (app.calibrated) "Players calibrated" else "Connect, place, calibrate", Colors.GOOD, icon = Icon.TV, titleSize = 34f)) SetupFlow.startFull(app)
+        if (ui.tile(g, "settings", r2(3), "Settings", "Sound, motion, camera", 0xFFB388FF.toInt(), icon = Icon.GEAR, titleSize = 34f)) app.push(SettingsScreen(app))
+        if (ui.tile(g, "help", r2(4), "How to Play", "Controls for every game", Colors.WARM, icon = Icon.HELP, titleSize = 34f)) app.push(HelpScreen(app))
         // hands-free: anyone in front of the camera can steer the menus with a raised hand
+        var y = y2 + h2 + 34f
         run {
             val hint = when {
                 app.ui.cursors.any { it.active && it.hoverId != null } -> "Keep your hand there until the ring fills"
-                app.ui.cursors.any { it.active } -> "Move your hand over a button and hold it there - small movements are enough"
+                app.ui.cursors.any { it.active } -> "Move your hand over a card and hold it there - small movements are enough"
                 app.handCursorShown -> "Lift your hand to chest height to point"
                 else -> "Hands-free: stand in front of the camera and lift a hand to chest height to point"
             }
-            val hw = g.measureText(hint, 30f, false) + 70f
-            g.fillRoundRect(g.width / 2f - hw / 2f, y + 4f, g.width / 2f + hw / 2f, y + 58f, 27f, 0xAA0B2A4F.toInt())
-            g.text(hint, g.width / 2f, y + 31f, 30f, Colors.GOLD, bold = false)
-            y += 62f
+            val hw = g.measureText(hint, 30f, false) + 110f
+            g.fillRoundRect(g.width / 2f - hw / 2f, y, g.width / 2f + hw / 2f, y + 56f, 28f, 0xAA0B2A4F.toInt())
+            Icons.draw(g, Icon.HAND, g.width / 2f - hw / 2f + 40f, y + 28f, 34f, Colors.GOLD)
+            g.text(hint, g.width / 2f + 22f, y + 28f, 30f, Colors.GOLD, bold = false)
+            y += 66f
         }
-        if (app.canSwitchCamera && ui.button(g, "camSwitch", Rect(30f, 40f, 440f, 130f), app.cameraLabel(), "tap to switch", accent = Colors.ICE, size = 34f)) app.switchCamera()
         val dev = app.platform.deviceInfo()
         if (dev.meetsTarget == false) {
-            g.text("Note: this phone is below the recommended Snapdragon 8 Gen 3 class - tracking may be slower.", g.width / 2f, y + 20f, 28f, Colors.WARN, bold = false)
+            g.text("Note: this phone is below the recommended Snapdragon 8 Gen 3 class - tracking may be slower.", g.width / 2f, y + 8f, 26f, Colors.WARN, bold = false)
         }
         Common.statusBar(g, app)
+    }
+
+    /** The Quick Match card art: each game's live preview in turn, crossfading. */
+    private fun featuredArt(g: Gfx, r: Rect, demos: List<Pair<String, MiniGame>>, slot: Int, k: Float) {
+        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 20f, 0xFF0E2A4F.toInt())
+        val (title, game) = demos[slot]
+        val fade = when { k < 0.08f -> k / 0.08f; k > 0.92f -> (1f - k) / 0.08f; else -> 1f }
+        g.save(); g.setAlpha(g.getAlpha() * fade)
+        game.demo(g, r.inset(14f), app.time)
+        g.restore()
+        val label = "Now showing: $title"
+        val w = g.measureText(label, 24f, false) + 36f
+        g.fillRoundRect(r.left + 14f, r.top + 14f, r.left + 14f + w, r.top + 56f, 21f, 0xAA000000.toInt())
+        g.text(label, r.left + 14f + w / 2f, r.top + 35f, 24f, Colors.WHITE, bold = false)
+    }
+
+    /** The golf card art: a little hole with a waving flag and a ball flying at it. */
+    private fun golfArt(g: Gfx, r: Rect, xmas: Boolean, t: Double) {
+        g.gradientRect(r.left, r.top, r.right, r.bottom, if (xmas) 0xFF0D1B3A.toInt() else 0xFF5EB6FF.toInt(), if (xmas) 0xFF2B4C7E.toInt() else 0xFFCDEBFF.toInt())
+        val hz = r.top + r.height * 0.55f
+        // distant hills and trees
+        val hill = FloatArray(2 * 14)
+        for (i in 0 until 12) { hill[i * 2] = r.left + r.width * i / 11f; hill[i * 2 + 1] = hz - 30f - 22f * sin(i * 1.3f + 0.5f) }
+        hill[24] = r.right; hill[25] = r.bottom; hill[26] = r.left; hill[27] = r.bottom
+        g.fillPolygon(hill, 14, if (xmas) 0xFF9FB8D8.toInt() else 0xFF5FA463.toInt())
+        // fairway with mown stripes, in perspective
+        val fw = floatArrayOf(r.cx - 40f, hz, r.cx + 40f, hz, r.right + 60f, r.bottom, r.left - 60f, r.bottom)
+        g.fillPolygon(fw, 4, if (xmas) 0xFFE8F1FB.toInt() else 0xFF7CC66B.toInt())
+        for (i in 0 until 6) {
+            val y0 = hz + (r.bottom - hz) * (i / 6f) * (i / 6f)
+            val y1 = hz + (r.bottom - hz) * ((i + 0.5f) / 6f) * ((i + 0.5f) / 6f)
+            g.fillRect(r.left, y0, r.right, y1, if (xmas) 0x10000000 else 0x14FFFFFF)
+        }
+        // green, hole and flag
+        val gx = r.cx + r.width * 0.12f; val gy = hz + 26f
+        g.fillOval(gx - 90f, gy - 18f, gx + 90f, gy + 22f, if (xmas) 0xFFC9DDF0.toInt() else 0xFF5DBB4C.toInt())
+        g.fillOval(gx - 9f, gy - 3f, gx + 9f, gy + 5f, 0xFF1B2A1B.toInt())
+        g.line(gx, gy, gx, gy - 92f, 4f, Colors.WHITE)
+        val wave = sin(t.toFloat() * 4f) * 8f
+        g.fillPolygon(floatArrayOf(gx, gy - 92f, gx + 54f, gy - 80f + wave * 0.5f, gx, gy - 64f), 3, Colors.CANDY)
+        // a ball arcing towards the flag on a loop
+        val k = ((t % 3.0) / 3.0).toFloat()
+        val bx = r.left + r.width * 0.18f + (gx - r.left - r.width * 0.18f) * k
+        val by = r.bottom - 30f + (gy - r.bottom + 30f) * k - sin(k * Math.PI.toFloat()) * r.height * 0.42f
+        for (j in 1..6) {
+            val kk = (k - j * 0.035f).coerceAtLeast(0f)
+            val tx = r.left + r.width * 0.18f + (gx - r.left - r.width * 0.18f) * kk
+            val ty = r.bottom - 30f + (gy - r.bottom + 30f) * kk - sin(kk * Math.PI.toFloat()) * r.height * 0.42f
+            g.fillCircle(tx, ty, 5f - j * 0.6f, Colors.withAlpha(Colors.WHITE, 0.5f - j * 0.07f))
+        }
+        g.fillCircle(bx, by, 8f, Colors.WHITE)
     }
 }
 
@@ -120,11 +180,12 @@ class PermissionScreen(app: GameApp) : Screen(app) {
     }
 }
 
-/** Grid of the current mode's games with live instruction animations. */
+/** Cards for the current mode's games, each with a live preview and tags. The mode can be switched here too. */
 class GameSelectScreen(app: GameApp, private val onPick: ((String) -> Unit)? = null) : Screen(app) {
-    private val entries = GameRegistry.forMode(app.mode)
-    private val demoGames: List<MiniGame> by lazy {
-        entries.map { e ->
+    private val demoCache = HashMap<com.clrg.core.games.GameMode, List<MiniGame>>()
+
+    private fun demos(mode: com.clrg.core.games.GameMode): List<MiniGame> = demoCache.getOrPut(mode) {
+        GameRegistry.forMode(mode).map { e ->
             val env = GameEnv(
                 listOf(PlayerInfo(0, 0, "P1", app.playerColor(0), Hand.RIGHT, MovementMode.STANDARD), PlayerInfo(1, 0, "P2", app.playerColor(1), Hand.RIGHT, MovementMode.STANDARD)),
                 Settings(), 1,
@@ -135,28 +196,32 @@ class GameSelectScreen(app: GameApp, private val onPick: ((String) -> Unit)? = n
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)
-        Common.header(g, ui, "Choose a game - ${app.mode.title}", app = app)
+        Common.header(g, ui, "Choose a game", app = app)
+        Common.modeSwitch(g, ui, app, Rect(g.width - 680f, 30f, g.width - 40f, 116f))
+        val entries = GameRegistry.forMode(app.mode)
+        val games = demos(app.mode)
         val cols = 5
         val rows = (entries.size + cols - 1) / cols
-        val margin = 40f
-        val cw = (g.width - margin * 2 - (cols - 1) * 24f) / cols
-        val avail = g.height - 170f - 70f
-        val ch = minOf(400f, (avail - (rows - 1) * 24f) / rows)
-        val artH = ch - 150f
+        val margin = 50f
+        val gap = 26f
+        val cw = (g.width - margin * 2 - (cols - 1) * gap) / cols
+        val top = 165f
+        val avail = g.height - top - 80f
+        val ch = minOf(430f, (avail - (rows - 1) * gap) / rows)
+        val accent = if (app.christmasMode) Colors.CANDY else 0xFF40C4FF.toInt()
         entries.forEachIndexed { i, e ->
             val c = i % cols; val rr = i / cols
-            val x = margin + c * (cw + 24f)
-            val y = 160f + rr * (ch + 24f)
+            // a short last row is centred
+            val inRow = if (rr == rows - 1) entries.size - rr * cols else cols
+            val x0 = margin + (cols - inRow) * (cw + gap) / 2f
+            val x = x0 + c * (cw + gap)
+            val y = top + rr * (ch + gap)
             val r = Rect(x, y, x + cw, y + ch)
-            val act = ui.button(g, "game_${e.info.id}", r, "", accent = Colors.GOLD)
-            val art = Rect(r.left + 14f, r.top + 14f, r.right - 14f, r.top + artH)
-            g.save(); g.clipRect(art.left, art.top, art.right, art.bottom)
-            g.fillRoundRect(art.left, art.top, art.right, art.bottom, 18f, 0xFF0E2A4F.toInt())
-            demoGames[i].demo(g, art.inset(10f), app.time)
-            g.restore()
-            g.text(e.info.title, r.cx, art.bottom + 34f, ui.fit(g, e.info.title, 36f * app.theme.textScale, cw - 30f), Colors.WHITE)
-            g.text(e.info.tagline, r.cx, art.bottom + 76f, ui.fit(g, e.info.tagline, 26f, cw - 30f, false), app.theme.dim, bold = false)
-            g.text(e.info.goal, r.cx, art.bottom + 108f, ui.fit(g, e.info.goal, 22f, cw - 30f, false), Colors.GOLD, bold = false)
+            val act = ui.tile(g, "game_${e.info.id}", r, e.info.title, e.info.tagline, if (i % 3 == 0) Colors.GOLD else accent,
+                art = { gg, ar ->
+                    gg.fillRoundRect(ar.left, ar.top, ar.right, ar.bottom, 18f, 0xFF0E2A4F.toInt())
+                    games[i].demo(gg, ar.inset(8f), app.time)
+                }, tags = GameRegistry.tags(e.info.id), titleSize = 34f)
             if (act) {
                 if (onPick != null) onPick.invoke(e.info.id) else app.push(PlayerPickScreen(app, e.info.id))
             }
@@ -214,6 +279,17 @@ class PlayerPickScreen(app: GameApp, private val gameId: String) : Screen(app) {
 internal fun infoPanel(g: Gfx, app: GameApp, r: Rect, title: String, lines: List<String>, size: Float = 36f) {
     Draw.panel(g, r, app.theme.panel, app.theme.panelBorder)
     g.text(title, r.cx, r.top + 50f, 44f * app.theme.textScale, Colors.GOLD)
+    // wrap long lines to the panel, and shrink a little if it would still overflow
+    var sz = size * app.theme.textScale
+    var wrapped: List<String> = emptyList()
+    for (attempt in 0 until 6) {
+        wrapped = lines.flatMap { l ->
+            val indent = l.takeWhile { it == ' ' }
+            if (l.isBlank()) listOf("") else Common.wrap(g, l.trim(), sz, r.width - 80f - (if (indent.isNotEmpty()) 40f else 0f), false).mapIndexed { i, w -> if (indent.isNotEmpty() || i > 0) "    $w" else w }
+        }
+        if (r.top + 120f + wrapped.size * sz * 1.45f <= r.bottom - 20f || sz < size * 0.7f) break
+        sz *= 0.92f
+    }
     var y = r.top + 120f
-    for (l in lines) { g.text(l, r.left + 40f, y, size * app.theme.textScale, Colors.WHITE, Align.LEFT, bold = false); y += size * app.theme.textScale * 1.5f }
+    for (l in wrapped) { g.text(l, r.left + 40f, y, sz, Colors.WHITE, Align.LEFT, bold = false); y += sz * 1.45f }
 }

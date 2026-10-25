@@ -89,6 +89,16 @@ class Ui(val theme: Theme, private val sound: (Sfx, Float) -> Unit) {
     private var frameDt = 0f
     var time = 0.0
         private set
+    /** Per-button hover animation (0..1), eased each frame so cards lift and glow smoothly. */
+    private val hoverAnim = HashMap<String, Float>()
+
+    private fun hoverAmount(id: String, on: Boolean): Float {
+        val cur = hoverAnim[id] ?: 0f
+        val next = if (on) minOf(1f, cur + frameDt * 9f) else maxOf(0f, cur - frameDt * 6f)
+        hoverAnim[id] = next
+        // smoothstep
+        return next * next * (3f - 2f * next)
+    }
 
     /** Processes queued input and decides which button (if any) activates this frame. */
     fun begin(dt: Float, events: List<InputEvent>, cursorsEnabled: Boolean) {
@@ -225,56 +235,169 @@ class Ui(val theme: Theme, private val sound: (Sfx, Float) -> Unit) {
 
     // ------------------------------------------------------------------ widgets
 
-    /** Big rounded button. Returns true on the frame it is activated. */
+    /** Big rounded button (optionally with an [icon]). Returns true on the frame it is activated. */
     fun button(
         g: Gfx, id: String, r: Rect, label: String, sub: String? = null, accent: Int = Colors.GOLD,
-        enabled: Boolean = true, selected: Boolean = false, size: Float = 46f, icon: ((Gfx, Rect) -> Unit)? = null,
+        enabled: Boolean = true, selected: Boolean = false, size: Float = 46f, icon: Icon? = null,
     ): Boolean {
         register(id, r, enabled)
         val focused = focusId == id
         val hover = cursors.any { it.active && it.hoverId == id } || (pointerDown && downInside == id)
+        val h = if (enabled) hoverAmount(id, hover || focused) else 0f
         val d = dwellOn(id)
         val pressed = pointerDown && downInside == id
         val base = if (selected) Colors.withAlpha(accent, 0.92f) else theme.button
+        val rad = minOf(26f, r.height * 0.32f)
         g.save()
-        if (pressed && enabled) { g.translate(r.cx, r.cy); g.scale(0.965f); g.translate(-r.cx, -r.cy) }
+        val sc = (if (pressed && enabled) 0.965f else 1f) * (1f + 0.025f * h)
+        if (sc != 1f) { g.translate(r.cx, r.cy); g.scale(sc); g.translate(-r.cx, -r.cy) }
         // soft drop shadow, and a glow when pointed at or focused
-        g.fillRoundRect(r.left + 3f, r.top + 10f, r.right + 3f, r.bottom + 11f, 28f, 0x33000000)
-        if ((focused || hover) && enabled) {
-            g.fillRoundRect(r.left - 9f, r.top - 9f, r.right + 9f, r.bottom + 9f, 34f, Colors.withAlpha(accent, 0.16f))
-            g.fillRoundRect(r.left - 4f, r.top - 4f, r.right + 4f, r.bottom + 4f, 30f, Colors.withAlpha(accent, 0.22f))
+        g.fillRoundRect(r.left + 3f, r.top + 10f + 4f * h, r.right + 3f, r.bottom + 11f + 4f * h, rad + 2f, 0x33000000)
+        if (h > 0f) {
+            g.fillRoundRect(r.left - 10f, r.top - 10f, r.right + 10f, r.bottom + 10f, rad + 8f, Colors.withAlpha(accent, 0.16f * h))
+            g.fillRoundRect(r.left - 4f, r.top - 4f, r.right + 4f, r.bottom + 4f, rad + 4f, Colors.withAlpha(accent, 0.24f * h))
         }
         when {
-            !enabled -> g.fillRoundRect(r.left, r.top, r.right, r.bottom, 26f, 0x66222A35)
-            theme.highContrast -> g.fillRoundRect(r.left, r.top, r.right, r.bottom, 26f, base)
+            !enabled -> g.fillRoundRect(r.left, r.top, r.right, r.bottom, rad, 0x66222A35)
+            theme.highContrast -> g.fillRoundRect(r.left, r.top, r.right, r.bottom, rad, base)
             else -> {
-                val lift = if (hover) 0.3f else 0.17f
-                g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, 26f, Colors.lighter(base, lift), Colors.darker(base, 0.78f))
-                g.fillRoundRectGradient(r.left + 3f, r.top + 3f, r.right - 3f, r.top + r.height * 0.48f, 22f, 0x2EFFFFFF, 0x05FFFFFF)
+                val tint = if (selected) base else Colors.lerp(base, accent, 0.1f + 0.12f * h)
+                g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, rad, Colors.lighter(tint, 0.17f + 0.12f * h), Colors.darker(tint, 0.74f))
+                // glassy top sheen and a thin accent line along the bottom
+                g.fillRoundRectGradient(r.left + 3f, r.top + 3f, r.right - 3f, r.top + r.height * 0.48f, rad - 3f, 0x30FFFFFF, 0x04FFFFFF)
+                if (!selected) g.fillRoundRect(r.left + rad, r.bottom - 7f, r.right - rad, r.bottom - 3f, 2f, Colors.withAlpha(accent, 0.35f + 0.5f * h))
             }
         }
-        g.strokeRoundRect(r.left, r.top, r.right, r.bottom, 26f, if (focused) 7f else theme.borderWidth, if (focused || hover) accent else theme.buttonBorder)
+        g.strokeRoundRect(r.left, r.top, r.right, r.bottom, rad, if (focused) 7f else theme.borderWidth + 2f * h, if (focused || h > 0.05f) Colors.lerp(theme.buttonBorder, accent, maxOf(h, if (focused) 1f else 0f)) else theme.buttonBorder)
         if (d > 0f) {
             g.save(); g.clipRect(r.left, r.top, r.left + r.width * d, r.bottom)
-            g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, 26f, Colors.withAlpha(accent, 0.55f), Colors.withAlpha(accent, 0.25f))
+            g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, rad, Colors.withAlpha(accent, 0.55f), Colors.withAlpha(accent, 0.25f))
             g.restore()
             g.glow(r.left + r.width * d, r.cy, r.height * 0.6f, Colors.withAlpha(accent, 0.5f))
         }
         val textColor = if (!enabled) 0x88FFFFFF.toInt() else if (selected) Colors.BLACK else Colors.WHITE
         val ts = size * theme.textScale
         var tx = r.cx
+        var maxW = r.width - 40f
         if (icon != null) {
-            val ir = Rect(r.left + 16f, r.top + 12f, r.left + 16f + (r.height - 24f), r.bottom - 12f)
-            icon(g, ir)
-            tx = r.cx + (r.height - 24f) / 2f
+            val isz = minOf(r.height * 0.56f, ts * 1.15f)
+            val labelW = if (label.isEmpty()) 0f else minOf(g.measureText(label, ts), r.width - isz - 70f)
+            val groupW = isz + (if (label.isEmpty()) 0f else 18f + labelW)
+            val ix = r.cx - groupW / 2f + isz / 2f
+            Icons.draw(g, icon, ix, if (sub == null) r.cy else r.cy - ts * 0.12f, isz, if (selected) Colors.BLACK else Colors.lerp(Colors.WHITE, accent, 0.35f + 0.4f * h))
+            tx = ix + isz / 2f + 18f + labelW / 2f
+            maxW = r.width - isz - 70f
         }
-        if (sub == null) g.text(label, tx, r.cy, fit(g, label, ts, r.width - 40f - (if (icon != null) r.height else 0f)), textColor)
-        else {
-            g.text(label, tx, r.cy - ts * 0.38f, fit(g, label, ts, r.width - 40f), textColor)
-            g.text(sub, tx, r.cy + ts * 0.5f, fit(g, sub, ts * 0.55f, r.width - 40f, false), if (selected) 0xCC000000.toInt() else theme.dim, bold = false)
+        if (sub == null) {
+            if (label.isNotEmpty()) g.text(label, tx, r.cy, fit(g, label, ts, maxW), textColor)
+        } else {
+            g.text(label, tx, r.cy - ts * 0.38f, fit(g, label, ts, maxW), textColor)
+            g.text(sub, tx, r.cy + ts * 0.5f, fit(g, sub, ts * 0.55f, maxW, false), if (selected) 0xCC000000.toInt() else theme.dim, bold = false)
         }
         g.restore()
         return activated == id
+    }
+
+    /**
+     * A large menu card: artwork (or a big icon on a glowing disc) on top, title, subtitle and tag chips below.
+     * Lifts and glows when pointed at; the hold-to-choose progress runs along its bottom edge.
+     */
+    fun tile(
+        g: Gfx, id: String, r: Rect, title: String, sub: String? = null, accent: Int = Colors.GOLD, icon: Icon? = null,
+        art: ((Gfx, Rect) -> Unit)? = null, tags: List<String> = emptyList(), enabled: Boolean = true,
+        titleSize: Float = 44f, badge: String? = null,
+    ): Boolean {
+        register(id, r, enabled)
+        val focused = focusId == id
+        val hover = cursors.any { it.active && it.hoverId == id } || (pointerDown && downInside == id)
+        val h = if (enabled) hoverAmount(id, hover || focused) else 0f
+        val d = dwellOn(id)
+        val pressed = pointerDown && downInside == id
+        val rad = 30f
+        g.save()
+        g.translate(0f, -10f * h)
+        val sc = (if (pressed && enabled) 0.97f else 1f) * (1f + 0.02f * h)
+        if (sc != 1f) { g.translate(r.cx, r.cy); g.scale(sc); g.translate(-r.cx, -r.cy) }
+        // shadow and hover glow
+        g.fillRoundRect(r.left + 6f, r.top + 14f + 10f * h, r.right + 6f, r.bottom + 16f + 10f * h, rad, Colors.withAlpha(Colors.BLACK, 0.35f + 0.1f * h))
+        if (h > 0f) g.fillRoundRect(r.left - 12f, r.top - 12f, r.right + 12f, r.bottom + 12f, rad + 10f, Colors.withAlpha(accent, 0.22f * h))
+        // body: deep glass tinted with the accent
+        val top = if (theme.highContrast) 0xFF000000.toInt() else Colors.lerp(0xFF16305A.toInt(), accent, 0.16f + 0.1f * h)
+        val bottom = if (theme.highContrast) 0xFF000000.toInt() else 0xFF0A1630.toInt()
+        g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, rad, if (enabled) top else 0xFF2A3342.toInt(), bottom)
+        val textH = 30f + titleSize * theme.textScale + (if (sub != null) 44f else 0f) + (if (tags.isNotEmpty()) 52f else 0f)
+        val artR = Rect(r.left + 14f, r.top + 14f, r.right - 14f, r.bottom - textH)
+        if (artR.height > 40f) {
+            g.save(); g.clipRect(artR.left, artR.top, artR.right, artR.bottom)
+            if (art != null) art(g, artR)
+            else {
+                g.fillRoundRectGradient(artR.left, artR.top, artR.right, artR.bottom, rad - 10f, Colors.lerp(0xFF0F2547.toInt(), accent, 0.35f), Colors.lerp(0xFF081428.toInt(), accent, 0.12f))
+                val isz = minOf(artR.height * 0.62f, artR.width * 0.5f)
+                val pulse = 1f + 0.04f * h * kotlin.math.sin(time.toFloat() * 6f)
+                g.glow(artR.cx, artR.cy, isz * (0.85f + 0.25f * h), Colors.withAlpha(accent, 0.35f + 0.25f * h))
+                if (icon != null) Icons.draw(g, icon, artR.cx, artR.cy, isz * pulse, Colors.lerp(Colors.WHITE, accent, 0.25f))
+            }
+            // soft vignette where the art meets the text
+            g.gradientRect(artR.left, artR.bottom - 60f, artR.right, artR.bottom, 0x00000000, 0x660A1630)
+            g.restore()
+        }
+        // sheen and border
+        g.fillRoundRectGradient(r.left + 3f, r.top + 3f, r.right - 3f, r.top + r.height * 0.35f, rad - 3f, 0x22FFFFFF, 0x00FFFFFF)
+        g.strokeRoundRect(r.left, r.top, r.right, r.bottom, rad, if (focused) 7f else 3f + 3f * h, Colors.lerp(Colors.withAlpha(accent, 0.45f), accent, maxOf(h, if (focused) 1f else 0f)))
+        // text
+        var y = r.bottom - textH + 18f + titleSize * theme.textScale * 0.5f
+        val ts = titleSize * theme.textScale
+        val textColor = if (enabled) Colors.WHITE else 0x88FFFFFF.toInt()
+        g.text(title, r.cx + 2f, y + 3f, fit(g, title, ts, r.width - 40f), 0x66000000)
+        g.text(title, r.cx, y, fit(g, title, ts, r.width - 40f), textColor)
+        y += ts * 0.5f + 8f
+        if (sub != null) {
+            val ss = 27f * theme.textScale
+            val fitted = fit(g, sub, ss, r.width - 40f, false)
+            if (fitted >= ss * 0.8f) g.text(sub, r.cx, y + 14f, fitted, theme.dim, bold = false)
+            else {
+                // two lines, split at the space nearest the middle
+                val mid = sub.length / 2
+                val cut = (0..mid).firstNotNullOfOrNull { d -> listOf(mid - d, mid + d).firstOrNull { it in 1 until sub.length && sub[it] == ' ' } } ?: mid
+                val a = sub.substring(0, cut).trim(); val b = sub.substring(cut).trim()
+                val sz = minOf(fit(g, a, ss * 0.82f, r.width - 40f, false), fit(g, b, ss * 0.82f, r.width - 40f, false))
+                g.text(a, r.cx, y + 2f, sz, theme.dim, bold = false)
+                g.text(b, r.cx, y + 2f + sz * 1.1f, sz, theme.dim, bold = false)
+            }
+            y += 44f
+        }
+        if (tags.isNotEmpty()) {
+            val sizes = tags.map { g.measureText(it, 22f, false) + 30f }
+            val total = sizes.sum() + 10f * (tags.size - 1)
+            var x = r.cx - minOf(total, r.width - 30f) / 2f
+            for ((i, t) in tags.withIndex()) {
+                if (x + sizes[i] > r.right - 14f) break
+                chip(g, x, y + 22f, t, accent, 22f)
+                x += sizes[i] + 10f
+            }
+        }
+        badge?.let { b ->
+            val bw = g.measureText(b, 24f) + 34f
+            g.fillRoundRect(r.right - bw - 18f, r.top + 22f, r.right - 18f, r.top + 64f, 21f, accent)
+            g.text(b, r.right - 18f - bw / 2f, r.top + 43f, 24f, Colors.BLACK)
+        }
+        if (d > 0f) {
+            val bx = r.left + 20f + (r.width - 40f) * d
+            g.fillRoundRect(r.left + 20f, r.bottom - 14f, r.right - 20f, r.bottom - 6f, 4f, 0x55000000)
+            g.fillRoundRect(r.left + 20f, r.bottom - 14f, bx, r.bottom - 6f, 4f, accent)
+            g.glow(bx, r.bottom - 10f, 40f, Colors.withAlpha(accent, 0.7f))
+        }
+        g.restore()
+        return activated == id
+    }
+
+    /** Small tag pill whose left edge is at [x], vertically centred on [cy]. Returns its width. */
+    fun chip(g: Gfx, x: Float, cy: Float, text: String, color: Int, size: Float = 22f): Float {
+        val w = g.measureText(text, size, false) + 30f
+        g.fillRoundRect(x, cy - size * 0.8f, x + w, cy + size * 0.8f, size * 0.8f, Colors.withAlpha(color, 0.22f))
+        g.strokeRoundRect(x, cy - size * 0.8f, x + w, cy + size * 0.8f, size * 0.8f, 2f, Colors.withAlpha(color, 0.7f))
+        g.text(text, x + w / 2f, cy, size, Colors.lerp(Colors.WHITE, color, 0.25f), bold = false)
+        return w
     }
 
     fun toggle(g: Gfx, id: String, r: Rect, label: String, value: Boolean, enabled: Boolean = true): Boolean {
@@ -313,7 +436,7 @@ class Ui(val theme: Theme, private val sound: (Sfx, Float) -> Unit) {
     }
 
     /** Touch/dwell back button (the Back key is handled globally through Screen.onBack). */
-    fun backButton(g: Gfx): Boolean = button(g, "back", Rect(30f, 26f, 250f, 116f), "< Back", size = 40f, accent = Colors.ICE)
+    fun backButton(g: Gfx): Boolean = button(g, "back", Rect(30f, 26f, 250f, 116f), "Back", size = 38f, accent = Colors.ICE, icon = Icon.BACK)
 
     fun paragraph(g: Gfx, lines: List<String>, x: Float, y: Float, size: Float = 38f, color: Int = Colors.WHITE, gap: Float = 1.45f, align: Align = Align.LEFT): Float {
         var yy = y

@@ -53,4 +53,24 @@ object GameRegistry {
     fun forMode(mode: GameMode): List<Entry> = all.filter { it.mode == mode }
 
     fun byId(id: String): Entry? = all.firstOrNull { it.info.id == id }
+
+    /** Short tags shown on a game's card: how it is played and what it can use. */
+    fun tags(id: String): List<String> = when (id) {
+        "clays" -> listOf("3D", "Finger gun", "Toy gun")
+        "boxing" -> listOf("3D", "1 v 1", "Punch & guard")
+        "archery" -> listOf("3D", "Draw & release")
+        "gallery" -> listOf("Finger gun", "Toy gun")
+        "darts" -> listOf("Aim", "Throw")
+        "goalie", "goalie_s" -> listOf("Reach", "Reactions")
+        "tennis", "tennis_s" -> listOf("Swing", "Toy racket")
+        "tabletennis", "tabletennis_s" -> listOf("Swing", "Toy bat")
+        "bowling", "bowling_s" -> listOf("Roll", "Aim")
+        "snowball" -> listOf("Throw", "Dodge", "Shield")
+        "catch" -> listOf("Catch", "Combos")
+        "reindeer" -> listOf("Arm pump", "Race")
+        "dance" -> listOf("Dance", "Rhythm")
+        "slalom" -> listOf("Lean", "Race")
+        "tree" -> listOf("Point & hold", "Calm")
+        else -> emptyList()
+    }
 }
