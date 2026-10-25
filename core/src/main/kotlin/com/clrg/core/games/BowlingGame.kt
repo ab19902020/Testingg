@@ -218,6 +218,7 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
                     env.sfx(if (env.sporty) Sfx.CROWD_CHEER else Sfx.CHEER, 0.9f, pan(k))
                     if (!env.sporty) env.sfx(Sfx.JINGLE, 0.6f, pan(k))
                     env.particles.confetti(laneRect(k).left, laneRect(k).right, 200f, 60)
+                    env.particles.impact(laneRect(k).cx, 330f, Colors.GOLD, 1f)
                     env.popups.add("STRIKE! +15", laneRect(k).cx, 420f, Colors.GOLD, 80f, 1.4f)
                 } else {
                     message = if (gutter && knocked == 0) "Gutter ball" else "$knocked pins"
@@ -304,6 +305,19 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
         fun scale(y: Float) = fx / z(y)
         // lane and gutters
         val near = 0f; val far = PIT_Y + 0.6f
+        // the neighbouring lanes either side, darker, with their pins standing
+        for (side in intArrayOf(-1, 1)) {
+            val off = side * (LANE_HALF * 2f + 0.55f)
+            val np = floatArrayOf(sx(off - LANE_HALF, near), sy(near), sx(off + LANE_HALF, near), sy(near), sx(off + LANE_HALF, far), sy(far), sx(off - LANE_HALF, far), sy(far))
+            g.fillPolygonGradient(np, 4, sy(far), sy(near), 0xFF5E4A35.toInt(), 0xFF8C7253.toInt())
+            val cap = floatArrayOf(sx(off - side * (LANE_HALF + 0.12f), near), sy(near), sx(side * (LANE_HALF + 0.12f), near), sy(near), sx(side * (LANE_HALF + 0.12f), far), sy(far), sx(off - side * (LANE_HALF + 0.12f), far), sy(far))
+            g.fillPolygonGradient(cap, 4, sy(far), sy(near), 0xFF242C38.toInt(), 0xFF3A4656.toInt())
+            for (row in 0 until 4) for (j in 0..row) {
+                val py = HEAD_PIN_Y + row * 0.26f
+                val px = off + (j - row / 2f) * 0.3f
+                drawPin(g, sx(px, py), sy(py), scale(py) * 0.95f, false, 0f)
+            }
+        }
         val gut = floatArrayOf(sx(-LANE_HALF - 0.12f, near), sy(near), sx(LANE_HALF + 0.12f, near), sy(near), sx(LANE_HALF + 0.12f, far), sy(far), sx(-LANE_HALF - 0.12f, far), sy(far))
         g.fillPolygonGradient(gut, 4, sy(far), sy(near), 0xFF1E272C.toInt(), 0xFF4A5A63.toInt())
         val lanePts = floatArrayOf(sx(-LANE_HALF, near), sy(near), sx(LANE_HALF, near), sy(near), sx(LANE_HALF, far), sy(far), sx(-LANE_HALF, far), sy(far))

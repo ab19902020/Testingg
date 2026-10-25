@@ -37,7 +37,7 @@ tasks.test {
     useJUnitPlatform()
     maxHeapSize = "2g"
     // Optional real-model validation (see tools/pose-validation/run_real_model_tests.sh)
-    for (k in listOf("clrg.validation.python", "clrg.validation.models", "clrg.validation.scenes", "clrg.cpudiag", "clrg.rallydiag", "clrg.sfxdump", "clrg.uishots")) {
+    for (k in listOf("clrg.validation.python", "clrg.validation.models", "clrg.validation.scenes", "clrg.cpudiag", "clrg.rallydiag", "clrg.sfxdump", "clrg.uishots", "clrg.gameshots")) {
         (project.findProperty(k) as String?)?.let { systemProperty(k, it) }
     }
     testLogging.showStandardStreams = (project.findProperty("clrg.validation.python") != null || project.findProperty("clrg.sfxdump") != null)

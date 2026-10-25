@@ -188,6 +188,7 @@ class BoxingGame(env: GameEnv) : MiniGame(env) {
                 env.sfx(if (f.kind == PunchKind.STRAIGHT) Sfx.PUNCH else Sfx.PUNCH_HEAVY, 1f, pan(d))
                 if (f.kind == PunchKind.UPPERCUT && f.head) env.sfx(Sfx.CROWD_OOH, 0.35f, pan(d))
                 env.shake.kick(if (f.kind == PunchKind.STRAIGHT) 6f else 10f)
+                env.particles.impact(px, py - 60f, if (f.kind == PunchKind.STRAIGHT) Colors.WHITE else Colors.GOLD, if (f.kind == PunchKind.STRAIGHT) 0.45f else 0.8f)
                 val label = when (f.kind) { PunchKind.STRAIGHT -> if (f.head) "JAB!" else "BODY!"; PunchKind.HOOK -> "HOOK!"; PunchKind.UPPERCUT -> "UPPERCUT!" }
                 env.popups.add(label, px, py - 120f, env.color(f.from), 58f)
                 env.particles.burst(px, py - 40f, Colors.WHITE, 14, speed = 300f, kind = Particles.Kind.STAR, size = 10f)

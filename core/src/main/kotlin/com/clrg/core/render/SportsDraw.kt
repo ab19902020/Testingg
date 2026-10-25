@@ -10,32 +10,55 @@ object SportsDraw {
     const val GRASS_FAR = 0xFF6FAE4A.toInt()
     const val GRASS_NEAR = 0xFF3E7F2C.toInt()
 
-    /** Blue sky down to [horizon], a soft sun and slowly drifting clouds. */
+    /** Blue sky down to [horizon] with a warm haze, a haloed sun and slowly drifting, softly shaded clouds. */
     fun daySky(g: Gfx, l: Float, t: Float, r: Float, horizon: Float, time: Double, sunX: Float = l + (r - l) * 0.78f) {
-        g.gradientRect(l, t, r, horizon, SKY_TOP, SKY_HORIZON)
-        g.glow(sunX, t + (horizon - t) * 0.22f, 260f, 0x66FFF3C4)
-        g.fillCircle(sunX, t + (horizon - t) * 0.22f, 46f, 0xFFFFF8E1.toInt())
+        val mid = t + (horizon - t) * 0.62f
+        g.gradientRect(l, t, r, mid, 0xFF2A74C9.toInt(), 0xFF8EC6F5.toInt())
+        g.gradientRect(l, mid - 1f, r, horizon, 0xFF8EC6F5.toInt(), 0xFFE8F1F6.toInt())
+        val sunY = t + (horizon - t) * 0.22f
+        g.glow(sunX, sunY, 420f, 0x33FFF3C4)
+        g.glow(sunX, sunY, 200f, 0x66FFF3C4)
+        g.fillCircle(sunX, sunY, 46f, 0xFFFFF8E1.toInt())
         val w = r - l
-        for (i in 0 until 6) {
-            val speed = 8f + i * 3f
-            val cx = l + ((i * 0.37f * w + time.toFloat() * speed) % (w + 500f)) - 250f
-            val cy = t + (horizon - t) * (0.12f + 0.12f * (i % 3))
-            cloud(g, cx, cy, 120f + 40f * (i % 3), 0xEEFFFFFF.toInt())
+        for (i in 0 until 7) {
+            val speed = 6f + i * 2.5f
+            val cx = l + ((i * 0.41f * w + time.toFloat() * speed) % (w + 600f)) - 300f
+            val cy = t + (horizon - t) * (0.1f + 0.11f * (i % 3))
+            val size = 110f + 45f * (i % 3) - (if (i > 4) 40f else 0f)
+            cloud(g, cx, cy, size, 0xF2FFFFFF.toInt())
         }
     }
 
+    /** A puffy cloud: flat shaded base, lit tops. */
     fun cloud(g: Gfx, cx: Float, cy: Float, size: Float, color: Int) {
-        g.fillOval(cx - size, cy - size * 0.28f, cx + size, cy + size * 0.32f, Colors.withAlpha(color, 0.9f))
-        g.fillCircle(cx - size * 0.35f, cy - size * 0.18f, size * 0.38f, color)
-        g.fillCircle(cx + size * 0.15f, cy - size * 0.3f, size * 0.48f, color)
-        g.fillCircle(cx + size * 0.6f, cy - size * 0.08f, size * 0.3f, color)
+        val shade = Colors.lerp(color, 0xFF9FB6CC.toInt(), 0.35f)
+        g.fillOval(cx - size, cy - size * 0.2f, cx + size, cy + size * 0.34f, Colors.withAlpha(shade, 0.85f))
+        g.fillCircle(cx - size * 0.38f, cy - size * 0.12f, size * 0.4f, color)
+        g.fillCircle(cx + size * 0.12f, cy - size * 0.28f, size * 0.5f, color)
+        g.fillCircle(cx + size * 0.58f, cy - size * 0.04f, size * 0.32f, color)
+        g.fillOval(cx - size * 0.8f, cy + size * 0.02f, cx + size * 0.85f, cy + size * 0.3f, Colors.withAlpha(shade, 0.7f))
     }
 
-    /** Rolling hills with a tree line along the horizon. */
+    /** Distant blue mountains, rolling hills and a varied tree line along the horizon. */
     fun hills(g: Gfx, l: Float, r: Float, horizon: Float, seed: Int = 0) {
+        val w = r - l
+        // far mountains with snowy tops, hazy
+        val mn = 14
+        val mp = FloatArray((mn + 3) * 2)
+        for (i in 0..mn) {
+            val x = l + w * i / mn
+            val h = 120f + 70f * sin(i * 1.7f + seed * 0.7f) + 40f * sin(i * 3.1f + seed)
+            mp[i * 2] = x; mp[i * 2 + 1] = horizon - h
+        }
+        mp[(mn + 1) * 2] = r; mp[(mn + 1) * 2 + 1] = horizon + 2f; mp[(mn + 2) * 2] = l; mp[(mn + 2) * 2 + 1] = horizon + 2f
+        g.fillPolygonGradient(mp, mn + 3, horizon - 230f, horizon, 0xFF9FB9D4.toInt(), 0xFFC9DBE6.toInt())
+        for (i in 0..mn) {
+            val px = mp[i * 2]; val py = mp[i * 2 + 1]
+            if (horizon - py > 150f) Draw.tri(g, px - 34f, py + 26f, px + 34f, py + 26f, px, py, 0xCCF4F8FF.toInt())
+        }
+        // nearer hills
         val n = 24
         val pts = FloatArray((n + 3) * 2)
-        val w = r - l
         for (i in 0..n) {
             val x = l + w * i / n
             val h = 40f + 30f * sin(i * 0.9f + seed) + 18f * sin(i * 2.3f + seed * 2)
@@ -43,15 +66,42 @@ object SportsDraw {
         }
         pts[(n + 1) * 2] = r; pts[(n + 1) * 2 + 1] = horizon + 2f
         pts[(n + 2) * 2] = l; pts[(n + 2) * 2 + 1] = horizon + 2f
-        g.fillPolygonGradient(pts, n + 3, horizon - 80f, horizon, 0xFF8DB7A0.toInt(), 0xFF6E9C7E.toInt())
-        // tree line
+        g.fillPolygonGradient(pts, n + 3, horizon - 80f, horizon, 0xFF86B192.toInt(), 0xFF5F8F6C.toInt())
+        // tree line: a mix of round trees and pines, lit from the sun's side
         var x = l
         var i = 0
         while (x < r) {
-            val h = 16f + 10f * ((i * 7919) % 5) / 4f
-            g.fillOval(x - 14f, horizon - h - 12f, x + 14f, horizon + 2f, 0xFF3F6F45.toInt())
-            x += 18f + (i % 3) * 6f; i++
+            val k = ((i * 7919 + seed * 31) % 7)
+            val h = 18f + 12f * k / 6f
+            if (k % 3 == 0) {
+                Draw.tri(g, x - 10f, horizon + 2f, x + 10f, horizon + 2f, x, horizon - h - 14f, 0xFF2F5A3A.toInt())
+            } else {
+                g.fillOval(x - 15f, horizon - h - 12f, x + 15f, horizon + 2f, 0xFF3C6E45.toInt())
+                g.fillOval(x - 9f, horizon - h - 10f, x + 8f, horizon - h + 2f, 0xFF5A8F5C.toInt())
+            }
+            x += 17f + (i % 3) * 6f; i++
         }
+    }
+
+    /** A little hut through [cam]: walls (a box) and a pitched roof running left to right. */
+    fun hut(g: Gfx, cam: Cam3, ox: Float, oy: Float, x0: Float, y0: Float, x1: Float, y1: Float, h: Float, roofH: Float, wall: Int, roof: Int, z0: Float = 0f) {
+        box(g, cam, ox, oy, x0, y0, z0, x1, y1, h, Colors.darker(wall, 0.9f), wall, Colors.darker(wall, 0.75f))
+        val ym = (y0 + y1) / 2f
+        val pts = FloatArray(8)
+        fun poly(vararg v: Float, color: Int) {
+            val n = v.size / 3
+            for (i in 0 until n) { if (!cam.project(v[i * 3], v[i * 3 + 1], v[i * 3 + 2])) return; pts[i * 2] = cam.px + ox; pts[i * 2 + 1] = cam.py + oy }
+            g.fillPolygon(pts, n, color)
+        }
+        val o = 0.15f
+        // front roof slope, then the gable end facing the camera
+        poly(x0 - o, y0 - o, h, x1 + o, y0 - o, h, x1 + o, ym, h + roofH, x0 - o, ym, h + roofH, color = roof)
+        if (cam.ex < x0) poly(x0, y0, h, x0, y1, h, x0, ym, h + roofH, color = Colors.darker(wall, 0.85f))
+        else if (cam.ex > x1) poly(x1, y0, h, x1, y1, h, x1, ym, h + roofH, color = Colors.darker(wall, 0.85f))
+        // the opening the clays fly out of
+        val hx = (x0 + x1) / 2f
+        val wh = h - z0
+        poly(hx - (x1 - x0) * 0.3f, y0 - 0.01f, z0 + wh * 0.35f, hx + (x1 - x0) * 0.3f, y0 - 0.01f, z0 + wh * 0.35f, hx + (x1 - x0) * 0.3f, y0 - 0.01f, z0 + wh * 0.75f, hx - (x1 - x0) * 0.3f, y0 - 0.01f, z0 + wh * 0.75f, color = 0xFF2B1B12.toInt())
     }
 
     /** A cartoon "finger gun" hand: index finger along [angle], thumb raised or dropped. */

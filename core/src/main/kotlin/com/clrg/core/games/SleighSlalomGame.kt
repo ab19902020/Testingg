@@ -11,6 +11,7 @@ import com.clrg.core.game.PlayerInput
 import com.clrg.core.math.Rect
 import com.clrg.core.math.clamp
 import com.clrg.core.math.lerp
+import com.clrg.core.render.Cam3
 import com.clrg.core.render.Colors
 import com.clrg.core.render.Draw
 import com.clrg.core.render.Gfx
@@ -220,103 +221,243 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
     private val trailLastY = FloatArray(2)
     private val lanePts = FloatArray(TRAIL * 2)
 
-    /** Top-down pine: soft shadow, layered lit needles, a dusting of snow. */
-    private fun topTree(g: Gfx, xx: Float, yy: Float, s: Float) {
-        Draw.softShadow(g, xx + s * 0.25f, yy + s * 0.3f, s * 1.1f, s * 0.7f, 0.35f)
-        for (a in 0 until 7) {
-            val ang = a * 0.8976f
-            val cx = xx + kotlin.math.cos(ang) * s * 0.5f; val cy = yy + kotlin.math.sin(ang) * s * 0.5f
-            g.fillCircleRadial(cx, cy, s * 0.52f, cx - s * 0.2f, cy - s * 0.25f, s * 0.8f, 0xFF2E7D4F.toInt(), 0xFF123D26.toInt())
-        }
-        g.fillCircleRadial(xx, yy, s * 0.6f, xx - s * 0.2f, yy - s * 0.25f, s * 0.85f, 0xFF3FA36A.toInt(), 0xFF1B5E3A.toInt())
-        g.fillCircle(xx - s * 0.22f, yy - s * 0.22f, s * 0.24f, 0xCCF4F8FF.toInt())
-        g.fillCircle(xx + s * 0.25f, yy - s * 0.05f, s * 0.13f, 0x99F4F8FF.toInt())
+    // ------------------------------------------------------------------ 3D view: behind each sleigh, down the hill
+
+    /** Half the piste's width in metres (course x of 1 is the piste edge). */
+    private val halfW = 7f
+    private val cams = arrayOf(Cam3(), Cam3())
+    private val quad = FloatArray(8)
+
+    /** Height of the snow at distance [yy] down the course: a rolling slope. */
+    private fun zAt(yy: Float): Float = 0.9f * sin(yy * 0.11f) + 0.55f * sin(yy * 0.047f + 1f)
+
+    private fun hash01(i: Int): Float { var h = i * 374761393 + 668265263; h = (h xor (h ushr 13)) * 1274126177; return ((h xor (h ushr 16)) and 0xFFFF) / 65535f }
+
+    private class Obj(var d: Float, var kind: Int, var x: Float, var y: Float, var s: Float, var i: Int)
+    private val objs = ArrayList<Obj>()
+    private val pool = ArrayList<Obj>()
+    private fun obj(d: Float, kind: Int, x: Float, y: Float, s: Float, i: Int) {
+        val o = if (pool.isNotEmpty()) pool.removeAt(pool.size - 1) else Obj(0f, 0, 0f, 0f, 0f, 0)
+        o.d = d; o.kind = kind; o.x = x; o.y = y; o.s = s; o.i = i
+        objs.add(o)
     }
+
+    private fun fogMix(c: Int, d: Float): Int = Colors.lerp(c, 0xFFDCE7F6.toInt(), ((d - 18f) / 70f).coerceIn(0f, 0.85f))
 
     private fun renderLane(g: Gfx, k: Int, time: Double) {
         val r = Rect(if (k == 0) 0f else screenW / 2f, 120f, if (k == 0) screenW / 2f else screenW, 1080f)
         g.save(); g.clipRect(r.left, r.top, r.right, r.bottom)
-        g.gradientRect(r.left, r.top, r.right, r.bottom, 0xFFF8FBFF.toInt(), 0xFFD2E1F4.toInt())
-        val half = r.width * 0.42f
-        val pxPerM = 26f
-        fun sx(xx: Float) = r.cx + xx * half
-        fun sy(yy: Float) = sleighY + (yy - y[k]) * pxPerM
-        // slope texture: soft ridges scrolling up
-        var ry = (kotlin.math.floor((y[k] - 20f) / 8f) * 8f)
-        while (sy(ry) < r.bottom + 40f) {
-            val yy = sy(ry)
-            if (yy > r.top - 20f) {
-                g.line(r.left, yy, r.right, yy + 30f, 3f, 0x14003366)
-                g.line(r.left, yy + 3f, r.right, yy + 33f, 2f, 0x22FFFFFF)
+        val cam = cams[k]
+        val ys = y[k]
+        val xs = x[k] * halfW
+        val bounce = if (crash[k] > 0f) 0f else sin(time.toFloat() * 13f) * 0.03f * speed[k] / 15f
+        cam.viewport(r, 58f)
+        cam.cy = r.top + r.height * 0.42f
+        cam.lookAt(xs * 0.8f, ys - 7.5f, zAt(ys) + 3.0f + bounce, xs * 0.45f, ys + 14f, zAt(ys + 14f) + 0.2f)
+        // sky, low sun glow and mountains
+        val hz = cam.horizonY()
+        g.gradientRect(r.left, r.top, r.right, hz + 10f, 0xFF7FB2E5.toInt(), 0xFFE9F0FA.toInt())
+        g.glow(r.left + r.width * 0.72f, hz - 70f, 260f, 0x55FFE3B3)
+        val mt = FloatArray(2 * 12)
+        for (layer in 0..1) {
+            val base = hz + 6f
+            val amp = if (layer == 0) 150f else 90f
+            for (i in 0 until 10) {
+                val px = r.left - 40f + (r.width + 80f) * i / 9f
+                mt[i * 2] = px
+                mt[i * 2 + 1] = base - amp * (0.45f + 0.55f * hash01(i * 7 + layer * 31 + k * 0)) - (if (i % 2 == 0) 0f else amp * 0.25f)
             }
-            ry += 8f
+            mt[20] = r.right + 40f; mt[21] = base; mt[22] = r.left - 40f; mt[23] = base
+            g.fillPolygonGradient(mt, 12, base - amp, base, if (layer == 0) 0xFFB7C9E2.toInt() else 0xFF9DB4D3.toInt(), 0xFFDCE7F6.toInt())
+            if (layer == 0) for (i in 0 until 10 step 2) {
+                // snow caps
+                val px = mt[i * 2]; val py = mt[i * 2 + 1]
+                Draw.tri(g, px - 46f, py + 40f, px + 46f, py + 40f, px, py, 0xEEFFFFFF.toInt())
+            }
         }
-        g.gradientRect(r.left, r.top, sx(-1.08f), r.bottom, 0xFFC9DAF0.toInt(), 0xFFA9C1E1.toInt())
-        g.gradientRect(sx(1.08f), r.top, r.right, r.bottom, 0xFFC9DAF0.toInt(), 0xFFA9C1E1.toInt())
-        g.line(sx(-1.08f), r.top, sx(-1.08f), r.bottom, 4f, 0x55FFFFFF)
-        g.line(sx(1.08f), r.top, sx(1.08f), r.bottom, 4f, 0x55FFFFFF)
+        // the slope, far to near, in strips
+        val far = 85f
+        var yy = ys + far
+        var prevL = 0f; var prevR = 0f; var prevY = 0f; var prevOk = false
+        var pbl = 0f; var pbr = 0f
+        while (yy > ys - 7f) {
+            val step = if (yy - ys > 40f) 4f else if (yy - ys > 15f) 2f else 1f
+            val z = zAt(yy)
+            val okL = cam.project(-halfW, yy, z); val lx = cam.px; val ly = cam.py
+            val okR = cam.project(halfW, yy, z); val rx = cam.px
+            val okBL = cam.project(-halfW - 14f, yy, z + 1.3f); val blx = cam.px; val bly = cam.py
+            val okBR = cam.project(halfW + 14f, yy, z + 1.3f); val brx = cam.px; val bry = cam.py
+            if (okL && okR && okBL && okBR && prevOk) {
+                val d = cam.pd
+                val slope = (zAt(yy + 1f) - zAt(yy - 1f)) / 2f
+                val light = (1f - slope * 1.6f).coerceIn(0.78f, 1.08f)
+                val stripe = ((yy / 1.6f).toInt() and 1) == 0
+                val snow = if (stripe) 0xFFF4F8FF.toInt() else 0xFFE6EEF9.toInt()
+                val c = fogMix(Colors.lerp(Colors.darker(snow, 0.86f), snow, light - 0.08f), d)
+                quad[0] = lx; quad[1] = ly; quad[2] = rx; quad[3] = ly; quad[4] = prevR; quad[5] = prevY; quad[6] = prevL; quad[7] = prevY
+                g.fillPolygon(quad, 4, c)
+                val bank = fogMix(0xFFD3E0F2.toInt(), d)
+                quad[0] = blx; quad[1] = bly; quad[2] = lx; quad[3] = ly; quad[4] = prevL; quad[5] = prevY; quad[6] = pbl; quad[7] = prevY - (ly - bly)
+                g.fillPolygon(quad, 4, bank)
+                quad[0] = rx; quad[1] = ly; quad[2] = brx; quad[3] = bry; quad[4] = pbr; quad[5] = prevY - (ly - bry); quad[6] = prevR; quad[7] = prevY
+                g.fillPolygon(quad, 4, bank)
+                // fence posts marking the piste edge
+                if (((yy / 4f).toInt()) % 2 == 0 && d < 45f) {
+                    g.line(lx, ly, lx, ly - 900f / d, maxOf(1.5f, 60f / d), 0xFFE53935.toInt())
+                    g.line(rx, ly, rx, ly - 900f / d, maxOf(1.5f, 60f / d), 0xFFE53935.toInt())
+                }
+            }
+            prevL = lx; prevR = rx; prevY = ly; prevOk = okL && okR && okBL && okBR; pbl = blx; pbr = brx
+            yy -= step
+        }
         // ski tracks
         val n = trailN[k]
-        if (n >= 2) for (off in floatArrayOf(-0.06f, 0.06f)) {
+        if (n >= 2) for (off in floatArrayOf(-0.35f, 0.35f)) {
             var m = 0
-            for (i in 0 until n) { val ty = sy(trailY[k][i]); if (ty < r.top - 40f) continue; lanePts[m * 2] = sx(trailX[k][i] + off); lanePts[m * 2 + 1] = ty; m++ }
-            if (m >= 2) g.polyline(lanePts, m, 5f, 0x2A3A6FA8)
+            for (i in 0 until n) {
+                if (!cam.project(trailX[k][i] * halfW + off, trailY[k][i], zAt(trailY[k][i]) + 0.02f)) continue
+                lanePts[m * 2] = cam.px; lanePts[m * 2 + 1] = cam.py; m++
+            }
+            if (m >= 2) g.polyline(lanePts, m, 4f, 0x335C7FB0)
         }
-        // finish line
-        val fy = sy(LENGTH)
-        if (fy in r.top..r.bottom) {
-            for (i in 0 until 12) g.fillRect(sx(-1f + i / 6f), fy - 10f, sx(-1f + (i + 1) / 6f), fy + 10f, if (i % 2 == 0) Colors.BLACK else Colors.WHITE)
-            g.text("FINISH", r.cx, fy - 40f, 50f, Colors.CANDY)
-        }
+        // everything standing on the snow, sorted far to near
+        pool.addAll(objs); objs.clear()
         for ((i, t) in things.withIndex()) {
-            val yy = sy(t.y)
-            if (yy < r.top - 80f || yy > r.bottom + 80f) continue
-            val xx = sx(t.x)
-            when (t.kind) {
-                Kind.GATE -> {
-                    val passed = i in done[k]
-                    val c1 = if (passed) 0x88E57373.toInt() else 0xFFE53935.toInt()
-                    val c2 = if (passed) 0x8864B5F6.toInt() else 0xFF1E88E5.toInt()
-                    for ((side, c) in listOf(-1 to c1, 1 to c2)) {
-                        val px = sx(t.x + side * t.halfWidth)
-                        Draw.softShadow(g, px + 14f, yy + 4f, 26f, 8f, 0.4f)
-                        g.line(px, yy, px, yy - 100f, 10f, 0xFF263238.toInt())
-                        g.line(px - 1.5f, yy, px - 1.5f, yy - 100f, 4f, 0xFF90A4AE.toInt())
-                        val flap = sin(time * 5 + i + side).toFloat() * 6f
-                        lanePts[0] = px; lanePts[1] = yy - 100f; lanePts[2] = px; lanePts[3] = yy - 55f; lanePts[4] = px - side * 62f; lanePts[5] = yy - 78f + flap
-                        g.fillPolygonGradient(lanePts, 3, yy - 100f, yy - 55f, Colors.lighter(c, 0.35f), Colors.darker(c, 0.7f))
-                    }
-                    g.line(sx(t.x - t.halfWidth), yy, sx(t.x + t.halfWidth), yy, 3f, 0x33000000)
+            if (t.y < ys - 6f || t.y > ys + far) continue
+            if (t.kind == Kind.PRESENT && i in done[k]) continue
+            obj(t.y - ys, t.kind.ordinal, t.x * halfW, t.y, 1f, i)
+        }
+        // the forest either side
+        var row = kotlin.math.floor((ys - 6f) / 3.2f).toInt()
+        while (row * 3.2f < ys + far) {
+            for (side in 0..1) {
+                val h = hash01(row * 2 + side)
+                val sgn = if (side == 0) -1f else 1f
+                obj(row * 3.2f - ys, 10, sgn * (halfW + 2f + h * 9f), row * 3.2f + hash01(row * 5 + side) * 2f, 3.5f + 3f * hash01(row * 11 + side), row)
+                if (h > 0.4f) obj(row * 3.2f - ys + 1.5f, 10, sgn * (halfW + 6f + h * 12f), row * 3.2f + 1.5f, 4f + 3f * h, row + 7)
+            }
+            row++
+        }
+        // the finish arch
+        if (LENGTH - ys in -6f..far) obj(LENGTH - ys, 20, 0f, LENGTH, 1f, 0)
+        objs.sortByDescending { it.d }
+        for (o in objs) {
+            // things right beside the camera would fill the view: fade them out as they pass
+            val camD = o.d + 7.5f
+            if (camD < 4.5f) continue
+            val a = ((camD - 4.5f) / 3.5f).coerceIn(0f, 1f)
+            if (a < 1f) { g.save(); g.setAlpha(g.getAlpha() * a) }
+            drawObj(g, cam, k, o, time)
+            if (a < 1f) g.restore()
+        }
+        // the sleigh, from behind
+        if (cam.project(xs, ys, zAt(ys))) {
+            val sx = cam.px; val sy = cam.py
+            val st = steer[k]
+            val size = cam.focal * 1.55f / cam.pd
+            if (kotlin.math.abs(st) > 0.35f && crash[k] <= 0f) for (i in 0 until 6) {
+                val ph = ((time * 3.2 + i / 6.0) % 1.0).toFloat()
+                g.glow(sx + (if (st > 0) -1f else 1f) * (size * 0.35f + size * 0.5f * ph), sy - size * 0.1f - size * 0.4f * ph, size * (0.12f + 0.18f * ph), Colors.withAlpha(Colors.WHITE, (kotlin.math.abs(st) - 0.3f) * (1f - ph)))
+            }
+            Draw.sleighBack(g, sx, sy, size, env.color(k), -st * 0.22f, time + k, tucking[k])
+            if (crash[k] > 0f) for (j in 0..2) Draw.star(g, sx + kotlin.math.cos(time.toFloat() * 6f + j * 2.1f) * size * 0.35f, sy - size * 0.9f, size * 0.07f, Colors.GOLD, time.toFloat() * 5f)
+        }
+        // falling snow
+        if (!env.settings.reducedEffects) for (i in 0 until 46) {
+            val fx = r.left + ((hash01(i * 13 + k) * r.width + time.toFloat() * (12f + 20f * hash01(i)) + sin(time.toFloat() * 0.8f + i) * 18f) % r.width + r.width) % r.width
+            val fy = r.top + ((hash01(i * 29) * r.height + time.toFloat() * (70f + 90f * hash01(i * 3)) + speed[k] * 6f * time.toFloat() * 0f) % r.height)
+            g.fillCircle(fx, fy, 2f + 3.5f * hash01(i * 7), 0xCCFFFFFF.toInt())
+        }
+        // speed lines when tucked
+        if (tucking[k] || (steeringOnly && speed[k] > 10f)) for (i in 0 until 8) {
+            val ph = ((time * 2.5 + i * 0.137) % 1.0).toFloat()
+            val ang = i * 0.785f + 0.3f
+            val cx = r.cx; val cy = cam.cy + 80f
+            val r0 = 260f + 420f * ph
+            g.line(cx + kotlin.math.cos(ang) * r0, cy + kotlin.math.sin(ang) * r0 * 0.7f, cx + kotlin.math.cos(ang) * (r0 + 90f), cy + kotlin.math.sin(ang) * (r0 + 90f) * 0.7f, 3f, Colors.withAlpha(Colors.WHITE, 0.5f * (1f - ph)))
+        }
+        // lane HUD: time, progress and place
+        val f = (y[k] / LENGTH).coerceIn(0f, 1f)
+        g.fillRoundRect(r.right - 46f, 200f, r.right - 26f, 1000f, 10f, 0x55000000)
+        g.fillRoundRect(r.right - 46f, 1000f - 800f * f, r.right - 26f, 1000f, 10f, env.color(k))
+        g.fillCircle(r.right - 36f, 1000f - 800f * f, 14f, Colors.WHITE)
+        val timeText = if (finish[k] >= 0) "%.1f s".format(finish[k]) else "%.1f s".format(total(k, playTime))
+        val tw = g.measureText(timeText, 46f) + 50f
+        g.fillRoundRect(r.cx - tw / 2f, 200f, r.cx + tw / 2f, 262f, 31f, 0xAA0B1A36.toInt())
+        g.text(timeText, r.cx, 231f, 46f, Colors.WHITE)
+        if (finish[k] >= 0) g.text(if (place(k) == 1) "1st!" else "2nd", r.cx, 560f, 110f, env.color(k), outline = Colors.BLACK, outlineWidth = 8f)
+        Hud.laneLabel(g, Rect(r.left, 130f, r.right, 260f), env, k)
+        g.restore()
+    }
+
+    private fun drawObj(g: Gfx, cam: Cam3, k: Int, o: Obj, time: Double) {
+        val z = zAt(o.y)
+        if (!cam.project(o.x, o.y, z)) return
+        val bx = cam.px; val by = cam.py; val d = cam.pd
+        val pxm = cam.focal / d
+        when (o.kind) {
+            10, Kind.TREE.ordinal -> {
+                val h = (if (o.kind == 10) o.s else 4.2f) * pxm
+                Draw.softShadow(g, bx + h * 0.12f, by, h * 0.32f, h * 0.06f, 0.3f)
+                Draw.pineTree(g, bx, by, h, fogMix(if (o.kind == 10) 0xFF2E7D4F.toInt() else 0xFF2F8A55.toInt(), d))
+            }
+            Kind.ROCK.ordinal -> {
+                val w = 1.4f * pxm
+                Draw.softShadow(g, bx + w * 0.1f, by, w * 0.7f, w * 0.15f, 0.35f)
+                g.fillCircleRadial(bx, by - w * 0.25f, w * 0.55f, bx - w * 0.2f, by - w * 0.5f, w * 0.9f, fogMix(0xFFB0BEC5.toInt(), d), fogMix(0xFF455A64.toInt(), d))
+                g.fillOval(bx - w * 0.42f, by - w * 0.78f, bx + w * 0.3f, by - w * 0.46f, fogMix(0xEEF4F8FF.toInt(), d))
+            }
+            Kind.PRESENT.ordinal -> {
+                val sz = 0.9f * pxm
+                val hover = sin(time * 3 + o.i).toFloat() * sz * 0.08f
+                g.glow(bx, by - sz * 0.6f, sz * 1.2f, 0x55FFD54F)
+                Draw.softShadow(g, bx, by, sz * 0.5f, sz * 0.12f, 0.35f)
+                Draw.present(g, bx, by - sz * 0.55f + hover, sz, Colors.CANDY, Colors.GOLD, sin(time * 2 + o.i).toFloat() * 0.15f)
+            }
+            Kind.GATE.ordinal -> {
+                val t = things[o.i]
+                val passed = o.i in done[k]
+                for (side in intArrayOf(-1, 1)) {
+                    val px = o.x + side * t.halfWidth * halfW
+                    if (!cam.project(px, o.y, z)) continue
+                    val gx = cam.px; val gy = cam.py; val pd = cam.pd
+                    val m = cam.focal / pd
+                    val c = if (side < 0) 0xFFE53935.toInt() else 0xFF1E88E5.toInt()
+                    val col = if (passed) Colors.withAlpha(c, 0.5f) else fogMix(c, pd)
+                    Draw.softShadow(g, gx + 0.3f * m, gy, 0.5f * m, 0.12f * m, 0.35f)
+                    g.line(gx, gy, gx, gy - 1.9f * m, maxOf(2f, 0.09f * m), fogMix(0xFF37474F.toInt(), pd))
+                    val flap = sin(time * 6 + o.i + side).toFloat() * 0.12f * m
+                    val fx = gx - side * 0.75f * m
+                    quad[0] = gx; quad[1] = gy - 1.9f * m; quad[2] = fx; quad[3] = gy - 1.85f * m + flap
+                    quad[4] = fx; quad[5] = gy - 1.25f * m + flap; quad[6] = gx; quad[7] = gy - 1.2f * m
+                    g.fillPolygonGradient(quad, 4, gy - 1.9f * m, gy - 1.2f * m, Colors.lighter(col, 0.3f), Colors.darker(col, 0.75f))
+                    if (passed) Draw.star(g, gx, gy - 2.15f * m, 0.12f * m, Colors.withAlpha(Colors.GOLD, 0.7f), 0f)
                 }
-                Kind.PRESENT -> if (i !in done[k]) Draw.present(g, xx, yy - 20f, 46f, Colors.CANDY, Colors.GOLD, sin(time * 3 + i).toFloat() * 0.2f)
-                Kind.TREE -> topTree(g, xx, yy, 48f)
-                Kind.ROCK -> {
-                    Draw.softShadow(g, xx + 10f, yy + 14f, 44f, 18f, 0.35f)
-                    g.save(); g.translate(xx, yy); g.scale(1f, 0.66f)
-                    g.fillCircleRadial(0f, 0f, 34f, -12f, -14f, 50f, 0xFFB0BEC5.toInt(), 0xFF455A64.toInt())
-                    g.restore()
-                    g.fillOval(xx - 22f, yy - 22f, xx + 14f, yy - 4f, 0xEEF4F8FF.toInt())
+            }
+            20 -> {
+                // finish arch across the piste
+                val zz = z
+                val postH = 4.2f
+                val okL = cam.project(-halfW - 0.6f, o.y, zz); val lx = cam.px; val ly = cam.py; val lm = cam.focal / cam.pd
+                val okR = cam.project(halfW + 0.6f, o.y, zz); val rx = cam.px
+                if (!okL || !okR) return
+                g.line(lx, ly, lx, ly - postH * lm, maxOf(3f, 0.25f * lm), 0xFF5D4037.toInt())
+                g.line(rx, ly, rx, ly - postH * lm, maxOf(3f, 0.25f * lm), 0xFF5D4037.toInt())
+                val top = ly - postH * lm; val bot = ly - (postH - 1.1f) * lm
+                g.fillRect(lx, top, rx, bot, Colors.CANDY)
+                val cells = 16
+                for (i in 0 until cells) if (i % 2 == 0) g.fillRect(lx + (rx - lx) * i / cells, bot, lx + (rx - lx) * (i + 1) / cells, bot + 0.25f * lm, Colors.WHITE)
+                g.text("FINISH", (lx + rx) / 2f, (top + bot) / 2f, minOf(120f, 0.8f * lm), Colors.WHITE, outline = 0xFF7F0000.toInt(), outlineWidth = maxOf(2f, 0.06f * lm))
+                // chequered line on the snow
+                for (i in 0 until 12) {
+                    val x0 = -halfW + 2f * halfW * i / 12f; val x1 = -halfW + 2f * halfW * (i + 1) / 12f
+                    if (!cam.project(x0, o.y, zz)) continue
+                    val ax = cam.px; val ay = cam.py
+                    if (!cam.project(x1, o.y + 0.6f, zz)) continue
+                    g.fillRect(ax, minOf(ay, cam.py), cam.px, maxOf(ay, cam.py) + 2f, if (i % 2 == 0) 0xFF263238.toInt() else Colors.WHITE)
                 }
             }
         }
-        // sleigh, snow spray on hard turns
-        val shx = sx(x[k])
-        val st = steer[k]
-        if (kotlin.math.abs(st) > 0.35f && crash[k] <= 0f) for (i in 0 until 5) {
-            val ph = ((time * 3 + i / 5.0) % 1.0).toFloat()
-            g.glow(shx + (if (st > 0) -1f else 1f) * (40f + 50f * ph), sleighY - 30f - 60f * ph, 16f + 22f * ph, Colors.withAlpha(Colors.WHITE, (kotlin.math.abs(st) - 0.3f) * (1f - ph)))
-        }
-        if (tucking[k] || (steeringOnly && speed[k] > 10f)) for (i in 0..2) g.line(shx - 30f + i * 30f, sleighY - 60f, shx - 30f + i * 30f, sleighY - 120f - speed[k] * 3f, 3f, 0x5590CAF9)
-        Draw.sleighTop(g, shx, sleighY, 110f, env.color(k), -steer[k] * 0.35f)
-        if (crash[k] > 0f) Draw.star(g, shx + 30f, sleighY - 60f, 20f, Colors.GOLD, time.toFloat() * 5f)
-        // progress bar
-        val f = (y[k] / LENGTH).coerceIn(0f, 1f)
-        g.fillRoundRect(r.right - 46f, 200f, r.right - 26f, 1000f, 10f, 0x44000000)
-        g.fillRoundRect(r.right - 46f, 200f, r.right - 26f, 200f + 800f * f, 10f, env.color(k))
-        g.text(if (finish[k] >= 0) "%.1f s".format(finish[k]) else "%.1f s".format(total(k, playTime)), r.cx, 230f, 44f, Colors.BLACK, bold = true)
-        if (finish[k] >= 0) g.text(if (place(k) == 1) "1st!" else "2nd", r.cx, 640f, 100f, env.color(k), outline = Colors.BLACK, outlineWidth = 8f)
-        Hud.laneLabel(g, Rect(r.left, 130f, r.right, 260f), env, k)
-        g.restore()
     }
 
     override fun demo(g: Gfx, r: Rect, t: Double) {

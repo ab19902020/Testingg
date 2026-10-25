@@ -824,6 +824,54 @@ object Draw {
         g.restore()
     }
 
+    /**
+     * Sleigh seen from behind (the slalom camera), standing on the snow at ([x], [y]), [s] pixels wide: curled runners,
+     * a painted body with gold trim, a sack of presents and the rider in a bobble hat, scarf streaming in the wind.
+     */
+    fun sleighBack(g: Gfx, x: Float, y: Float, s: Float, color: Int, tilt: Float, t: Double, tucked: Boolean) {
+        softShadow(g, x, y + s * 0.02f, s * 0.62f, s * 0.12f, 0.45f)
+        g.save(); g.translate(x, y); g.rotate(tilt)
+        // runners and struts
+        for (sx in floatArrayOf(-0.4f, 0.4f)) {
+            g.line(s * sx, 0f, s * sx * 0.92f, -s * 0.2f, s * 0.05f, 0xFF455A64.toInt())
+            g.line(s * sx - s * 0.03f, -s * 0.01f, s * sx + s * 0.03f, -s * 0.01f, s * 0.04f, 0xFFCFD8DC.toInt())
+        }
+        g.line(-s * 0.38f, -s * 0.12f, s * 0.38f, -s * 0.12f, s * 0.03f, 0xFF455A64.toInt())
+        // body: wider at the top, lit from above
+        pts[0] = -s * 0.38f; pts[1] = -s * 0.15f; pts[2] = s * 0.38f; pts[3] = -s * 0.15f
+        pts[4] = s * 0.5f; pts[5] = -s * 0.6f; pts[6] = -s * 0.5f; pts[7] = -s * 0.6f
+        g.fillPolygonGradient(pts, 4, -s * 0.6f, -s * 0.15f, Colors.lighter(color, 0.25f), Colors.darker(color, 0.6f))
+        g.line(-s * 0.5f, -s * 0.6f, s * 0.5f, -s * 0.6f, s * 0.05f, GOLD_TRIM)
+        g.line(-s * 0.38f, -s * 0.15f, s * 0.38f, -s * 0.15f, s * 0.03f, Colors.darker(GOLD_TRIM, 0.8f))
+        g.fillCircle(-s * 0.5f, -s * 0.62f, s * 0.05f, GOLD_TRIM)
+        g.fillCircle(s * 0.5f, -s * 0.62f, s * 0.05f, GOLD_TRIM)
+        // a gold swirl on the back panel
+        g.arc(-s * 0.1f, -s * 0.38f, s * 0.08f, 0f, 4.5f, s * 0.022f, Colors.withAlpha(GOLD_TRIM, 0.9f))
+        g.arc(s * 0.1f, -s * 0.38f, s * 0.08f, PI_F, 4.5f, s * 0.022f, Colors.withAlpha(GOLD_TRIM, 0.9f))
+        // sack of presents
+        g.fillCircleRadial(s * 0.3f, -s * 0.7f, s * 0.17f, s * 0.24f, -s * 0.78f, s * 0.25f, 0xFFA1887F.toInt(), 0xFF5D4037.toInt())
+        present(g, s * 0.2f, -s * 0.86f, s * 0.14f, Colors.GOOD, Colors.GOLD, 0.2f)
+        present(g, s * 0.38f, -s * 0.84f, s * 0.12f, 0xFF42A5F5.toInt(), Colors.WHITE, -0.25f)
+        // the rider from behind (lower when tucked)
+        val dip = if (tucked) s * 0.12f else 0f
+        g.fillCircleRadial(-s * 0.04f, -s * 0.74f + dip * 0.6f, s * 0.27f, -s * 0.12f, -s * 0.86f, s * 0.38f, Colors.WHITE, 0xFFB4C9E6.toInt())
+        val hy = -s * 1.03f + dip
+        g.fillCircleRadial(-s * 0.04f, hy, s * 0.19f, -s * 0.1f, hy - s * 0.08f, s * 0.28f, Colors.WHITE, 0xFFC5D5EC.toInt())
+        // scarf round the neck, tails streaming back in the wind
+        g.fillRoundRect(-s * 0.2f, hy + s * 0.14f, s * 0.12f, hy + s * 0.22f, s * 0.04f, color)
+        val flap = kotlin.math.sin(t.toFloat() * 14f) * s * 0.04f
+        pts[0] = s * 0.06f; pts[1] = hy + s * 0.16f; pts[2] = s * 0.32f; pts[3] = hy + s * 0.1f + flap
+        pts[4] = s * 0.34f; pts[5] = hy + s * 0.18f + flap; pts[6] = s * 0.08f; pts[7] = hy + s * 0.24f
+        g.fillPolygon(pts, 4, Colors.darker(color, 0.85f))
+        // bobble hat
+        g.fillRoundRectGradient(-s * 0.21f, hy - s * 0.2f, s * 0.13f, hy - s * 0.02f, s * 0.1f, Colors.lighter(color, 0.3f), Colors.darker(color, 0.7f))
+        g.fillRoundRect(-s * 0.23f, hy - s * 0.06f, s * 0.15f, hy + s * 0.01f, s * 0.03f, Colors.WHITE)
+        g.fillCircle(-s * 0.04f, hy - s * 0.24f, s * 0.06f, Colors.WHITE)
+        g.restore()
+    }
+
+    private const val GOLD_TRIM = 0xFFFFC94D.toInt()
+
     fun present(g: Gfx, cx: Float, cy: Float, size: Float, box: Int, ribbon: Int, rot: Float = 0f) {
         g.save(); g.translate(cx, cy); g.rotate(rot)
         val h = size / 2f

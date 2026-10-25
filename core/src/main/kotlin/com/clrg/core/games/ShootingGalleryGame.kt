@@ -181,6 +181,7 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
             Kind.STAR -> { env.sfx(Sfx.SPARKLE, 1f); env.sfx(Sfx.APPLAUSE, 0.4f); env.particles.burst(sx, sy, Colors.GOLD, 30, kind = Particles.Kind.STAR, size = 14f) }
             Kind.DUCK -> { env.sfx(Sfx.TIN_HIT, 0.8f, (sx / 960f - 1f).coerceIn(-1f, 1f)); env.particles.burst(sx, sy, Colors.GOLD, 12, speed = 260f, size = 7f) }
         }
+        env.particles.impact(sx, sy, if (tg.kind == Kind.STAR) Colors.GOLD else tg.color, if (tg.kind == Kind.STAR) 0.9f else 0.45f)
         env.popups.add("+${tg.kind.points}", sx, sy - 50f, env.color(k), if (tg.kind == Kind.STAR) 60f else 44f)
     }
 

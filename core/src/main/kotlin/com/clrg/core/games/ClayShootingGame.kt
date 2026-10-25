@@ -284,6 +284,7 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         env.sfx(Sfx.SHATTER, 0.9f, (s[0] / 960f).coerceIn(-1f, 1f))
         if (c.gold) env.sfx(Sfx.SPARKLE, 0.6f, (s[0] / 960f).coerceIn(-1f, 1f))
         env.particles.burst(sx, sy, if (c.gold) Colors.GOLD else 0xFFFF7043.toInt(), 26, speed = 380f, size = 8f, gravity = 500f)
+        env.particles.impact(sx, sy, if (c.gold) Colors.GOLD else 0xFFFFAB91.toInt(), if (c.gold) 0.9f else 0.55f)
         env.particles.burst(sx, sy, 0xCCFFFFFF.toInt(), 8, speed = 120f, kind = Particles.Kind.PUFF, size = 22f, gravity = 0f)
         env.popups.add(if (c.gold) "+3 GOLD!" else "+1", sx, sy - 40f, env.color(k), if (c.gold) 56f else 46f)
     }
@@ -381,10 +382,14 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         }
         // trap houses
         // trap houses (left, right, far) and the high tower, back to front
-        SportsDraw.box(g, cam, ox, oy, -11.6f, 23.6f, 0f, -10.4f, 24.8f, 7.5f, 0xFFA1887F.toInt(), 0xFF8D6E63.toInt(), 0xFF6D4C41.toInt())
-        SportsDraw.box(g, cam, ox, oy, -20f, 31f, 0f, -16f, 34f, 1.4f, 0xFF8D6E63.toInt(), 0xFF6D4C41.toInt(), 0xFF5D4037.toInt())
-        SportsDraw.box(g, cam, ox, oy, 16f, 31f, 0f, 20f, 34f, 1.4f, 0xFF8D6E63.toInt(), 0xFF6D4C41.toInt(), 0xFF5D4037.toInt())
-        SportsDraw.box(g, cam, ox, oy, -2f, 16.5f, 0f, 2f, 18.5f, 1.0f, 0xFF8D6E63.toInt(), 0xFF6D4C41.toInt(), 0xFF5D4037.toInt())
+        // the high tower: timber legs, a cabin with a roof
+        for (lx in floatArrayOf(-11.6f, -10.6f)) SportsDraw.box(g, cam, ox, oy, lx, 23.8f, 0f, lx + 0.25f, 24.05f, 6.2f, 0xFF6D4C41.toInt(), 0xFF5D4037.toInt(), 0xFF4E342E.toInt())
+        SportsDraw.hut(g, cam, ox, oy, -11.9f, 23.4f, -10.1f, 25.0f, 7.5f, 0.9f, 0xFF8D6E63.toInt(), 0xFFB23A2E.toInt(), z0 = 6.0f)
+        SportsDraw.hut(g, cam, ox, oy, -20f, 31f, -16f, 34f, 1.4f, 0.7f, 0xFF8D6E63.toInt(), 0xFF2E5E3A.toInt())
+        SportsDraw.hut(g, cam, ox, oy, 16f, 31f, 20f, 34f, 1.4f, 0.7f, 0xFF8D6E63.toInt(), 0xFF2E5E3A.toInt())
+        SportsDraw.box(g, cam, ox, oy, -2f, 16.5f, 0f, 2f, 18.5f, 1.0f, 0xFF9E9E9E.toInt(), 0xFF757575.toInt(), 0xFF616161.toInt())
+        // hay bales along the edge of the field
+        for (bx in floatArrayOf(-26f, -23f, 23f, 26f)) SportsDraw.box(g, cam, ox, oy, bx, 20f, 0f, bx + 2.2f, 21.2f, 1.1f, 0xFFF0D58C.toInt(), 0xFFD9B95F.toInt(), 0xFFB89A45.toInt())
         if (cam.project(-11f, 24.2f, 7.5f)) { val fx = cam.px + ox; val fy = cam.py + oy; g.line(fx, fy, fx, fy - 70f, 4f, 0xFF5D4037.toInt()); g.fillRect(fx, fy - 70f, fx + 44f, fy - 44f, 0xFFE53935.toInt()) } // tower flag
         // intro target
         if (playTime < INTRO_SEC && !(loaded[0] && loaded[1])) {
@@ -400,11 +405,29 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         // clays (far first)
         val drawList = clays.filter { flying(it, playTime) }.sortedByDescending { c -> c.pos((playTime - c.launch).toFloat(), tmp); tmp[1] }
         for (c in drawList) drawClay(g, c, ox, oy, time)
-        // foreground: the shooting stand rail
-        g.fillRect(0f, g.height - 70f, g.width, g.height - 52f, 0xFF8D6E63.toInt())
-        g.fillRect(0f, g.height - 52f, g.width, g.height, 0xFF5D4037.toInt())
+        // foreground: the shooting stand - posts, a polished rail and each player's shell tray
         var px = 60f
-        while (px < g.width) { g.fillRect(px - 9f, g.height - 120f, px + 9f, g.height, 0xFF6D4C41.toInt()); px += 260f }
+        while (px < g.width) {
+            g.fillRect(px - 11f, g.height - 150f, px + 11f, g.height, 0xFF5D4037.toInt())
+            g.fillRect(px - 11f, g.height - 150f, px - 4f, g.height, 0xFF795548.toInt())
+            px += 300f
+        }
+        g.fillRoundRectGradient(-10f, g.height - 92f, g.width + 10f, g.height - 52f, 8f, 0xFFA1785A.toInt(), 0xFF6D4C41.toInt())
+        for (i in 0 until 6) g.line(0f, g.height - 86f + i * 6f, g.width, g.height - 84f + i * 6f, 1.5f, 0x22000000)
+        g.fillRect(0f, g.height - 52f, g.width, g.height, 0xFF4E342E.toInt())
+        for (k in 0..1) {
+            val tx = if (k == 0) g.width * 0.12f else g.width * 0.88f
+            g.fillRoundRect(tx - 70f, g.height - 112f, tx + 70f, g.height - 86f, 8f, 0xFFB08D57.toInt())
+            g.fillRoundRect(tx - 64f, g.height - 108f, tx + 64f, g.height - 92f, 6f, 0xFF3E2723.toInt())
+            for (j in 0 until SHELLS) {
+                val sx = tx - 24f + j * 48f
+                val has = j < shells[k]
+                if (!has) continue
+                g.fillRoundRect(sx - 14f, g.height - 138f, sx + 14f, g.height - 100f, 6f, env.color(k))
+                g.fillRoundRect(sx - 14f, g.height - 106f, sx + 14f, g.height - 96f, 3f, 0xFFD4AF37.toInt())
+                g.fillRoundRect(sx - 10f, g.height - 136f, sx - 4f, g.height - 104f, 3f, 0x44FFFFFF)
+            }
+        }
         // guns and crosshairs
         for (k in 0..1) drawGun(g, k, inputs[k], ox, oy)
         for (k in 0..1) drawCrosshair(g, k, inputs[k], ox, oy, time)

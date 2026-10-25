@@ -11,7 +11,7 @@ import kotlin.math.sin
  * "reduced effects" accessibility setting lowers the count and disables screen flashes.
  */
 class Particles(private val maxParticles: Int = 400) {
-    enum class Kind { SPARK, CONFETTI, PUFF, STAR, RING }
+    enum class Kind { SPARK, CONFETTI, PUFF, STAR, RING, STREAK, FLASH }
 
     private class P(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float, var maxLife: Float,
                     var size: Float, var color: Int, var kind: Kind, var rot: Float, var vr: Float, var gravity: Float)
@@ -38,6 +38,28 @@ class Particles(private val maxParticles: Int = 400) {
     fun ring(x: Float, y: Float, color: Int, size: Float = 90f) {
         if (list.size >= maxParticles) list.removeAt(0)
         list.add(P(x, y, 0f, 0f, 0.45f, 0.45f, size, color, Kind.RING, 0f, 0f, 0f))
+    }
+
+    /**
+     * A hit that should feel big: a bright flash, a shock ring and sparks shooting out as streaks. [power] 0..1
+     * scales it (a jab is small, a knockout or a strike is large).
+     */
+    fun impact(x: Float, y: Float, color: Int, power: Float = 0.6f) {
+        val p = power.coerceIn(0.1f, 1f)
+        if (!reduced) {
+            if (list.size >= maxParticles) list.removeAt(0)
+            list.add(P(x, y, 0f, 0f, 0.18f, 0.18f, 120f + 160f * p, color, Kind.FLASH, 0f, 0f, 0f))
+        }
+        ring(x, y, color, 70f + 110f * p)
+        val n = (10 + 20 * p).toInt()
+        val count = if (reduced) n / 3 else n
+        repeat(count) {
+            if (list.size >= maxParticles) list.removeAt(0)
+            val a = rng.range(0f, 6.2832f)
+            val sp = (380f + 700f * p) * rng.range(0.45f, 1f)
+            val life = rng.range(0.25f, 0.5f)
+            list.add(P(x, y, cos(a) * sp, sin(a) * sp, life, life, rng.range(3f, 6f), Colors.lerp(color, Colors.WHITE, rng.range(0.2f, 0.6f)), Kind.STREAK, 0f, 0f, 300f))
+        }
     }
 
     fun confetti(x0: Float, x1: Float, y: Float, n: Int = 80) {
@@ -84,6 +106,15 @@ class Particles(private val maxParticles: Int = 400) {
                     val flip = kotlin.math.abs(sin(p.rot * 2))
                     g.fillRect(-p.size / 2, -p.size / 4 * (0.4f + 0.6f * flip), p.size / 2, p.size / 4, Colors.lerp(Colors.darker(c, 0.7f), c, flip))
                     g.restore()
+                }
+                Kind.STREAK -> {
+                    // a short line along the direction of travel
+                    val k = 0.035f
+                    g.line(p.x - p.vx * k, p.y - p.vy * k, p.x, p.y, p.size * (0.5f + 0.5f * a), c)
+                }
+                Kind.FLASH -> {
+                    val k = 1f - p.life / p.maxLife
+                    g.glow(p.x, p.y, p.size * (0.6f + 0.6f * k), Colors.withAlpha(Colors.lerp(p.color, Colors.WHITE, 0.6f), (1f - k) * 0.75f))
                 }
                 Kind.RING -> {
                     val k = 1f - p.life / p.maxLife

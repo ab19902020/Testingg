@@ -274,6 +274,18 @@ class ReindeerRaceGame(env: GameEnv) : MiniGame(env) {
                 for (side in intArrayOf(-1, 1)) {
                     val tx = sx(side * (3.4f + 0.8f * Draw.hash01((tz.toInt() * 7 + side))), z)
                     items.add(z to { Draw.pineTree(g, tx, sy(z), 2.6f * s, 0xFF1F5A3F.toInt()) })
+                    // a cheering snow buddy now and then by the barrier
+                    if (Draw.hash01(tz.toInt() * 13 + side * 5) > 0.55f) {
+                        val fx = sx(side * 2.9f, z + 3f)
+                        val fs = f / (z + 3f)
+                        val cheer = com.clrg.core.gesture.AvatarPose().apply {
+                            valid = true
+                            val w = sin(time * 6 + tz).toFloat()
+                            upper[0] = -2.3f + 0.3f * w; fore[0] = -2.6f + 0.4f * w; upper[1] = -0.8f - 0.3f * w; fore[1] = -0.5f - 0.4f * w
+                        }
+                        val fc = com.clrg.core.render.PlayerColors.get((tz.toInt() / 14 + side + 3) and 7)
+                        items.add((z + 3f) to { Draw.buddy(g, fx, sy(z + 3f), 1.2f * fs, fc, cheer, Expression.EXCITED, t = time + tz) })
+                    }
                 }
             }
             tz += 14f
@@ -341,36 +353,76 @@ class ReindeerRaceGame(env: GameEnv) : MiniGame(env) {
 
     private val mpts = FloatArray(40)
 
+    private val rpts = FloatArray(16)
+
+    /**
+     * The player's reindeer from behind, mid-gallop: hind legs driving, rump with a white tail patch, a saddle blanket
+     * in the player's colour with jingle bells, the rider in a bobble hat, head and branching antlers above.
+     */
     private fun drawReindeerBack(g: Gfx, x: Float, y: Float, h: Float, color: Int, ph: Float, stumbling: Boolean, time: Double) {
-        val body = 0xFF8D5A3B.toInt(); val dark = 0xFF5D3A24.toInt()
-        val bob = sin(ph * 6.283f * 2) * h * 0.025f
-        g.fillOval(x - h * 0.4f, y - h * 0.05f, x + h * 0.4f, y + h * 0.05f, Colors.SHADOW)
-        for (i in 0..3) {
+        val coat = 0xFFA06A45.toInt(); val coatDark = 0xFF6B4129.toInt(); val coatLight = 0xFFC48A5C.toInt()
+        val cyc = ph * 6.2832f * 2f
+        val bob = kotlin.math.abs(sin(cyc)) * h * 0.035f
+        val roll = sin(cyc * 0.5f) * 0.04f
+        Draw.softShadow(g, x, y, h * 0.42f, h * 0.06f, 0.45f)
+        // snow kicked up by the hooves
+        for (i in 0 until 4) {
+            val p2 = ((ph * 2f + i * 0.25f) % 1f)
             val side = if (i % 2 == 0) -1f else 1f
-            val lift = sin(ph * 6.283f + i * 1.57f).coerceAtLeast(0f) * h * 0.08f
-            val lx = x + side * h * (if (i < 2) 0.14f else 0.2f)
-            g.line(lx, y - h * 0.32f + bob, lx, y - lift, h * 0.07f, if (i < 2) dark else body)
-            g.fillOval(lx - h * 0.04f, y - lift - h * 0.03f, lx + h * 0.04f, y - lift + h * 0.01f, 0xFF3E2723.toInt())
+            g.glow(x + side * h * (0.16f + 0.25f * p2), y - h * 0.05f - h * 0.28f * p2, h * (0.05f + 0.07f * p2), Colors.withAlpha(Colors.WHITE, 0.55f * (1f - p2)))
         }
-        g.save(); if (stumbling) { g.translate(x, y - h * 0.4f); g.rotate(sin(time * 20).toFloat() * 0.15f); g.translate(-x, -(y - h * 0.4f)) }
-        g.save(); g.translate(x, y - h * 0.44f + bob); g.scale(1f, 0.64f)
-        g.fillCircleRadial(0f, 0f, h * 0.28f, -h * 0.1f, -h * 0.14f, h * 0.42f, 0xFFB07850.toInt(), 0xFF5D3A24.toInt())
-        g.restore()
-        g.fillRoundRectGradient(x - h * 0.22f, y - h * 0.6f + bob, x + h * 0.22f, y - h * 0.42f + bob, h * 0.05f, Colors.lighter(color, 0.3f), Colors.darker(color, 0.7f))
-        g.line(x - h * 0.2f, y - h * 0.44f + bob, x + h * 0.2f, y - h * 0.44f + bob, h * 0.012f, Colors.GOLD)
-        g.fillCircle(x, y - h * 0.32f + bob, h * 0.06f, Colors.SNOW)
-        // rider (the player's snow buddy hat and scarf)
-        g.fillCircle(x, y - h * 0.68f + bob, h * 0.11f, 0xFFF7FBFF.toInt())
-        g.fillPie(x, y - h * 0.72f + bob, h * 0.11f, 3.1416f, 3.1416f, color)
-        g.fillCircle(x, y - h * 0.84f + bob, h * 0.035f, Colors.WHITE)
-        // head and antlers ahead of the body
-        g.fillOval(x - h * 0.09f, y - h * 0.86f + bob, x + h * 0.09f, y - h * 0.7f + bob, body)
-        val ant = 0xFFC8A27A.toInt()
-        for (s in intArrayOf(-1, 1)) {
-            g.line(x + s * h * 0.05f, y - h * 0.84f + bob, x + s * h * 0.2f, y - h * 1.02f + bob, h * 0.025f, ant)
-            g.line(x + s * h * 0.13f, y - h * 0.93f + bob, x + s * h * 0.1f, y - h * 1.05f + bob, h * 0.02f, ant)
-            g.line(x + s * h * 0.18f, y - h * 0.99f + bob, x + s * h * 0.28f, y - h * 1.04f + bob, h * 0.02f, ant)
+        g.save()
+        g.translate(x, y); g.rotate(roll)
+        if (stumbling) g.rotate(sin(time * 20).toFloat() * 0.12f)
+        // hind legs: thigh, hock and hoof, alternating
+        for (side in intArrayOf(-1, 1)) {
+            val swing = sin(cyc + (if (side < 0) 0f else 3.14f))
+            val lift = swing.coerceAtLeast(0f) * h * 0.1f
+            val hipX = side * h * 0.17f; val hipY = -h * 0.42f + bob
+            val kneeX = side * h * 0.21f; val kneeY = -h * 0.22f - lift * 0.6f
+            val hoofX = side * h * (0.16f + 0.03f * swing); val hoofY = -lift
+            g.line(hipX, hipY, kneeX, kneeY, h * 0.11f, coatDark)
+            g.line(kneeX, kneeY, hoofX, hoofY - h * 0.03f, h * 0.06f, coatDark)
+            g.fillOval(hoofX - h * 0.045f, hoofY - h * 0.05f, hoofX + h * 0.045f, hoofY, 0xFF2B1B12.toInt())
         }
+        // rump: two rounded haunches and the white tail patch
+        for (side in intArrayOf(-1, 1)) g.fillCircleRadial(side * h * 0.12f, -h * 0.47f + bob, h * 0.2f, side * h * 0.06f - h * 0.05f, -h * 0.58f + bob, h * 0.3f, coatLight, coatDark)
+        g.fillOval(-h * 0.08f, -h * 0.66f + bob, h * 0.08f, -h * 0.5f + bob, 0xFFF5ECE3.toInt())
+        g.fillOval(-h * 0.04f, -h * 0.67f + bob, h * 0.04f, -h * 0.58f + bob, coat)
+        // back and saddle blanket with gold trim and bells
+        g.fillRoundRectGradient(-h * 0.25f, -h * 0.78f + bob, h * 0.25f, -h * 0.58f + bob, h * 0.08f, coatLight, coat)
+        g.fillRoundRectGradient(-h * 0.27f, -h * 0.8f + bob, h * 0.27f, -h * 0.62f + bob, h * 0.06f, Colors.lighter(color, 0.3f), Colors.darker(color, 0.7f))
+        g.line(-h * 0.26f, -h * 0.63f + bob, h * 0.26f, -h * 0.63f + bob, h * 0.018f, 0xFFFFC94D.toInt())
+        for (i in -2..2) {
+            val bx = i * h * 0.1f
+            g.fillCircleRadial(bx, -h * 0.6f + bob, h * 0.022f, bx - h * 0.008f, -h * 0.61f + bob, h * 0.03f, 0xFFFFF3C4.toInt(), 0xFFC79100.toInt())
+        }
+        // head, ears and antlers (seen above the rider)
+        val hy = -h * 1.0f + bob * 1.3f
+        g.fillOval(-h * 0.1f, hy - h * 0.05f, h * 0.1f, hy + h * 0.13f, coat)
+        for (side in intArrayOf(-1, 1)) {
+            rpts[0] = side * h * 0.08f; rpts[1] = hy + h * 0.02f; rpts[2] = side * h * 0.2f; rpts[3] = hy - h * 0.02f; rpts[4] = side * h * 0.1f; rpts[5] = hy + h * 0.07f
+            g.fillPolygon(rpts, 3, coatDark)
+            val ant = 0xFFD8B48A.toInt()
+            val ax = side * h * 0.06f
+            g.line(ax, hy, side * h * 0.2f, hy - h * 0.22f, h * 0.028f, ant)
+            g.line(side * h * 0.2f, hy - h * 0.22f, side * h * 0.32f, hy - h * 0.3f, h * 0.022f, ant)
+            g.line(side * h * 0.12f, hy - h * 0.1f, side * h * 0.08f, hy - h * 0.24f, h * 0.02f, ant)
+            g.line(side * h * 0.2f, hy - h * 0.22f, side * h * 0.2f, hy - h * 0.36f, h * 0.02f, ant)
+            g.line(side * h * 0.27f, hy - h * 0.27f, side * h * 0.37f, hy - h * 0.2f, h * 0.018f, ant)
+        }
+        // the rider: snow buddy from behind, bobble hat and a scarf streaming back
+        val ry = -h * 0.86f + bob
+        g.fillCircleRadial(0f, ry, h * 0.13f, -h * 0.04f, ry - h * 0.05f, h * 0.2f, Colors.WHITE, 0xFFB4C9E6.toInt())
+        g.fillCircleRadial(0f, ry - h * 0.17f, h * 0.095f, -h * 0.03f, ry - h * 0.21f, h * 0.14f, Colors.WHITE, 0xFFC5D5EC.toInt())
+        val flap = sin(time.toFloat() * 15f) * h * 0.02f
+        g.fillRoundRect(-h * 0.1f, ry - h * 0.1f, h * 0.07f, ry - h * 0.06f, h * 0.02f, color)
+        rpts[0] = h * 0.04f; rpts[1] = ry - h * 0.09f; rpts[2] = h * 0.2f; rpts[3] = ry - h * 0.03f + flap
+        rpts[4] = h * 0.2f; rpts[5] = ry + h * 0.01f + flap; rpts[6] = h * 0.05f; rpts[7] = ry - h * 0.05f
+        g.fillPolygon(rpts, 4, Colors.darker(color, 0.8f))
+        g.fillRoundRectGradient(-h * 0.1f, ry - h * 0.29f, h * 0.08f, ry - h * 0.19f, h * 0.05f, Colors.lighter(color, 0.3f), Colors.darker(color, 0.7f))
+        g.fillRoundRect(-h * 0.11f, ry - h * 0.21f, h * 0.09f, ry - h * 0.18f, h * 0.015f, Colors.WHITE)
+        g.fillCircle(-h * 0.01f, ry - h * 0.31f, h * 0.03f, Colors.WHITE)
         g.restore()
     }
 

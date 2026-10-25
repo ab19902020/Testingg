@@ -126,6 +126,7 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
                         env.popups.add("SPLAT! +1", sx(px[target]), 380f, env.color(b.owner), 60f)
                         env.particles.burst(sx(px[target]), 640f, Colors.SNOW, 30, kind = Particles.Kind.PUFF, size = 14f)
                         env.sfx(Sfx.SPLAT, 1f, pan(target))
+                        env.particles.impact(sx(px[target]), 560f, Colors.SNOW, 0.6f)
                         env.shake.kick(8f)
                     }
                 } else {

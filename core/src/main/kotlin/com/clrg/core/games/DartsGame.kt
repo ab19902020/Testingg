@@ -201,14 +201,28 @@ class DartsGame(env: GameEnv) : MiniGame(env) {
     private fun renderLane(g: Gfx, k: Int, inp: PlayerInput, time: Double) {
         val r = Rect(if (k == 0) 0f else g.width / 2f, 0f, if (k == 0) g.width / 2f else g.width, g.height)
         g.save(); g.clipRect(r.left, r.top, r.right, r.bottom)
-        // pub wall: wood panelling, a lamp over the board
-        g.gradientRect(r.left, 0f, r.right, g.height, 0xFF3E2A20.toInt(), 0xFF22160F.toInt())
-        for (i in 0 until 8) g.line(r.left + i * r.width / 8f, 0f, r.left + i * r.width / 8f, g.height, 3f, 0x22000000)
+        // pub wall: dark green paint above wood panelling, lit from a lamp above the board
         val cx = r.cx; val cy = 540f + boardY
-        g.glow(cx, cy, 620f, 0x33FFE0B2)
-        // board: black surround, segments, rings
         val R = BOARD_MM * PX_PER_MM
-        g.fillCircle(cx, cy, R + 70f, 0xFF1B1B1B.toInt())
+        g.gradientRect(r.left, 0f, r.right, g.height * 0.72f, 0xFF1F3A2E.toInt(), 0xFF152A21.toInt())
+        g.gradientRect(r.left, g.height * 0.72f, r.right, g.height, 0xFF4A3022.toInt(), 0xFF2A1A11.toInt())
+        for (i in 0 until 9) {
+            val px = r.left + i * r.width / 8f
+            g.fillRect(px - 3f, g.height * 0.72f, px + 3f, g.height, 0x33000000)
+            g.fillRect(px + 3f, g.height * 0.72f, px + 5f, g.height, 0x14FFFFFF)
+        }
+        g.fillRect(r.left, g.height * 0.72f - 10f, r.right, g.height * 0.72f + 6f, 0xFF6D4C41.toInt())
+        // light pooling on the wall from above
+        g.glow(cx, cy - R * 0.3f, R * 2.1f, 0x44FFE0B2)
+        g.glow(cx, cy - R * 0.5f, R * 1.2f, 0x33FFF3E0)
+        // the cabinet behind the board, with its shadow
+        g.fillRoundRect(cx - R - 96f + 14f, cy - R - 96f + 22f, cx + R + 96f + 14f, cy + R + 96f + 22f, 26f, 0x66000000)
+        g.fillRoundRectGradient(cx - R - 96f, cy - R - 96f, cx + R + 96f, cy + R + 96f, 26f, 0xFF6B4630.toInt(), 0xFF3B2519.toInt())
+        g.strokeRoundRect(cx - R - 96f, cy - R - 96f, cx + R + 96f, cy + R + 96f, 26f, 6f, 0xFF8D6E63.toInt())
+        g.fillRoundRect(cx - R - 80f, cy - R - 80f, cx + R + 80f, cy + R + 80f, 18f, 0xFF2A1A11.toInt())
+        // board: black surround, segments, rings
+        g.fillCircle(cx + 8f, cy + 14f, R + 72f, 0x66000000)
+        g.fillCircleRadial(cx, cy, R + 70f, cx - R * 0.3f, cy - R * 0.4f, R * 1.6f, 0xFF2B2B2B.toInt(), 0xFF111111.toInt())
         for (i in 0 until 20) {
             val start = (-90f - 9f + i * 18f) * (PI.toFloat() / 180f)
             val sweep = 18f * (PI.toFloat() / 180f)
@@ -224,7 +238,20 @@ class DartsGame(env: GameEnv) : MiniGame(env) {
         }
         g.fillCircle(cx, cy, 15.9f * PX_PER_MM, 0xFF2E7D32.toInt())
         g.fillCircle(cx, cy, 6.35f * PX_PER_MM, 0xFFD32F2F.toInt())
-        g.strokeCircle(cx, cy, R, 2f, 0x66B0BEC5)
+        // sisal texture: faint fibres radiating out
+        for (i in 0 until 90) {
+            val a = i * 0.0698f + 0.02f
+            g.line(cx + cos(a) * 18f * PX_PER_MM, cy + sin(a) * 18f * PX_PER_MM, cx + cos(a) * R, cy + sin(a) * R, 1f, 0x0FFFFFFF)
+        }
+        // the wire spider: segment lines and ring wires catching the light
+        val wire = 0xAAD7DDE2.toInt()
+        for (i in 0 until 20) {
+            val a = (-90f - 9f + i * 18f) * (PI.toFloat() / 180f)
+            g.line(cx + cos(a) * 15.9f * PX_PER_MM, cy + sin(a) * 15.9f * PX_PER_MM, cx + cos(a) * R, cy + sin(a) * R, 1.6f, wire)
+        }
+        for (rr in floatArrayOf(6.35f, 15.9f, 99f, 107f, 162f, BOARD_MM)) g.strokeCircle(cx, cy, rr * PX_PER_MM, 1.6f, wire)
+        // the light from above: a sheen over the top of the board
+        g.fillCircleRadial(cx, cy, R + 70f, cx, cy - R * 0.9f, R * 1.4f, 0x22FFFFFF, 0x00FFFFFF)
         // darts: this round's in the board; one flying in
         val rnd = round(k)
         for (d in darts) {
@@ -249,13 +276,27 @@ class DartsGame(env: GameEnv) : MiniGame(env) {
             g.line(x - 34f, y, x + 34f, y, 3f, c); g.line(x, y - 34f, x, y + 34f, 3f, c)
         }
         // HUD in the lane
-        g.text(if (finished(k)) "Finished: ${totals[k]}" else "Round ${rnd + 1} of $ROUNDS - dart ${thrown[k] % DARTS_PER_ROUND + 1}", r.cx, 160f, 32f, Colors.GOLD, outline = Colors.BLACK, outlineWidth = 4f)
-        if (lastAge[k] in 0f..1.6f && lastLabel[k].isNotEmpty()) g.text(lastLabel[k], r.cx, 980f, 64f, if (lastLabel[k].startsWith("Miss") || lastLabel[k].startsWith("Time")) Colors.BAD else Colors.WHITE, outline = Colors.BLACK, outlineWidth = 7f)
-        else if (!finished(k) && !env.players[k].cpu) g.text("Hold steady... then push to throw", r.cx, 1000f, 30f, Colors.TEXT_DIM, outline = Colors.BLACK, outlineWidth = 3f)
+        // round and dart, in a pill in the lane's top corner, with a dart icon per dart left this round
+        val info = if (finished(k)) "Finished: ${totals[k]}" else "Round ${rnd + 1} of $ROUNDS"
+        val pillX = if (k == 0) r.left + 24f else r.right - 24f - 300f
+        g.fillRoundRect(pillX, 140f, pillX + 300f, 200f, 30f, 0xCC0B1A36.toInt())
+        g.text(info, pillX + 150f, 158f, 28f, Colors.GOLD)
+        if (!finished(k)) {
+            val left = DARTS_PER_ROUND - thrown[k] % DARTS_PER_ROUND
+            for (j in 0 until DARTS_PER_ROUND) drawDart(g, pillX + 115f + j * 34f, 172f, 0.42f, if (j < left) env.color(k) else 0x44FFFFFF)
+        }
+        if (lastAge[k] in 0f..1.6f && lastLabel[k].isNotEmpty()) {
+            val bad = lastLabel[k].startsWith("Miss") || lastLabel[k].startsWith("Time")
+            val w = g.measureText(lastLabel[k], 60f) + 70f
+            g.fillRoundRect(r.cx - w / 2f, 940f, r.cx + w / 2f, 1030f, 45f, 0xCC0B1A36.toInt())
+            g.text(lastLabel[k], r.cx, 985f, 60f, if (bad) Colors.BAD else if (lastLabel[k].startsWith("BULL")) Colors.GOLD else Colors.WHITE)
+        } else if (!finished(k) && !env.players[k].cpu) g.text("Hold steady... then push to throw", r.cx, 1040f, 28f, Colors.TEXT_DIM, outline = Colors.BLACK, outlineWidth = 3f)
         g.restore()
     }
 
     private fun drawDart(g: Gfx, x: Float, y: Float, s: Float, color: Int) {
+        // shadow on the board
+        g.line(x + 6f * s, y + 6f * s, x + 22f * s, y + 54f * s, 6f * s, 0x44000000)
         g.line(x, y, x + 10f * s, y + 26f * s, 5f * s, 0xFFB0BEC5.toInt())
         g.line(x + 10f * s, y + 26f * s, x + 16f * s, y + 44f * s, 7f * s, 0xFF455A64.toInt())
         com.clrg.core.render.Draw.tri(g, x + 12f * s, y + 40f * s, x + 26f * s, y + 58f * s, x + 4f * s, y + 56f * s, color)

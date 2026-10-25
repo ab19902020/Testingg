@@ -132,6 +132,7 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
                             env.popups.add(if (streak[k] >= 3) "SAVE! x${streak[k]}" else "SAVE!", px, py - 70f, Colors.GOOD, 60f)
                             env.particles.burst(px, py, env.color(k), 20, kind = Particles.Kind.STAR, size = 12f)
                             env.particles.ring(px, py, Colors.GOOD, 120f)
+                            env.particles.impact(px, py, Colors.WHITE, 0.6f)
                         } else {
                             goals[k]++; streak[k] = 0; goalFlash[k] = 0f
                             env.sfx(Sfx.GOAL_NET, 0.9f, pan(k))
