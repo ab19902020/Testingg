@@ -63,6 +63,13 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
         private set
     var pointerY = 0f
         private set
+    companion object {
+        /** A hand cursor this close (virtual px) to a button points at it. */
+        const val MAGNET_PX = 40f
+        /** A hand cursor on a button keeps pointing at it until it is this far (px) outside. */
+        const val STICKY_PX = 48f
+    }
+
     var dwellSeconds = 1.5f
     val cursors = arrayOf(HandCursor(0), HandCursor(1))
     private var globalLock = 0f
@@ -106,7 +113,7 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
         // hands-free dwell
         for (c in cursors) {
             if (!cursorsEnabled || !c.active) { c.dwell = 0f; c.hoverId = null; continue }
-            val id = hit(c.x, c.y)
+            val id = hitMagnetic(c)
             if (c.lockoutUntilLeave != null && id != c.lockoutUntilLeave) c.lockoutUntilLeave = null
             if (id == null || id == c.lockoutUntilLeave || globalLock > 0f) { c.hoverId = id; c.dwell = 0f; continue }
             if (id == c.hoverId) {
@@ -132,6 +139,26 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
     }
 
     private fun hit(x: Float, y: Float): String? = boxes.lastOrNull { it.enabled && it.rect.contains(x, y) }?.id
+
+    /**
+     * What a hand cursor is pointing at. Hands wobble and tracking is never perfectly still, so buttons are a little
+     * magnetic: a cursor just outside a button still points at the nearest one, and once on a button it stays there
+     * through a small wobble over its edge (so the hold-to-choose ring does not keep restarting).
+     */
+    private fun hitMagnetic(c: HandCursor): String? {
+        hit(c.x, c.y)?.let { return it }
+        c.hoverId?.let { h -> boxes.lastOrNull { it.id == h && it.enabled }?.let { b -> if (distToRect(b.rect, c.x, c.y) < STICKY_PX) return h } }
+        var best: Box? = null
+        var bd = MAGNET_PX
+        for (b in boxes) if (b.enabled) { val d = distToRect(b.rect, c.x, c.y); if (d < bd) { bd = d; best = b } }
+        return best?.id
+    }
+
+    private fun distToRect(r: Rect, x: Float, y: Float): Float {
+        val dx = maxOf(r.left - x, 0f, x - r.right)
+        val dy = maxOf(r.top - y, 0f, y - r.bottom)
+        return hypot(dx, dy)
+    }
 
     private fun moveFocus(k: Key) {
         val enabled = boxes.filter { it.enabled }

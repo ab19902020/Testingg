@@ -204,5 +204,12 @@ abstract class MiniGame(val env: GameEnv) {
     /** How far behind the real body the avatar/hand data of player [k] are (zero for computer players). */
     protected fun avatarLag(k: Int): Double = if (env.players[k].cpu) 0.0 else env.timing.avatarLag
 
+    /**
+     * For camera player [k]: how long ago (s) the game moment was that the player was reacting to when their hands
+     * were where the game now sees them - the hands reach the game late, and the TV shows the picture late. Zero
+     * for computer players.
+     */
+    protected fun viewLag(k: Int): Double = if (env.players[k].cpu || !env.timing.enabled) 0.0 else env.timing.avatarLag + env.timing.displayDelay
+
     protected fun winnerOf(a: Int, b: Int) = if (a > b) 0 else if (b > a) 1 else -1
 }

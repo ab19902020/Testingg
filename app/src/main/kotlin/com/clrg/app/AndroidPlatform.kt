@@ -48,7 +48,10 @@ class AndroidPlatform(
 
     override fun applySettings(settings: Settings) {
         camera.configure(settings.cameraId, settings.wideAngle)
-        pose.mirror = settings.mirror
+        // mirroring and orientation are per camera (phones differ, e.g. a front camera delivered already mirrored)
+        val id = settings.cameraId?.takeIf { want -> camera.infos.any { it.id == want } } ?: camera.defaultId()
+        pose.mirror = settings.mirrorFor(id)
+        pose.upsideDown = settings.upsideDown(id)
         pose.quality = settings.quality
         pose.allowHighFps = settings.highFpsCamera
         router.preferPresentation = settings.preferTvAsSecondScreen

@@ -45,6 +45,8 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
     val devOverlay = DevOverlay(this)
     /** Camera and display delays: timing games judge movements by when they were made. */
     val timing = com.clrg.core.game.InputTiming()
+    /** Makes sure movements go the right way (left/right and up/down) for the camera in use. */
+    val directionCheck = DirectionCheck(this)
 
     /** Who is playing as P1 (left) and P2 (right) right now. */
     val activePlayers = arrayOf(roster.players[0], roster.players[1])
@@ -255,6 +257,19 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         return true
     }
 
+    /** Swaps left and right for the camera in use (when movements go the wrong way on screen). */
+    fun flipLeftRight() {
+        val id = currentCamera()?.id ?: return
+        settings.mirrorByCamera[id] = !settings.mirrorFor(id)
+        settings.directionChecked.add(id)
+        saveSettings()
+        resetTracking()
+        notify("Flipped left and right")
+    }
+
+    /** Whether the camera in use shows the picture like a mirror. */
+    val mirrorNow: Boolean get() = settings.mirrorFor(currentCamera()?.id)
+
     /** Back to two people at the camera (quick match, tournament, full set-up). */
     fun leaveSolo() {
         if (!solo && !tracker.solo) return
@@ -317,6 +332,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
             while (true) {
                 val f = poseQueue.poll() ?: break
                 feedPose(f)
+                directionCheck.observe(tracker.lastCandidates, f.timestampNanos)
                 lastPoseLatencyMs = (nowNanos - f.timestampNanos) / 1e6f
                 timing.observe((nowNanos - f.timestampNanos) / 1e9)
             }
@@ -330,8 +346,10 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         val events = ArrayList<InputEvent>()
         while (true) events.add(inputQueue.poll() ?: break)
         val scr = current ?: return
-        // hands-free menus from the moment anyone is in front of the camera (no set-up needed first)
-        val cursorsOn = scr.allowCursors
+        // hands-free menus from the moment anyone is in front of the camera (no set-up needed first); the first
+        // time on a camera, a quick left/right check makes sure the cursor goes the way the hand goes
+        directionCheck.update(dt, scr.allowCursors && !displayLost)
+        val cursorsOn = scr.allowCursors && !directionCheck.active
         ui.begin(dt, events, cursorsOn)
         if (ui.backPressed && scr.onBack()) { /* handled */ }
         g.fillRect(0f, 0f, g.width, g.height, Colors.NIGHT_TOP)
@@ -446,6 +464,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
             g.text(msg, g.width / 2, 105f, 38f, Colors.WHITE)
             g.restore()
         }
+        directionCheck.draw(g)
         if (displayLost) {
             g.fillRect(0f, 0f, g.width, g.height, 0xCC000000.toInt())
             ui.title(g, "TV disconnected", g.height / 2 - 140f)

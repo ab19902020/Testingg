@@ -42,6 +42,21 @@ class UiDwellTest {
     }
 
     @Test
+    fun aHandJustOffAButtonOrWobblingOverItsEdgeStillSelectsIt() {
+        val r = boxes.getValue("a")
+        // 25 px below the button: still pointing at it
+        run(1.6f) { val c = ui.cursors[0]; c.active = true; c.x = r.cx; c.y = r.bottom + 25f }
+        assertEquals(listOf("a"), activations.map { it.second }, "a near miss counts")
+        // wobbling 30 px either side of the right edge of "b" does not restart the ring
+        activations.clear()
+        run(1.0f) { point(0, "off") } // away, and past the short lock after a selection
+        val rb = boxes.getValue("b")
+        var t = 0f
+        run(1.7f) { t += dt; val c = ui.cursors[0]; c.active = true; c.y = rb.cy; c.x = rb.right + 30f * kotlin.math.sin(t * 9f) }
+        assertEquals(listOf("b"), activations.map { it.second }, "wobble over the edge: $activations")
+    }
+
+    @Test
     fun sweepingAcrossButtonsNeverSelects() {
         var t = 0f
         run(6f) { t += dt; point(0, if ((t / 0.7f).toInt() % 2 == 0) "a" else "b") }

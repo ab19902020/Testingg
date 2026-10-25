@@ -105,7 +105,7 @@ class CameraSource(private val context: Context) {
     }
 
     /** Default: the widest back camera (it can be placed facing the players), otherwise the front one. */
-    private fun defaultId(): String? = infos.filter { !it.front }.maxByOrNull { it.hFovDeg }?.id ?: infos.firstOrNull()?.id
+    fun defaultId(): String? = infos.filter { !it.front }.maxByOrNull { it.hFovDeg }?.id ?: infos.firstOrNull()?.id
 
     fun setPermissionMissing(denied: Boolean) {
         val st = CameraStatus(if (denied) CameraState.DENIED else CameraState.NEEDS_PERMISSION)

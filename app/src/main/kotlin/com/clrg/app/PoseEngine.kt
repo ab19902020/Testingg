@@ -148,6 +148,9 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     /** Allow the camera to run at 60 fps when inference is fast enough and the phone is cool. */
     @Volatile var allowHighFps = true
     @Volatile var mirror = true
+    /** The camera delivers this camera's picture upside down: turn it the right way up. */
+    @Volatile var upsideDown = false
+    private var lastUpsideDown = false
     @Volatile var displayRotationDeg = 90
     @Volatile var enabled = true
     /**
@@ -339,10 +342,10 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         }
         ensureRunner()
         val pipe = pipeline ?: return
-        if (info.id != lastCameraId) { pipe.reset(); lastCameraId = info.id }
+        if (info.id != lastCameraId || upsideDown != lastUpsideDown) { pipe.reset(); lastCameraId = info.id; lastUpsideDown = upsideDown }
         val cfg = configFor(variant, expectedPeople)
         if (pipe.config != cfg) pipe.config = cfg // keeps the people already being followed
-        val rot = FrameOrientation.rotationFor(info.sensorOrientation, displayRotationDeg, info.front)
+        val rot = (FrameOrientation.rotationFor(info.sensorOrientation, displayRotationDeg, info.front) + if (upsideDown) 180 else 0) % 360
         val orient = FrameOrientation(w, h, rot)
         val t0 = System.nanoTime()
         val onGpu = runner?.delegateName == "GPU"

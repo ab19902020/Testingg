@@ -36,7 +36,17 @@ data class Settings(
     // camera / tracking
     var cameraId: String? = null,
     var wideAngle: Boolean = false,
+    /** Default for cameras not yet checked: show the picture like a mirror (your right hand on the right). */
     var mirror: Boolean = true,
+    /**
+     * Per camera id: whether that camera's picture must be mirrored so movements go the right way. Phones differ (some
+     * deliver the front camera already mirrored), so this is found by the left/right check or set by hand.
+     */
+    val mirrorByCamera: MutableMap<String, Boolean> = mutableMapOf(),
+    /** Camera ids whose picture arrives upside down (turned the right way up automatically). */
+    val upsideDownCameras: MutableSet<String> = mutableSetOf(),
+    /** Camera ids whose left/right direction has been checked with a player. */
+    val directionChecked: MutableSet<String> = mutableSetOf(),
     var quality: QualityMode = QualityMode.AUTO,
     /** Let the camera run at 60 fps when the phone keeps up (smoother, quicker tracking; a little more heat). */
     var highFpsCamera: Boolean = true,
@@ -60,7 +70,9 @@ data class Settings(
             "v" to 1, "musicVolume" to musicVolume, "sfxVolume" to sfxVolume, "highContrast" to highContrast,
             "reducedEffects" to reducedEffects, "largeText" to largeText, "captions" to captions, "dwellSeconds" to dwellSeconds,
             "gestureSensitivity" to gestureSensitivity, "steeringOnlySlalom" to steeringOnlySlalom, "cpuLevel" to cpuLevel, "cameraId" to cameraId,
-            "wideAngle" to wideAngle, "mirror" to mirror, "quality" to quality.name, "highFpsCamera" to highFpsCamera,
+            "wideAngle" to wideAngle, "mirror" to mirror,
+            "mirrorByCamera" to mirrorByCamera.entries.joinToString(",") { "${it.key}:${if (it.value) 1 else 0}" },
+            "upsideDownCameras" to upsideDownCameras.joinToString(","), "directionChecked" to directionChecked.joinToString(","), "quality" to quality.name, "highFpsCamera" to highFpsCamera,
             "displayDelayMs" to displayDelayMs, "timingMeasured" to timingMeasured, "preferTvAsSecondScreen" to preferTvAsSecondScreen,
             "showCameraInset" to showCameraInset, "devOverlay" to devOverlay, "skeletonOverlay" to skeletonOverlay,
         ),
@@ -88,6 +100,9 @@ data class Settings(
                 cameraId = (o.map["cameraId"] as? String),
                 wideAngle = o.bool("wideAngle", d.wideAngle),
                 mirror = o.bool("mirror", d.mirror),
+                mirrorByCamera = o.str("mirrorByCamera").split(",").filter { it.contains(":") }.associate { it.substringBeforeLast(":") to (it.substringAfterLast(":") == "1") }.toMutableMap(),
+                upsideDownCameras = o.str("upsideDownCameras").split(",").filter { it.isNotEmpty() }.toMutableSet(),
+                directionChecked = o.str("directionChecked").split(",").filter { it.isNotEmpty() }.toMutableSet(),
                 quality = runCatching { QualityMode.valueOf(o.str("quality", d.quality.name)) }.getOrDefault(d.quality),
                 highFpsCamera = o.bool("highFpsCamera", d.highFpsCamera),
                 displayDelayMs = o.int("displayDelayMs", d.displayDelayMs).coerceIn(MIN_DELAY_MS, MAX_DELAY_MS),
@@ -105,6 +120,12 @@ data class Settings(
     }
 
     fun save(store: KeyValueStore) = store.put(KEY, toJson())
+
+    /** Whether the picture from camera [id] is mirrored (the per-camera result if known, else the default). */
+    fun mirrorFor(id: String?): Boolean = id?.let { mirrorByCamera[it] } ?: mirror
+
+    /** Whether camera [id]'s picture needs turning the right way up. */
+    fun upsideDown(id: String?): Boolean = id != null && id in upsideDownCameras
 }
 
 /** A family member who can play. */

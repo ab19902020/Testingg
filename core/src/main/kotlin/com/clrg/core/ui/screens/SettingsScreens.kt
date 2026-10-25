@@ -55,7 +55,12 @@ class SettingsScreen(app: GameApp) : Screen(app) {
                     x += 440f
                 }
                 if (ui.toggle(g, "wide", row(), "Wide angle (when the camera supports zooming out)", s.wideAngle)) { s.wideAngle = !s.wideAngle; changed = true }
-                if (ui.toggle(g, "mirror", row(), "Mirror the picture (recommended)", s.mirror)) { s.mirror = !s.mirror; changed = true }
+                val mr = row()
+                if (ui.toggle(g, "mirror", Rect(mr.left, mr.top, mr.right - 480f, mr.bottom), "Mirror the picture (this camera)", app.mirrorNow)) app.flipLeftRight()
+                if (ui.button(g, "dircheck", Rect(mr.right - 460f, mr.top, mr.right, mr.bottom), "Check left/right", "raise a hand to start", accent = Colors.ICE, size = 32f)) {
+                    app.directionCheck.request()
+                    app.notify("Raise a hand to start the left/right check")
+                }
                 val qr = row()
                 g.text("Tracking quality", qr.left, qr.cy, 40f, Colors.WHITE, Align.LEFT)
                 QualityMode.values().forEachIndexed { i, q ->

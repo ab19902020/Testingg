@@ -127,7 +127,7 @@ class CameraSetupScreen(app: GameApp, private val then: () -> Unit, private val 
         }
         val wideAvail = opts.any { it.wideAvailable && it.id == (app.settings.cameraId ?: st.activeId) }
         if (ui.toggle(g, "wide", Rect(800f, 790f, 1300f, 870f), "Wide angle", app.settings.wideAngle, enabled = wideAvail)) { app.settings.wideAngle = !app.settings.wideAngle; app.saveSettings() }
-        if (ui.toggle(g, "mirror", Rect(1320f, 790f, g.width - 40f, 870f), "Mirror image", app.settings.mirror)) { app.settings.mirror = !app.settings.mirror; app.saveSettings() }
+        if (ui.toggle(g, "mirror", Rect(1320f, 790f, g.width - 40f, 870f), "Mirror image", app.mirrorNow)) app.flipLeftRight()
         val ok = SetupFlow.cameraReady(app)
         if (ui.button(g, "next", Rect(g.width - 560f, 900f, g.width - 40f, 1010f), "Next: get into place", accent = Colors.GOOD, enabled = ok, size = 40f)) app.replace(FramingScreen(app, then, full))
     }
@@ -175,6 +175,11 @@ class FramingScreen(app: GameApp, private val then: () -> Unit, private val full
         val camX = if (app.solo) 40f else 440f
         if (app.canSwitchCamera && ui.button(g, "camSwitch", Rect(camX, 980f, camX + 420f, 1060f), if (app.currentCamera()?.front == true) "Use back camera" else "Use front camera", size = 32f, accent = Colors.ICE)) {
             app.switchCamera()
+            stable = 0f
+        }
+        // movements going the wrong way? one tap fixes it for this camera
+        if (ui.button(g, "flipLR", Rect(g.width - 470f, 150f, g.width - 40f, 230f), "Flip left/right", "if moves look backwards", accent = Colors.ICE, size = 30f)) {
+            app.flipLeftRight()
             stable = 0f
         }
         val go = stable >= 1.5f
