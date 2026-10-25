@@ -75,8 +75,11 @@ class GestureTest {
         r.moveHand(r.p1, RIGHT, 0.2f, -0.1f)
         r.clearEvents()
         r.seconds(2f) { t -> r.p1.setWrist(RIGHT, 0.2f + 0.7f * kotlin.math.sin(t * 2 * Math.PI * 3).toFloat(), -0.1f) }
+        // 13 strokes (11 from one side to the other, plus the half strokes at the start and the end): each may count
+        // once, never more (a backswing followed by the real swing must both be seen, so a stroke back the other way
+        // re-arms the detector)
         val n = r.count<GestureEvent.Swing>(0)
-        assertTrue(n in 1..6, "swings while waving: $n (cooldown ${r.controls[0].tuning.swingCooldown}s)")
+        assertTrue(n in 6..13, "swings while waving: $n (cooldown ${r.controls[0].tuning.swingCooldown}s)")
     }
 
     @Test

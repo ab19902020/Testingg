@@ -33,14 +33,66 @@ class TennisGameTest {
     @Test
     fun farTooEarlyGoesOutAndFarTooLateHitsTheNet() {
         val d = GameDriver(::TennisGame)
-        // P2 swings 0.27 s early (beyond 70% of the 0.36 s window) -> long -> OUT -> point to P1
-        d.run(8.0) { d.autoSwing(0); d.autoSwing(1, offset = -0.27) }
-        assertEquals(1, d.game.scores[0], "early return should be out")
+        // P2 swings 0.62 s early (beyond 1.6 timing windows) -> long -> OUT -> point to P1
+        d.run(8.0) { d.autoSwing(0); d.autoSwing(1, offset = -0.62) }
+        assertEquals(1, d.game.scores[0], "far too early a return should be out")
         assertEquals(RallyGame.PointReason.OUT, d.game.pointReason)
         val e = GameDriver(::TennisGame)
-        e.run(8.0) { e.autoSwing(0); e.autoSwing(1, offset = 0.28) }
-        assertEquals(1, e.game.scores[0], "late return should hit the net")
+        e.run(8.0) { e.autoSwing(0); e.autoSwing(1, offset = 0.42) }
+        assertEquals(1, e.game.scores[0], "far too late a return should hit the net")
         assertEquals(RallyGame.PointReason.NET, e.game.pointReason)
+    }
+
+    @Test
+    fun aLittleEarlyOrLateIsStillAGoodReturn() {
+        // a quarter of a second either side of the perfect moment: the rally goes on
+        val d = GameDriver(::TennisGame)
+        d.run(14.0) { d.autoSwing(0, offset = -0.25); d.autoSwing(1, offset = 0.22) }
+        assertEquals(0, d.game.scores.sum(), "no points lost")
+        assertTrue(d.game.rally >= 5, "rally ${d.game.rally}")
+    }
+
+    @Test
+    fun swingingAtTheTopOfTheBounceStillReturns() {
+        // a natural early swing: as the ball reaches the top of its bounce, about 0.45 s before the perfect moment.
+        // Early in a rally that is a fine return; deep into a rally (tighter timing) it would sail long.
+        val d = GameDriver(::TennisGame)
+        d.run(30.0) { if (d.game.scores.sum() == 0) { d.autoSwing(0); d.autoSwing(1, offset = -0.45) } }
+        assertTrue(d.game.hitsMade[1] >= 2, "early-in-the-rally returns: ${d.game.hitsMade[1]}")
+    }
+
+    @Test
+    fun aBackswingDoesNotSpoilTheRealSwing() {
+        // every return: first a backswing 0.6 s early (that alone would sail long), then the real swing on time
+        val d = GameDriver(::TennisGame)
+        d.run(20.0) { d.autoSwing(0); d.autoSwing(1, offset = -0.6); d.autoSwing(1) }
+        assertEquals(0, d.game.scores.sum(), "the swing on time is the one played: ${d.game.pointReason}")
+        assertTrue(d.game.rally >= 8, "rally ${d.game.rally}")
+    }
+
+    @Test
+    fun wavingAboutStillPlaysTheBestTimedSwing() {
+        // P2 swings every 0.3 s whatever the ball does
+        val d = GameDriver(::TennisGame)
+        var next = 0.0
+        d.run(20.0) { t ->
+            d.autoSwing(0)
+            if (t >= next) { d.swing(1); next = t + 0.3 }
+        }
+        assertTrue(d.game.hitsMade[1] >= 3, "P2 returned balls: ${d.game.hitsMade[1]}")
+    }
+
+    @Test
+    fun theBallIsExpectedAsSoonAsItIsStruck() {
+        val d = GameDriver(::TennisGame)
+        var sawExpectation = false
+        d.run(6.0) {
+            d.autoSwing(0)
+            val g = d.game
+            if (g.state == RallyGame.State.RALLY && g.receiver == 1 && !g.bounced) assertTrue(!g.hitTime.isNaN(), "perfect moment known before the bounce")
+            if (g.state == RallyGame.State.RALLY && g.receiver == 1 && d.inputs[1].expectSwing > 0.9f) sawExpectation = true
+        }
+        assertTrue(sawExpectation, "the receiver's swing detection is made more sensitive as the ball arrives")
     }
 
     @Test

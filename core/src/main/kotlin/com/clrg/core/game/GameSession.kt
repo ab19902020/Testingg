@@ -113,6 +113,8 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
         val anyLost = !allowWithoutTracking && slots.indices.any { !cpu[it] && slots[it].needsAttention }
         for (k in 0..1) {
             if (cpu[k]) continue
+            // the game's wish for a more sensitive swing detector (a ball on its way) applies from the next pose
+            controls[k].swingBoost = if (phase == Phase.PLAYING) inputs[k].expectSwing.coerceIn(0f, 1f) else 0f
             if (scripted[k]) { controls[k].discardEvents(); continue }
             inputs[k].fill(controls[k], slots[k].isPlaying)
             controls[k].drainEvents(pendingEvents[k])

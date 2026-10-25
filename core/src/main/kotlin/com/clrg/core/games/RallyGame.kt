@@ -21,6 +21,11 @@ import kotlin.math.sqrt
  * sets the shot. On time = deep, fast shot. A little early = deeper, a little late = shorter. Far too early = long
  * (OUT), far too late = into the NET. No swing = miss.
  *
+ * Built for real swings seen by a camera: the perfect moment is known as soon as the opponent hits (so a swing before
+ * the bounce counts as a volley), a backswing or an early swing is never "used up" - every swing around the ball's
+ * arrival is a candidate and the one closest to the perfect moment is played - and while a ball is arriving the
+ * receiver's swing detection is made more sensitive ([PlayerInput.expectSwing]).
+ *
  * Timing is judged by when the swing was *made*: a camera player's swing arrives a little after they make it
  * (camera, tracking) and they react to a picture that is a little old (phone display, TV), so the swing is compared
  * with where the ball was at that moment, the ball is returned from there, and a miss is only called once a swing
@@ -99,6 +104,16 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     private var pointsPlayed = 0
     protected val rng = env.rng(11)
 
+    /** Swings made around the incoming ball's arrival: the closest to the perfect moment is played. */
+    private class Candidate(val at: Double, val swing: GestureEvent.Swing)
+    private val candidates = ArrayList<Candidate>()
+    private var tooEarlyShown = false
+    /** Swings seen per player (any time) and swings that hit a ball - for the end-of-match summary and tests. */
+    val swingsSeen = IntArray(2)
+    val hitsMade = IntArray(2)
+    /** For each hit: how far from the perfect moment the swing was made (s, + = late). */
+    val timingErrors = Array(2) { ArrayList<Float>() }
+
     // recent ball positions (one per simulation step) so a swing can be judged against where the ball was
     private val histT = DoubleArray(HISTORY)
     private val histX = FloatArray(HISTORY)
@@ -141,16 +156,18 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     }
 
     override fun update(dt: Float, inputs: Array<PlayerInput>) {
+        if (dt > 0f) lastDt = dt
         stateTime += dt
         for (k in 0..1) swingAge[k] += dt
-        // collect swings (any other gesture is ignored by this game)
-        val swings = arrayOfNulls<GestureEvent.Swing>(2)
-        for (k in 0..1) swings[k] = inputs[k].take<GestureEvent.Swing>()
-        for (k in 0..1) swings[k]?.let { swingAge[k] = 0f; swingForehand[k] = it.forehand }
+        // collect swings (any other gesture is ignored by this game): every swing of this step, not just one
+        val swings = Array(2) { ArrayList<GestureEvent.Swing>(2) }
+        for (k in 0..1) while (true) { swings[k].add(inputs[k].take<GestureEvent.Swing>() ?: break) }
+        for (k in 0..1) swings[k].lastOrNull()?.let { swingAge[k] = 0f; swingForehand[k] = it.forehand; swingsSeen[k] += swings[k].size }
+        for (k in 0..1) inputs[k].expectSwing = expectation(k)
 
         when (state) {
             State.SERVE -> {
-                val s = swings[server]
+                val s = swings[server].lastOrNull()
                 val auto = stateTime > cfg.autoServeSec
                 if ((s != null && stateTime > 0.6f) || auto) serve(s?.power ?: 0.3f, auto)
                 moveCharacters(dt)
@@ -160,15 +177,18 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
                 recordBall()
                 val r = receiver
                 if (r >= 0 && !hitTime.isNaN()) {
-                    val s = swings[r]
-                    if (s != null) {
+                    val w = window()
+                    for (s in swings[r]) {
                         val at = madeAt(s)
-                        val e = ((at - hitTime) / window()).toFloat()
-                        if (e < -1f) onTooEarly(r) else if (e <= 1f) hit(r, e, s, at)
+                        val e = ((at - hitTime) / w).toFloat()
+                        if (e < EARLIEST) {
+                            if (!tooEarlyShown) { tooEarlyShown = true; onTooEarly(r) }
+                        } else if (e <= LATEST) candidates.add(Candidate(at, s))
                     }
+                    decide(r, w)
                     // no swing that was made in time can still be on its way: missed
-                    val eLatest = ((playTime - inputGrace(r) - hitTime) / window()).toFloat()
-                    if (eLatest > 1.15f && state == State.RALLY && receiver == r) endPoint(1 - r, PointReason.MISSED)
+                    val eLatest = ((playTime - inputGrace(r) - hitTime) / w).toFloat()
+                    if (eLatest > LATEST && candidates.isEmpty() && state == State.RALLY && receiver == r) endPoint(1 - r, PointReason.MISSED)
                 }
                 moveCharacters(dt)
             }
@@ -187,7 +207,32 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
         }
     }
 
-    protected open fun onTooEarly(player: Int) = popup("Wait for it!", player, 40f)
+    protected open fun onTooEarly(player: Int) = popup("Too early - wait for it!", player, 40f)
+
+    /**
+     * Plays the best swing so far once no closer one can still be on its way: a swing made after the perfect moment
+     * is played straight away (any later one would be worse); an early one waits until a swing as far after the
+     * perfect moment could have arrived - but never long after the ball reached the player.
+     */
+    private fun decide(r: Int, w: Float) {
+        if (candidates.isEmpty()) return
+        var best = candidates[0]
+        for (c in candidates) if (kotlin.math.abs(c.at - hitTime) < kotlin.math.abs(best.at - hitTime)) best = c
+        val waitUntil = if (best.at >= hitTime) playTime else minOf(hitTime + (hitTime - best.at), hitTime + HOLD_FOR_BETTER) + inputGrace(r)
+        if (playTime + 1e-9 < waitUntil) return
+        candidates.clear()
+        hit(r, ((best.at - hitTime) / w).toFloat(), best.swing, best.at)
+    }
+
+    /** 0..1: how much player [k] should be swinging right now (a ball arriving at them, or their serve). */
+    private fun expectation(k: Int): Float = when {
+        state == State.SERVE && server == k && stateTime > 0.6f -> 0.6f
+        state == State.RALLY && receiver == k && !hitTime.isNaN() -> {
+            val left = (hitTime - playTime).toFloat()
+            if (left < -window() * LATEST) 0f else (1f - (left - 0.8f) / 0.4f).coerceIn(0f, 1f)
+        }
+        else -> 0f
+    }
 
     /** Last rendered virtual screen width (layout depends on the display aspect ratio). */
     protected var screenW = 1920f
@@ -242,7 +287,44 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
         hitTime = Double.NaN
         state = State.RALLY
         stateTime = 0f
+        candidates.clear()
+        tooEarlyShown = false
+        predictHitTime()
     }
+
+    /**
+     * From the moment a ball is struck: where and when the receiver's perfect hit will be (after the bounce, as the
+     * ball comes down to hitting height). Nothing for a ball heading into the net or out.
+     */
+    private fun predictHitTime() {
+        if (netShot) return
+        // fly the ball forward with the very steps the game will use, up to its bounce
+        val g = cfg.gravity
+        val dt = lastDt
+        var x = bx; var h = bh; var v = vh
+        var t = 0f
+        while (t < 6f) {
+            val ox = x
+            x += vx * dt
+            v -= g * dt
+            h += v * dt
+            t += dt
+            if (sign(ox) != sign(x) && ox != 0f && h < cfg.netH) return // into the net
+            if (h <= 0f && v < 0f) break
+        }
+        val rcv = receiver
+        if (rcv < 0 || sign(x) != dirToward(rcv) || abs(x) > 1.03f) return
+        // then exactly what happens at the bounce (see computeHitTime)
+        val vhb = -v * cfg.restitution
+        val vxb = vx * cfg.friction
+        val disc = vhb * vhb - 2f * g * cfg.hitH
+        val tau = if (disc >= 0f) (vhb + sqrt(disc)) / g else vhb / g
+        hitTime = playTime + t + tau
+        hitX = x + vxb * tau
+    }
+
+    /** Length of the last simulation step (the game runs at a fixed rate). */
+    private var lastDt = 1f / 120f
 
     private fun stepBall(dt: Float) {
         if (!ballVisible) return
@@ -296,26 +378,31 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     }
 
     private fun hit(player: Int, e: Float, s: GestureEvent.Swing, at: Double) {
-        val q = clamp(1f - abs(e), 0f, 1f)
+        val q = clamp(1f - abs(e) / SWEET, 0f, 1f)
         rally++
+        hitsMade[player]++
+        timingErrors[player].add((at - hitTime).toFloat())
         longestRally = max(longestRally, rally)
         val target = 1 - player
         val modifier = shotModifier(player, s, q)
-        // return the ball from where it was when the swing was made (it may have flown on while the swing arrived)
-        val i = if (at < playTime) ballIndexAt(at) else -1
+        // return the ball from where it was when the swing was made (it may have flown on while the swing arrived),
+        // but no earlier than just before it reached the player
+        val from = max(at, hitTime - 0.12)
+        val i = if (from < playTime) ballIndexAt(from) else -1
         val fromX = if (i >= 0) histX[i] else bx
         val fromH = if (i >= 0) histH[i] else bh
         when {
-            e < -0.7f -> {
+            e < EARLY_OUT -> {
                 launch(player, fromX, max(fromH, cfg.hitH), dirToward(target) * 1.2f, flightTime(q, s.power) * 0.9f, net = false)
                 popup("Too early!", player)
             }
-            e > 0.7f -> {
+            e > LATE_NET -> {
                 launch(player, fromX, max(fromH, cfg.hitH * 0.7f), dirToward(target) * 0.3f, 0.5f, net = true)
                 popup("Too late!", player)
             }
             else -> {
-                val landFrac = clamp(0.62f - 0.4f * e + modifier.depthBonus, 0.25f, 0.97f)
+                // early = deeper, late = shorter; a little early or late is still a good, safe return
+                val landFrac = clamp(0.62f - 0.25f * e + modifier.depthBonus, 0.3f, 0.95f)
                 launch(player, fromX, max(fromH, cfg.hitH), dirToward(target) * landFrac, flightTime(q, s.power) * modifier.timeFactor, net = false)
                 onGoodHit(player, q, modifier)
             }
@@ -347,6 +434,7 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
         stateTime = 0f
         receiver = -1
         hitTime = Double.NaN
+        candidates.clear()
         env.sfx(Sfx.POINT)
         onPoint(winner, reason)
     }
@@ -406,7 +494,7 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
         if (state == State.RALLY && receiver == k && !hitTime.isNaN()) {
             if (botPlanFor[k] != hitTime) {
                 botPlanFor[k] = hitTime
-                val sigma = lerp(0.15f, 0.045f, skill) * (1f + 0.04f * rally) * incomingPressure()
+                val sigma = lerp(0.15f, 0.045f, skill) * (1f + 0.07f * rally) * incomingPressure()
                 botSwingAt[k] = hitTime + rng.gaussian() * sigma
                 botWillSwing[k] = !rng.chance(lerp(0.06f, 0.01f, skill))
                 botForehandPlan[k] = botForehand(k) != rng.chance(botWrongStrokeChance(skill))
@@ -422,8 +510,19 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     override val isOver: Boolean get() = state == State.MATCH_OVER
 
     companion object {
-        /** Ball positions kept for judging late-arriving swings: 0.6 s at 120 steps per second. */
-        private const val HISTORY = 72
+        /** Ball positions kept for judging late-arriving swings: 1 s at 120 steps per second. */
+        private const val HISTORY = 120
+        /** Swings this many timing windows before the perfect moment are ignored ("too early - wait for it"). */
+        const val EARLIEST = -2.2f
+        /** ... and swings later than this are not a hit at all. */
+        const val LATEST = 1.35f
+        /** Played but sails long (OUT) / into the net. */
+        const val EARLY_OUT = -1.6f
+        const val LATE_NET = 1.0f
+        /** Timing (in windows) over which shot quality falls from perfect to nothing. */
+        const val SWEET = 1.3f
+        /** How long after the perfect moment an early swing waits for a better one (s). */
+        const val HOLD_FOR_BETTER = 0.1
     }
 
     override fun result(): MatchResult = MatchResult(
@@ -441,5 +540,5 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     /** Timing window for the current shot: tightens as a rally gets longer, so rallies build pressure and end. */
     fun window(): Float = cfg.window * max(cfg.minWindowFactor, 1f - cfg.windowShrinkPerHit * rally)
 
-    fun inWindow(): Boolean = !hitTime.isNaN() && abs(playTime - hitTime) <= window()
+    fun inWindow(): Boolean = !hitTime.isNaN() && abs(playTime - hitTime) <= window() * 0.75f
 }

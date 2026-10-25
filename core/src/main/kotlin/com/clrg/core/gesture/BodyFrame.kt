@@ -39,12 +39,35 @@ class BodyFrame {
     /** Vertical shift of the shoulders from the calibrated neutral height, in S units (+ = higher, - = crouching). */
     var rise = 0f
 
+    /**
+     * Unsmoothed wrists and elbows of this frame (same units), with their visibility. Smoothing trades a little delay
+     * for steadiness, which is right for drawing and pointing; fast-movement detection reads these instead.
+     */
+    val rwx = FloatArray(2)
+    val rwy = FloatArray(2)
+    val rwz = FloatArray(2)
+    val rwv = FloatArray(2)
+    val rex = FloatArray(2)
+    val rey = FloatArray(2)
+    val rev = FloatArray(2)
+
+    /** Held object (stick / toy racket) in this frame: hand (-1 none), grip point and far end, confidence. */
+    var objHand = -1
+    var objBaseX = 0f
+    var objBaseY = 0f
+    var objX = 0f
+    var objY = 0f
+    var objConf = 0f
+
     fun copyFrom(o: BodyFrame) {
         t = o.t; scale = o.scale; originX = o.originX; originY = o.originY
         o.wx.copyInto(wx); o.wy.copyInto(wy); o.ex.copyInto(ex); o.ey.copyInto(ey)
         o.sx.copyInto(sx); o.sy.copyInto(sy); o.wv.copyInto(wv); o.wz.copyInto(wz)
         noseX = o.noseX; noseY = o.noseY; hipX = o.hipX; hipY = o.hipY; hipsVisible = o.hipsVisible
         shift = o.shift; tilt = o.tilt; rise = o.rise
+        o.rwx.copyInto(rwx); o.rwy.copyInto(rwy); o.rwz.copyInto(rwz); o.rwv.copyInto(rwv)
+        o.rex.copyInto(rex); o.rey.copyInto(rey); o.rev.copyInto(rev)
+        objHand = o.objHand; objBaseX = o.objBaseX; objBaseY = o.objBaseY; objX = o.objX; objY = o.objY; objConf = o.objConf
     }
 
     companion object {
@@ -72,6 +95,31 @@ class BodyFrame {
                 out.sy[h] = (oy - p.y[sIdx[h]]) / s
                 out.wv[h] = p.vis[wIdx[h]]
                 out.wz[h] = if (pose != null) (pose.z[wIdx[h]] - (pose.z[Lm.LEFT_SHOULDER] + pose.z[Lm.RIGHT_SHOULDER]) / 2f) / s else 0f
+            }
+            // unsmoothed joints, relative to the (smoothed) shoulder centre
+            val raw = slot.metrics?.pose
+            for (h in 0..1) {
+                if (raw != null) {
+                    out.rwx[h] = (raw.x[wIdx[h]] - ox) / s
+                    out.rwy[h] = (oy - raw.y[wIdx[h]]) / s
+                    out.rwv[h] = raw.vis(wIdx[h])
+                    out.rex[h] = (raw.x[eIdx[h]] - ox) / s
+                    out.rey[h] = (oy - raw.y[eIdx[h]]) / s
+                    out.rev[h] = raw.vis(eIdx[h])
+                } else {
+                    out.rwx[h] = out.wx[h]; out.rwy[h] = out.wy[h]; out.rwv[h] = out.wv[h]
+                    out.rex[h] = out.ex[h]; out.rey[h] = out.ey[h]; out.rev[h] = p.vis[eIdx[h]]
+                }
+                out.rwz[h] = out.wz[h]
+            }
+            val held = raw?.held
+            if (held != null && held.confidence > 0f) {
+                out.objHand = held.hand
+                out.objBaseX = (held.baseX - ox) / s; out.objBaseY = (oy - held.baseY) / s
+                out.objX = (held.tipX - ox) / s; out.objY = (oy - held.tipY) / s
+                out.objConf = held.confidence
+            } else {
+                out.objHand = -1; out.objConf = 0f
             }
             out.noseX = (p.x[Lm.NOSE] - ox) / s
             out.noseY = (oy - p.y[Lm.NOSE]) / s

@@ -44,9 +44,10 @@ class GestureTuning(val mode: MovementMode, val hand: Hand, reach: Float = 1.5f,
     private val std = mode == MovementMode.STANDARD
     private val seated = mode == MovementMode.SEATED
 
-    val swingDistance = (if (std) 0.7f else 0.38f) * k
-    val swingSpeed = (if (std) 3.2f else 1.8f) * k
-    val swingCooldown = 0.35f
+    /** A swing: the hand covers this distance within [SwingDetector.WINDOW] at this average speed or faster. */
+    val swingDistance = (if (std) 0.6f else 0.34f) * k
+    val swingSpeed = (if (std) 2.7f else 1.6f) * k
+    val swingCooldown = 0.22f
 
     val throwStartY = if (std) 0.0f else -0.4f
     val throwDistance = (if (std) 0.55f else 0.3f) * k
@@ -70,70 +71,275 @@ class GestureTuning(val mode: MovementMode, val hand: Hand, reach: Float = 1.5f,
     val raiseHoldSec = 1.0f
 }
 
-/** Detects fast arm swings with either hand (shared cooldown so a two-handed swing counts once). */
+/**
+ * Detects fast arm swings with either hand, built to survive a real camera:
+ *
+ *  - It reads the *unsmoothed* joints, so a swing is seen as soon as the camera sees it.
+ *  - A fast hand is often blurred: the model loses the wrist or places it badly for a frame or two. The elbow (which
+ *    moves about half as far) and, when one is held, the object's far end are watched as well, and a wrist that
+ *    vanishes while moving fast still counts when the game is expecting a swing.
+ *  - Movement towards or away from the camera (a forehand swung at the TV) counts too, from the wrist's depth.
+ *  - A backswing does not block the real swing that follows it: a hand re-arms as soon as it changes direction, and
+ *    the cooldown between swings is short. (Games that judge timing pick the swing closest to the right moment.)
+ *  - A one-frame jump of a joint (a mis-detection) is not a swing: the distance has to be covered over several frames.
+ *
+ * [boost] (0..1) is set by a game while it is waiting for a swing (a ball arriving): thresholds drop by up to 40%,
+ * so a gentle or partly-seen swing still counts exactly when it matters.
+ */
 class SwingDetector {
     private val armed = booleanArrayOf(true, true)
+    private val lastDirX = FloatArray(2)
+    private val lastDirY = FloatArray(2)
+    private val lastEventT = doubleArrayOf(-9.0, -9.0)
+    /** Frames up to the last detection are never measured again: one movement is one swing. */
+    private var usedUpTo = -9.0
     private var cooldownUntil = -1.0
 
-    fun reset() { armed.fill(true); cooldownUntil = -1.0 }
+    /** What the last check saw for each hand (for the motion test screen): 0..1+ of the swing threshold. */
+    val level = FloatArray(2)
+    /** Which part saw the last swing: 0 wrist, 1 elbow, 2 held object (motion test screen). */
+    var lastKind = 0
+        private set
+
+    fun reset() { armed.fill(true); cooldownUntil = -1.0; level.fill(0f); lastEventT.fill(-9.0); usedUpTo = -9.0 }
+
+    private class Signal {
+        var ok = false
+        var disp = 0f; var path = 0f; var speed = 0f
+        var dx = 0f; var dy = 0f
+        var peakT = 0.0; var peakV = 0f
+        var lastStepX = 0f; var lastStepY = 0f; var lastStepV = 0f; var lastStepFrom = 0.0
+        fun clear() { ok = false; disp = 0f; path = 0f; speed = 0f; dx = 0f; dy = 0f; peakV = 0f; lastStepV = 0f }
+    }
+
+    private val sig = Array(3) { Signal() }
+
+    /**
+     * Measures one effector (0 = wrist, 1 = elbow, 2 = held object's far end) of [hand] over the last [WINDOW]
+     * seconds, in wrist-equivalent body units ([gain]).
+     */
+    private fun measure(h: BodyHistory, hand: Int, kind: Int, gain: Float, out: Signal) {
+        out.clear()
+        val nowT = h.latest?.t ?: return
+        var newest: BodyFrame? = null
+        var oldest: BodyFrame? = null
+        var prev: BodyFrame? = null
+        var n = 0
+        var steps = 0
+        var maxStep = 0f
+        for (k in 0 until h.size) {
+            val f = h.get(k)
+            val age = nowT - f.t
+            if (age > WINDOW + 0.04 || f.t < usedUpTo) break
+            val seen = when (kind) {
+                0 -> f.rwv[hand] >= MIN_VIS
+                1 -> f.rev[hand] >= MIN_VIS
+                else -> f.objHand == hand && f.objConf >= 0.35f
+            }
+            if (!seen) continue
+            if (newest == null) {
+                if (age > 0.07) return // this joint has not been seen for a while
+                newest = f
+            }
+            val p = prev
+            if (p != null) {
+                val dt = (p.t - f.t).toFloat()
+                if (dt <= 0f || dt > MAX_GAP) break // a long gap: do not join across it
+                val sx = x(p, hand, kind) - x(f, hand, kind)
+                val sy = y(p, hand, kind) - y(f, hand, kind)
+                val sz = if (kind == 0) (p.rwz[hand] - f.rwz[hand]).coerceIn(-0.5f, 0.5f) * Z_WEIGHT else 0f
+                val step = kotlin.math.sqrt(sx * sx + sy * sy + sz * sz) * gain
+                out.path += step
+                if (step > maxStep) maxStep = step
+                val v = step / dt
+                if (steps < stepV.size) { stepV[steps] = v; stepT[steps] = (p.t + f.t) / 2.0; steps++ }
+                if (n == 1) { out.lastStepX = sx; out.lastStepY = sy; out.lastStepV = v; out.lastStepFrom = f.t }
+            }
+            prev = f
+            oldest = f
+            n++
+        }
+        peak(steps, out)
+        val a = newest ?: return
+        val b = oldest ?: return
+        val span = (a.t - b.t).toFloat()
+        if (n < 3 || span < 0.07f) return
+        val dx = (x(a, hand, kind) - x(b, hand, kind)) * gain
+        val dy = (y(a, hand, kind) - y(b, hand, kind)) * gain
+        val dz = if (kind == 0) (a.rwz[hand] - b.rwz[hand]).coerceIn(-0.8f, 0.8f) * Z_WEIGHT * gain else 0f
+        out.disp = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        out.dx = dx; out.dy = dy
+        out.speed = out.path / span
+        // mostly one way (not jitter adding up; elbows travel on an arc), covered over several frames (not one jump)
+        out.ok = out.disp >= (if (kind == 1) 0.45f else 0.55f) * out.path && maxStep <= 0.72f * out.path
+    }
+
+    private val stepV = FloatArray(16)
+    private val stepS = FloatArray(16)
+    private val stepT = DoubleArray(16)
+
+    /**
+     * The fastest moment: the fastest step, refined between frames with a parabola through it and its neighbours
+     * (so the moment is found to a few ms even at 30 frames per second, and one noisy step moves it less).
+     */
+    private fun peak(steps: Int, out: Signal) {
+        if (steps == 0) return
+        // light 1-2-1 smoothing: one noisy step should not decide where the peak is
+        for (k in 0 until steps) {
+            val newer = if (k > 0) stepV[k - 1] else stepV[k]
+            val older = if (k < steps - 1) stepV[k + 1] else stepV[k]
+            stepS[k] = (newer + 2f * stepV[k] + older) / 4f
+        }
+        var i = 0
+        for (k in 1 until steps) if (stepS[k] > stepS[i]) i = k
+        out.peakV = stepV[i]
+        out.peakT = stepT[i]
+        if (i == 0 || i == steps - 1) return
+        val a = stepS[i - 1]; val b = stepS[i]; val c = stepS[i + 1] // newer, peak, older
+        val den = a - 2f * b + c
+        if (den >= -1e-6f) return
+        val off = (0.5f * (a - c) / den).coerceIn(-0.5f, 0.5f) // + = towards the older step
+        val dtNewer = stepT[i - 1] - stepT[i]
+        val dtOlder = stepT[i] - stepT[i + 1]
+        out.peakT = if (off < 0f) stepT[i] - off * dtNewer else stepT[i] - off * dtOlder
+    }
+
+    private fun x(f: BodyFrame, hand: Int, kind: Int) = when (kind) { 0 -> f.rwx[hand]; 1 -> f.rex[hand]; else -> f.objX }
+    private fun y(f: BodyFrame, hand: Int, kind: Int) = when (kind) { 0 -> f.rwy[hand]; 1 -> f.rey[hand]; else -> f.objY }
 
     /** @param scale < 1 for games that use compact strokes (table tennis). */
-    fun update(h: BodyHistory, tune: GestureTuning, out: MutableList<GestureEvent>, scale: Float = 1f) {
+    fun update(h: BodyHistory, tune: GestureTuning, out: MutableList<GestureEvent>, scale: Float = 1f, boost: Float = 0f) {
         val now = h.latest ?: return
-        val past = h.atAge(0.15) ?: return
-        val prev = h.get(1)
-        val dtWin = (now.t - past.t).toFloat()
-        val dtStep = (now.t - prev.t).toFloat()
-        if (dtWin <= 0f || dtStep <= 0f) return
-        val minDist = tune.swingDistance * scale
-        val minSpeed = tune.swingSpeed * scale
+        if (h.size < 3) return
+        val relax = 1f - 0.4f * boost.coerceIn(0f, 1f)
+        val minDist = tune.swingDistance * scale * relax
+        val minSpeed = tune.swingSpeed * scale * relax
         var bestHand = -1
-        var bestDist = 0f
+        var bestDisp = 0f
+        var bestKind = 0
+        var bestPeakT = now.t
+        var bdx = 0f; var bdy = 0f; var bSpeed = 0f
         for (hand in 0..1) {
-            val stepSpeed = hypot(now.wx[hand] - prev.wx[hand], now.wy[hand] - prev.wy[hand]) / dtStep
-            if (!armed[hand] && stepSpeed < minSpeed * 0.35f) armed[hand] = true // hysteresis re-arm
-            if (!armed[hand] || now.wv[hand] < 0.2f || past.wv[hand] < 0.2f) continue
-            val d = hypot(now.wx[hand] - past.wx[hand], now.wy[hand] - past.wy[hand])
-            val speed = d / dtWin
-            if (d >= minDist && speed >= minSpeed && d > bestDist) { bestDist = d; bestHand = hand }
+            for (kind in 0..2) measure(h, hand, kind, GAIN[kind], sig[kind])
+            val w = sig[0]; val e = sig[1]; val o = sig[2]
+            // the wrist is being followed when it was seen in the last couple of frames; otherwise the elbow stands in
+            val wristSeen = w.lastStepV > 0f
+            val primary = if (wristSeen) w else e
+            var rearmedNow = false
+            if (!armed[hand]) {
+                val sinceLast = now.t - lastEventT[hand]
+                if (primary.lastStepV > 0f) {
+                    // re-arm: the hand has slowed right down, clearly turned back (backswing -> swing), or kept
+                    // moving for a while since its last swing
+                    val stepLen = hypot(primary.lastStepX, primary.lastStepY)
+                    val reversed = stepLen > 1e-4f && primary.lastStepX * lastDirX[hand] + primary.lastStepY * lastDirY[hand] < -0.5f * stepLen && sinceLast > 0.1
+                    if (primary.lastStepV < minSpeed * 0.5f || reversed || sinceLast > REARM_SEC) {
+                        armed[hand] = true
+                        // what came before the slow-down / turn belonged to the last swing
+                        usedUpTo = maxOf(usedUpTo, primary.lastStepFrom - 0.001)
+                        rearmedNow = true
+                    }
+                } else if (sinceLast > REARM_SEC) {
+                    armed[hand] = true
+                    usedUpTo = maxOf(usedUpTo, now.t - 0.001)
+                    rearmedNow = true
+                }
+            }
+            // candidates, best first: the wrist and a held object's end; the elbow only when the wrist is not seen
+            var handLevel = 0f
+            for (kind in ORDER) {
+                if (kind == 1 && wristSeen) continue
+                val s = sig[kind]
+                if (!s.ok) continue
+                handLevel = maxOf(handLevel, minOf(s.disp / minDist, s.speed / minSpeed))
+                if (rearmedNow || !armed[hand]) continue // measured afresh from the next frame
+                if (s.disp >= minDist && s.speed >= minSpeed) {
+                    if (s.disp > bestDisp) {
+                        bestDisp = s.disp; bestHand = hand; bestKind = kind; bestPeakT = s.peakT
+                        bdx = s.dx; bdy = s.dy; bSpeed = s.speed
+                    }
+                    break
+                }
+            }
+            level[hand] = handLevel
+            // a fast wrist that just vanished (motion blur) while the game is waiting for a swing
+            if (bestHand < 0 && boost > 0.3f && armed[hand] && now.rwv[hand] < MIN_VIS) {
+                val blur = blurredSwing(h, hand, minSpeed)
+                if (blur != null) {
+                    bestHand = hand; bestKind = 0; bestPeakT = blur[0].toDouble() + now.t
+                    bdx = blur[1]; bdy = blur[2]; bSpeed = blur[3]; bestDisp = minDist
+                }
+            }
         }
-        if (bestHand < 0 || now.t < cooldownUntil) return
-        val dx = now.wx[bestHand] - past.wx[bestHand]
-        val dy = now.wy[bestHand] - past.wy[bestHand]
-        val len = max(1e-4f, hypot(dx, dy))
-        val speed = len / dtWin
-        val power = clamp((speed - minSpeed) / (minSpeed * 1.5f), 0f, 1f)
+        if (bestHand < 0) return
+        if (now.t < cooldownUntil) {
+            // allowed sooner only for a swing back the other way (a backswing followed by the real swing)
+            val back = bdx * lastDirX[bestHand] + bdy * lastDirY[bestHand] < -0.5f * hypot(bdx, bdy) && now.t - lastEventT[bestHand] > 0.12
+            if (!back) return
+        }
+        val len = max(1e-4f, hypot(bdx, bdy))
+        val power = clamp((bSpeed - minSpeed) / (minSpeed * 1.5f), 0f, 1f)
         // Forehand: the playing hand moves from its own side across the body (right hand: toward screen left).
         val playing = if (tune.hand == Hand.RIGHT) RIGHT else LEFT
         val acrossDir = if (bestHand == RIGHT) -1f else 1f
-        val forehand = if (bestHand == playing) sign(dx) == acrossDir else sign(dx) != acrossDir
-        out.add(GestureEvent.Swing(peakTime(h, bestHand, now.t), bestHand, dx / len, dy / len, power, forehand))
+        val forehand = if (bestHand == playing) sign(bdx) == acrossDir else sign(bdx) != acrossDir
+        out.add(GestureEvent.Swing(bestPeakT, bestHand, bdx / len, bdy / len, power, forehand))
         armed[0] = false; armed[1] = false
+        lastDirX[bestHand] = bdx / len; lastDirY[bestHand] = bdy / len
+        lastEventT[bestHand] = now.t
+        usedUpTo = now.t - 0.001
         cooldownUntil = now.t + tune.swingCooldown
+        lastKind = bestKind
     }
 
     /**
-     * When the swing happened: the moment the hand moved fastest (where a racket meets the ball), looked up in the
-     * last [PEAK_SEARCH_SEC]. A swing is only recognised once enough distance has been covered, which is usually a
-     * little after that moment; stamping the event with the fastest moment keeps the judged timing independent of
-     * how quickly the detector fired.
+     * The wrist was seen moving fast in the last ~0.12 s and is now missing: the classic motion-blur dropout in the
+     * middle of a swing. Returns [peak time offset, dx, dy, speed] or null.
      */
-    private fun peakTime(h: BodyHistory, hand: Int, fallback: Double): Double {
-        val nowT = h.latest?.t ?: return fallback
-        var best = -1f
-        var t = fallback
-        for (k in 0 until h.size - 1) {
-            val a = h.get(k); val b = h.get(k + 1)
-            if (nowT - b.t > PEAK_SEARCH_SEC) break
-            val dt = (a.t - b.t).toFloat()
-            if (dt <= 0f) continue
-            val v = hypot(a.wx[hand] - b.wx[hand], a.wy[hand] - b.wy[hand]) / dt
-            if (v > best) { best = v; t = (a.t + b.t) / 2.0 }
+    private fun blurredSwing(h: BodyHistory, hand: Int, minSpeed: Float): FloatArray? {
+        val nowT = h.latest?.t ?: return null
+        var prev: BodyFrame? = null
+        var path = 0f
+        var span = 0f
+        var dx = 0f; var dy = 0f
+        var peakV = 0f; var peakT = 0.0
+        for (k in 1 until h.size) {
+            val f = h.get(k)
+            if (nowT - f.t > 0.25 || f.t < usedUpTo) break
+            if (f.rwv[hand] < MIN_VIS) { if (prev != null) break else continue }
+            if (prev == null && nowT - f.t > 0.12) return null
+            val p = prev
+            if (p != null) {
+                val dt = (p.t - f.t).toFloat()
+                if (dt <= 0f) break
+                val sx = p.rwx[hand] - f.rwx[hand]; val sy = p.rwy[hand] - f.rwy[hand]
+                val step = hypot(sx, sy)
+                path += step; span += dt; dx += sx; dy += sy
+                if (step / dt > peakV) { peakV = step / dt; peakT = (p.t + f.t) / 2.0 }
+            }
+            prev = f
         }
-        return t
+        if (span < 0.06f || path < 0.25f) return null
+        val v = path / span
+        // still moving fast when it vanished, and mostly in one direction
+        if (v < minSpeed * 1.3f || hypot(dx, dy) < 0.6f * path) return null
+        return floatArrayOf((peakT - nowT).toFloat(), dx, dy, v)
     }
 
     companion object {
+        /** How far back a swing is measured (s). */
+        const val WINDOW = 0.22
+        /** A joint counts as seen at this visibility. */
+        const val MIN_VIS = 0.3f
+        /** Depth is less precise than position: weighted down. */
+        const val Z_WEIGHT = 0.45f
+        /** Wrist-equivalent gain of each effector: wrist, elbow (moves about half as far), held object's far end. */
+        val GAIN = floatArrayOf(1f, 1.8f, 0.5f)
+        private val ORDER = intArrayOf(0, 2, 1)
+        /** Longest gap in a joint's sightings (blurred frames) that a swing is measured across (s). */
+        const val MAX_GAP = 0.17f
+        /** A hand that has kept moving since its last swing re-arms after this long anyway (s). */
+        const val REARM_SEC = 0.45
         const val PEAK_SEARCH_SEC = 0.25
     }
 }

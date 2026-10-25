@@ -44,6 +44,11 @@ class PlayerInput(val index: Int) {
     val events = ArrayList<GestureEvent>()
     var dominant = RIGHT
     var mode = MovementMode.STANDARD
+    /**
+     * Written by the game: 0..1 how much it is waiting for this player to swing right now (a ball arriving). The
+     * swing detector is made more sensitive accordingly.
+     */
+    var expectSwing = 0f
 
     /** Copies continuous state from the player's controls (events are delivered separately). */
     fun fill(c: PlayerControls, isTracked: Boolean) {

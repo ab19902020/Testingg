@@ -58,7 +58,7 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
     }
 
     override fun onExit() {
-        app.controls.forEach { it.compactSwings = false }
+        app.controls.forEach { it.compactSwings = false; it.swingBoost = 0f }
     }
 
     override fun onBack(): Boolean {

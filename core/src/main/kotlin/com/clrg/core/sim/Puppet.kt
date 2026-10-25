@@ -33,6 +33,8 @@ class Puppet(var cx: Float, var shoulderY: Float, var scale: Float) {
     var visibility = 0.95f
     /** Visibility of elbows, wrists and hands (e.g. arms outside the frame). NaN = same as [visibility]. */
     var armVisibility = Float.NaN
+    /** Per-hand wrist (and hand) visibility override, e.g. a blurred fast hand. NaN = as the arm. */
+    val wristVisibility = floatArrayOf(Float.NaN, Float.NaN)
     var score = 0.99f
     var trackHint = 1
     var appearance: FloatArray? = null
@@ -96,14 +98,15 @@ class Puppet(var cx: Float, var shoulderY: Float, var scale: Float) {
             val wIdx = if (h == 0) Lm.LEFT_WRIST else Lm.RIGHT_WRIST
             val eIdx = if (h == 0) Lm.LEFT_ELBOW else Lm.RIGHT_ELBOW
             val av = if (armVisibility.isNaN()) visibility else armVisibility
-            set(eIdx, ex, ey, av); set(wIdx, tx, ty, av)
+            val wv = if (wristVisibility[h].isNaN()) av else wristVisibility[h]
+            set(eIdx, ex, ey, av); set(wIdx, tx, ty, wv)
             z[wIdx] = wristZ[h] * s
             // hand points slightly beyond the wrist along the forearm
             val fx = (tx - ex) / l2; val fy = (ty - ey) / l2
             val handBase = if (h == 0) 17 else 18
-            set(handBase, tx + fx * 0.12f * s, ty + fy * 0.12f * s, av)         // pinky
-            set(handBase + 2, tx + fx * 0.14f * s, ty + fy * 0.14f * s, av)     // index
-            set(handBase + 4, tx + fx * 0.08f * s - fy * 0.04f * s, ty + fy * 0.08f * s, av) // thumb
+            set(handBase, tx + fx * 0.12f * s, ty + fy * 0.12f * s, wv)         // pinky
+            set(handBase + 2, tx + fx * 0.14f * s, ty + fy * 0.14f * s, wv)     // index
+            set(handBase + 4, tx + fx * 0.08f * s - fy * 0.04f * s, ty + fy * 0.08f * s, wv) // thumb
         }
         // hips and legs
         val hipV = if (hipsVisible) visibility else 0.05f

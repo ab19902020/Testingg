@@ -15,6 +15,8 @@ class PersonPose(
     /** Pipeline track id (temporal continuity hint only; identity is decided by the PlayerTracker). */
     val trackHint: Int,
     val appearance: FloatArray?,
+    /** An object held in one hand (when held-object tracking is on and one was seen), else null. */
+    val held: HeldObservation? = null,
 ) {
     fun vis(i: Int): Float = visibility[i] * presence[i]
     fun visible(i: Int, threshold: Float = 0.5f): Boolean = vis(i) >= threshold
@@ -30,6 +32,7 @@ class PersonPose(
                 FloatArray(n) { lm.visibility[it] },
                 FloatArray(n) { lm.presence[it] },
                 raw.presence, raw.trackId, raw.appearance,
+                raw.held?.mapped({ geo.toFrameX(it) }, { geo.toFrameY(it) }),
             )
         }
     }

@@ -31,7 +31,7 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
         slowFlight = 0.85f, fastFlight = 0.55f, speedupPerHit = 0.02f, minFlightFactor = 0.75f,
         pointsToWin = 11, serveEvery = 2, restitution = 0.8f, friction = 0.92f,
         homeX = 1.15f, moveSpeed = 3.6f, racketReach = 0.07f, autoServeSec = 8f,
-        windowShrinkPerHit = 0.05f, minWindowFactor = 0.5f,
+        windowShrinkPerHit = 0.065f, minWindowFactor = 0.4f,
     )
 
     /** Stroke required from each player for their next incoming ball: true = forehand. */

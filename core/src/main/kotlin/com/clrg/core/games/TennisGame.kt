@@ -25,10 +25,11 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
     override val cfg = Config(
         // a big court and unhurried shots: plenty of time to see the ball coming and swing
         gravity = 2.8f, netH = 0.11f, hitH = 0.2f, window = 0.36f,
-        slowFlight = 1.5f, fastFlight = 1.0f, speedupPerHit = 0.022f, minFlightFactor = 0.74f,
+        slowFlight = 1.5f, fastFlight = 1.0f, speedupPerHit = 0.03f, minFlightFactor = 0.68f,
         pointsToWin = 7, serveEvery = 1, restitution = 0.72f, friction = 0.9f,
         homeX = 0.95f, moveSpeed = 3.2f, racketReach = 0.09f, autoServeSec = 8f,
-        windowShrinkPerHit = 0.032f, minWindowFactor = 0.55f, maxCourtX = 1.2f,
+        // rallies build pressure: the timing window tightens with every hit, so points end in a minute or less
+        windowShrinkPerHit = 0.06f, minWindowFactor = 0.4f, maxCourtX = 1.2f,
     )
 
     private val groundY = 850f
@@ -108,7 +109,7 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
             val sy = toScreenY(bh)
             val shadowW = max(8f, 26f - bh * 30f)
             g.fillOval(sx - shadowW, groundY - 6f, sx + shadowW, groundY + 6f, Colors.SHADOW)
-            if (state == State.RALLY && rcv >= 0 && !hitTime.isNaN()) {
+            if (state == State.RALLY && rcv >= 0 && !hitTime.isNaN() && hitTime - playTime < 1.1) {
                 val f = approachFraction()
                 val ringR = 22f + 130f * (1f - f)
                 val c = if (inWindow()) Colors.GOOD else env.color(rcv)
@@ -167,12 +168,12 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
         val INFO = GameInfo(
             id = "tennis", title = "Christmas Tennis", tagline = "Swing your arm like a racket!",
             howTo = listOf(
-                "Your snow buddy runs to the ball for you.",
-                "When the ball comes to YOUR side, swing your arm as the ring closes.",
-                "On time = fast, deep shot. Far too early = OUT. Far too late = NET.",
-                "Serve by swinging when it's your turn. First to 7 points wins!",
+                "Your snow buddy runs to the ball for you - you just swing.",
+                "When the ball comes to YOUR side, swing your arm as the ring closes. Swing like a racket: back, then through.",
+                "The swing nearest the right moment counts. On time = fast, deep shot. Way too early = OUT, way too late = NET.",
+                "Rallies get faster and the timing tighter. Serve by swinging. First to 7 points wins!",
             ),
-            controls = listOf("Swing either arm" to "Hit the ball", "Watch the shrinking ring" to "Swing when it turns green"),
+            controls = listOf("Swing either arm (or your held object)" to "Hit the ball", "Watch the shrinking ring" to "Swing when it turns green"),
             gentleNotes = "Reduced movement and seated players: a smaller, slower arm swing counts.",
             music = MusicTrack.GAME, scoreUnit = "points", goal = "First to 7 points",
         )

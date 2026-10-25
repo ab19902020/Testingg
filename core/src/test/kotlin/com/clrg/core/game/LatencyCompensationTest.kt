@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
  * late" problem).
  */
 class LatencyCompensationTest {
-    private class Outcome(val p1Errors: Int, val p1Returns: Int)
+    private class Outcome(val p1Errors: Int, val p1Returns: Int, val meanError: Double)
 
     /**
      * @param cameraDelay seconds from capture to the game receiving the pose.
@@ -96,7 +96,8 @@ class LatencyCompensationTest {
             if (game.scores[1] > lastScores[1]) p1Errors++
             lastScores = game.scores.copyOf()
         }
-        return Outcome(p1Errors, returns)
+        val errs = game.timingErrors[0]
+        return Outcome(p1Errors, returns, if (errs.isEmpty()) Double.NaN else errs.average())
     }
 
     @Test
@@ -108,8 +109,11 @@ class LatencyCompensationTest {
 
     @Test
     fun withoutCompensationTheSameSwingsAreLate() {
+        val ok = play(cameraDelay = 0.16, tvDelay = 0.1, compensate = true)
         val late = play(cameraDelay = 0.16, tvDelay = 0.1, compensate = false)
-        assertTrue(late.p1Errors >= 3, "uncompensated delays make on-time swings late: ${late.p1Errors} errors")
+        println("TIMING compensated: mean error %+.0f ms over ${ok.p1Returns} returns; uncompensated: %+.0f ms over ${late.p1Returns} returns, ${late.p1Errors} points lost".format(ok.meanError * 1000, late.meanError * 1000))
+        assertTrue(kotlin.math.abs(ok.meanError) < 0.05, "compensated swings are judged on time: ${ok.meanError}")
+        assertTrue(late.meanError > 0.2, "uncompensated, the same swings are judged a quarter of a second late: ${late.meanError}")
     }
 
     @Test

@@ -104,6 +104,15 @@ class PlayerControls(val playerIndex: Int) {
         private set
     /** Set by games that use small, quick strokes (table tennis): swing thresholds are scaled down. */
     var compactSwings = false
+    /**
+     * 0..1, set by a game while it is waiting for this player to swing (a ball is arriving): the swing detector
+     * becomes more sensitive, so a gentle or partly-seen swing still counts when it matters.
+     */
+    var swingBoost = 0f
+    /** Live swing strength per hand, 0..1+ of what counts as a swing (motion test screen). */
+    val swingLevel: FloatArray get() = swing.level
+    /** Which part of the arm saw the last swing: 0 wrist, 1 elbow, 2 held object. */
+    val lastSwingSource: Int get() = swing.lastKind
     /** Golf: which stroke to look for (NONE outside golf). */
     var golfStroke = GolfStroke.NONE
     val golf = GolfSwingDetector()
@@ -169,7 +178,7 @@ class PlayerControls(val playerIndex: Int) {
         history.push(frame)
         hasPose = true
         val t = tuning
-        swing.update(history, t, pending, if (compactSwings) 0.7f else 1f)
+        swing.update(history, t, pending, if (compactSwings) 0.7f else 1f, swingBoost)
         throwD.update(history, t, pending)
         bowl.update(history, t, pending)
         leanT.update(frame, t, dt)

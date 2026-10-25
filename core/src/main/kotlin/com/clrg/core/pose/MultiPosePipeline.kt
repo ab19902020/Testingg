@@ -47,6 +47,8 @@ class RawPose(
     /** Clothing colour signature (see [Appearance]), or null if it could not be sampled. */
     val appearance: FloatArray?,
     val framesTracked: Int,
+    /** Object held in one hand, in upright pixels (set by the held-object tracker), else null. */
+    var held: HeldObservation? = null,
 )
 
 class PipelineStats {
