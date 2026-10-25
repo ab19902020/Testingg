@@ -17,6 +17,13 @@ class AvatarPose {
     val fore = floatArrayOf((-PI / 2 - 0.1).toFloat(), (-PI / 2 + 0.1).toFloat())
     /** Sideways lean of the torso (radians, + = toward screen right). */
     var tilt = 0f
+    /**
+     * A held object (stick / toy racket) seen in the player's hand: its direction (body-space angle, like [fore]), the
+     * hand holding it, and its length in body units. NaN angle = none: props follow the forearm.
+     */
+    var propAngle = Float.NaN
+    var propHand = -1
+    var propLen = 0f
     /** Sideways tilt of the head relative to the body (radians, + = toward screen right). */
     var head = 0f
     /** Rise of the body from its neutral height (S units: + = up on tiptoes / jumping, - = crouching). */
@@ -37,6 +44,7 @@ class AvatarPose {
 
     fun copyFrom(o: AvatarPose) {
         o.upper.copyInto(upper); o.fore.copyInto(fore); tilt = o.tilt; head = o.head; rise = o.rise; valid = o.valid
+        propAngle = o.propAngle; propHand = o.propHand; propLen = o.propLen
     }
 }
 
@@ -195,6 +203,7 @@ class PlayerControls(val playerIndex: Int) {
         if (golfStroke == GolfStroke.NONE) golf.reset()
         else golf.update(frame, golfStroke, calibration?.mode ?: MovementMode.STANDARD, calibration?.reach ?: 1.5f, sensitivity)?.let { golfShots.add(it) }
         avatar.update(frame, leanT.value)
+        updateProp(dt)
         val reach = calibration?.reach ?: 1.5f
         for (h in 0..1) {
             handX[h] = frame.wx[h] / reach
@@ -242,6 +251,32 @@ class PlayerControls(val playerIndex: Int) {
         /** Largest forward shift of a joint (S units). */
         const val MAX_SHIFT = 0.35f
     }
+
+    private var propLost = 0f
+
+    /** Held object: smoothed direction from the tracked object; kept a moment through a missed frame or two. */
+    private fun updateProp(dt: Float) {
+        val f = frame
+        if (f.objHand >= 0 && f.objConf >= 0.25f) {
+            val a = kotlin.math.atan2(f.objY - f.objBaseY, f.objX - f.objBaseX)
+            val len = kotlin.math.hypot(f.objX - f.objBaseX, f.objY - f.objBaseY)
+            if (avatar.propAngle.isNaN() || avatar.propHand != f.objHand) { avatar.propAngle = a; avatar.propLen = len }
+            else {
+                avatar.propAngle = com.clrg.core.math.normalizeRadians(avatar.propAngle + com.clrg.core.math.normalizeRadians(a - avatar.propAngle) * 0.7f)
+                avatar.propLen += (len - avatar.propLen) * 0.3f
+            }
+            avatar.propHand = f.objHand
+            propLost = 0f
+        } else {
+            propLost += dt
+            if (propLost > 0.4f) { avatar.propAngle = Float.NaN; avatar.propHand = -1 }
+        }
+        hasObject = !avatar.propAngle.isNaN()
+    }
+
+    /** True while a held object is being followed in this player's hand. */
+    var hasObject = false
+        private set
 
     /** Moves pending events into [out] (called once per game tick). */
     fun drainEvents(out: MutableList<GestureEvent>) {

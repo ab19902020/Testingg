@@ -50,6 +50,8 @@ class PerfSnapshot(
     val inputSize: String = "-",
     val thermal: String = "-",
     val adaptiveLevel: String = "-",
+    /** How the camera exposes: e.g. "auto exposure 33 ms" or "sharp-motion exposure 8 ms, ISO 1600". */
+    val exposure: String = "-",
 )
 
 /** Upright (non-mirrored) camera preview image plus whether it should be mirrored when shown. */
@@ -84,6 +86,17 @@ interface Platform {
     fun shareText(subject: String, text: String) {}
     /** How many players the camera should follow (1 in solo and golf, 2 otherwise): tracking does less work for one. */
     fun setExpectedPeople(n: Int) {}
+
+    /**
+     * Held objects: the colour model of each player's object (null = none) and each player's camera track id, so
+     * the camera thread can find the objects in the picture.
+     */
+    fun setHeldObjects(models: Array<com.clrg.core.pose.ObjectColorModel?>, tracks: IntArray) {}
+    /** Starts learning the object held up by the person with camera track [trackId], for player [player]. */
+    fun learnHeldObject(trackId: Int, player: Int) {}
+    fun cancelHeldLearning() {}
+    /** Progress of learning an object, or null when not learning (and no result waiting). */
+    fun heldLearnStatus(): com.clrg.core.pose.HeldLearnStatus? = null
 }
 
 /** Platform stub for tests and headless tools. */
@@ -110,4 +123,14 @@ open class NullPlatform(override val store: KeyValueStore) : Platform {
     override fun previousCrash() = crash
     override fun trackingProblem() = problem
     override fun shareText(subject: String, text: String) { shared.add(text) }
+
+    // held objects: tests decide what learning reports
+    var heldModels: Array<com.clrg.core.pose.ObjectColorModel?> = arrayOfNulls(2)
+    var heldTracks = intArrayOf(-1, -1)
+    var heldStatus: com.clrg.core.pose.HeldLearnStatus? = null
+    var heldLearnRequests = 0
+    override fun setHeldObjects(models: Array<com.clrg.core.pose.ObjectColorModel?>, tracks: IntArray) { heldModels = models; heldTracks = tracks }
+    override fun learnHeldObject(trackId: Int, player: Int) { heldLearnRequests++; heldStatus = com.clrg.core.pose.HeldLearnStatus(player, 0f, false, false, "learning", null) }
+    override fun cancelHeldLearning() { heldStatus = null }
+    override fun heldLearnStatus() = heldStatus
 }

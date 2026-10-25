@@ -85,6 +85,9 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
 
     val stats = PipelineStats()
 
+    /** Finds held objects (sticks, toy rackets) next to the players' hands when set. */
+    var heldObjects: HeldObjectTracker? = null
+
     /** Optional observer told which detector region / landmark ROI is about to be processed (debug overlay, tests). */
     var observer: ((region: CropRegion?, roi: RotatedRect?) -> Unit)? = null
 
@@ -158,6 +161,7 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
                 }
             }
         }
+        heldObjects?.let { h -> if (results.isNotEmpty()) h.process(src, toBuffer, results) }
         frameIndex++
         stats.tracks = tracks.size
         stats.totalMs = (clock() - t0) / 1e6f

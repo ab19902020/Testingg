@@ -35,6 +35,11 @@ class Puppet(var cx: Float, var shoulderY: Float, var scale: Float) {
     var armVisibility = Float.NaN
     /** Per-hand wrist (and hand) visibility override, e.g. a blurred fast hand. NaN = as the arm. */
     val wristVisibility = floatArrayOf(Float.NaN, Float.NaN)
+    /** A held object (as the held-object tracker would report it): hand (-1 none), length (body units), bend from the forearm (radians), confidence. */
+    var heldHand = -1
+    var heldLength = 0.9f
+    var heldBend = 0f
+    var heldConfidence = 0.8f
     var score = 0.99f
     var trackHint = 1
     var appearance: FloatArray? = null
@@ -108,6 +113,15 @@ class Puppet(var cx: Float, var shoulderY: Float, var scale: Float) {
             set(handBase + 2, tx + fx * 0.14f * s, ty + fy * 0.14f * s, wv)     // index
             set(handBase + 4, tx + fx * 0.08f * s - fy * 0.04f * s, ty + fy * 0.08f * s, wv) // thumb
         }
+        // held object: from the fist, along the forearm turned by the wrist
+        var held: com.clrg.core.pose.HeldObservation? = null
+        if (heldHand in 0..1 && heldConfidence > 0f) {
+            val w = if (heldHand == 0) Lm.LEFT_WRIST else Lm.RIGHT_WRIST
+            val e = if (heldHand == 0) Lm.LEFT_ELBOW else Lm.RIGHT_ELBOW
+            val fa = atan2(y[w] - y[e], x[w] - x[e]) + heldBend
+            val bx = x[w] + cos(fa) * 0.06f * s; val by = y[w] + sin(fa) * 0.06f * s
+            held = com.clrg.core.pose.HeldObservation(heldHand, bx, by, bx + cos(fa) * heldLength * s, by + sin(fa) * heldLength * s, heldConfidence)
+        }
         // hips and legs
         val hipV = if (hipsVisible) visibility else 0.05f
         set(Lm.LEFT_HIP, hipCx - sw * 0.4f, hipCy, hipV); set(Lm.RIGHT_HIP, hipCx + sw * 0.4f, hipCy, hipV)
@@ -122,7 +136,7 @@ class Puppet(var cx: Float, var shoulderY: Float, var scale: Float) {
             x[i] += (rng.nextFloat() - 0.5f) * 2f * noise * s
             y[i] += (rng.nextFloat() - 0.5f) * 2f * noise * s
         }
-        return PersonPose(x, y, z, vis, pres, score, trackHint, appearance?.copyOf())
+        return PersonPose(x, y, z, vis, pres, score, trackHint, appearance?.copyOf(), held)
     }
 }
 

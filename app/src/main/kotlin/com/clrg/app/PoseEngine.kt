@@ -159,6 +159,8 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
      * frames once everyone expected is being followed - for one player that saves the person-detector on most frames.
      */
     @Volatile var expectedPeople = 2
+    /** Held objects (sticks, toy rackets) found next to the players' hands; configured from the game. */
+    val held = com.clrg.core.pose.HeldObjectTracker()
 
     private val lock = Object()
     private var pending = false
@@ -313,7 +315,7 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
         initFailures = 0
         runner = r
         variant = wanted
-        pipeline = MultiPosePipeline(r, configFor(wanted, expectedPeople))
+        pipeline = MultiPosePipeline(r, configFor(wanted, expectedPeople)).also { it.heldObjects = held }
     }
 
     private fun processLatest() {

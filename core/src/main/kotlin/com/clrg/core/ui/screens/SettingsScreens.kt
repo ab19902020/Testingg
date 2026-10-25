@@ -15,7 +15,7 @@ import kotlin.math.roundToInt
 
 class SettingsScreen(app: GameApp) : Screen(app) {
     private var tab = 0
-    private val tabs = listOf("Sound", "Accessibility", "Camera & TV", "Timing", "Developer")
+    private val tabs = listOf("Sound", "Accessibility", "Camera & TV", "Motion", "Timing", "Developer")
     private var confirmReset = false
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
@@ -71,6 +71,18 @@ class SettingsScreen(app: GameApp) : Screen(app) {
                 if (ui.toggle(g, "inset", row(), "Show a small camera view during games", s.showCameraInset)) { s.showCameraInset = !s.showCameraInset; changed = true }
             }
             3 -> {
+                if (ui.button(g, "motionLab", row(), "Motion test - see what the camera sees of you", accent = Colors.GOOD, size = 36f)) app.push(MotionLabScreen(app))
+                if (ui.button(g, "heldObj", row(), "Use a real object as your racket / club", accent = Colors.GOOD, size = 36f)) app.push(HeldObjectScreen(app))
+                if (ui.toggle(g, "useHeld", row(), "Use learned objects in games", s.useHeldObjects)) { s.useHeldObjects = !s.useHeldObjects; changed = true }
+                if (ui.toggle(g, "sharp", row(), "Sharper fast movements (shorter camera exposure)", s.sharpMotion)) { s.sharpMotion = !s.sharpMotion; changed = true }
+                when (ui.stepper(g, "sens2", row(), "Gesture sensitivity", pct(s.gestureSensitivity))) { -1 -> { s.gestureSensitivity = (s.gestureSensitivity - 0.1f).coerceAtLeast(0.5f); changed = true }; 1 -> { s.gestureSensitivity = (s.gestureSensitivity + 0.1f).coerceAtMost(2f); changed = true } }
+                ui.paragraph(g, listOf(
+                    "Sharper fast movements makes swinging arms (and held objects) much less blurred in the camera",
+                    "picture, so swings are seen better. The picture may look a little grainier in a dim room; switch",
+                    "it off if the picture flickers or goes dark.",
+                ), 160f, y + 10f, 28f, app.theme.dim)
+            }
+            4 -> {
                 val r = row()
                 val label = "TV + camera delay allowance" + if (s.timingMeasured) " (measured)" else " (typical value)"
                 when (ui.stepper(g, "delay", r, label, "${s.displayDelayMs} ms")) {
@@ -88,7 +100,7 @@ class SettingsScreen(app: GameApp) : Screen(app) {
                     "casting, keep the room bright, and leave 'Smoother tracking: 60 fps' on.",
                 ), 160f, y + 10f, 29f, app.theme.dim)
             }
-            4 -> {
+            5 -> {
                 if (ui.toggle(g, "perf", row(), "Performance overlay (frame rate, latency, tracking)", s.devOverlay)) { s.devOverlay = !s.devOverlay; changed = true }
                 if (ui.toggle(g, "skel", row(), "Skeleton + tracking debug overlay", s.skeletonOverlay)) { s.skeletonOverlay = !s.skeletonOverlay; changed = true }
                 if (ui.toggle(g, "sim", row(), "SIMULATED INPUT (testing without camera - not real tracking)", s.simulatedInput)) {

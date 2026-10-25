@@ -67,6 +67,13 @@ class AndroidPlatform(
     override fun previousCrash(): String? = crashReport
     override fun trackingProblem(): String? = pose.problem
     override fun setExpectedPeople(n: Int) { pose.expectedPeople = n }
+    override fun setHeldObjects(models: Array<com.clrg.core.pose.ObjectColorModel?>, tracks: IntArray) {
+        pose.held.models = models.copyOf()
+        pose.held.tracks = tracks.copyOf()
+    }
+    override fun learnHeldObject(trackId: Int, player: Int) = pose.held.requestLearn(trackId, player)
+    override fun cancelHeldLearning() = pose.held.cancelLearn()
+    override fun heldLearnStatus(): com.clrg.core.pose.HeldLearnStatus? = pose.held.status
 
     override fun shareText(subject: String, text: String) {
         activity.runOnUiThread {

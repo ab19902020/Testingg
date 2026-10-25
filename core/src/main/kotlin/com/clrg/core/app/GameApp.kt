@@ -338,6 +338,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
             }
         }
 
+        updateHeldObjects()
         // 2) latency compensation for what players see, then hands-free cursors from calibrated, tracked players
         if (!settings.simulatedInput) for (c in controls) c.predict(nowNanos / 1e9)
         updateCursors(g, dt)
@@ -381,6 +382,33 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
 
     /** True when someone in front of the camera has a hand cursor on screen right now. */
     val handCursorShown: Boolean get() = ui.cursors.any { it.visible }
+
+    // ------------------------------------------------------------------ held objects
+
+    private val heldCache = HashMap<String, com.clrg.core.pose.ObjectColorModel?>()
+    private var heldSentModels: Array<com.clrg.core.pose.ObjectColorModel?> = arrayOfNulls(2)
+    private var heldSentTracks = intArrayOf(-2, -2)
+
+    /** A just-learned object being tried out (slot, model) before the player decides to keep it. */
+    var previewHeld: Pair<Int, com.clrg.core.pose.ObjectColorModel>? = null
+
+    /** The learned object of the player in slot [k] (when held objects are on), else null. */
+    fun heldModelFor(k: Int): com.clrg.core.pose.ObjectColorModel? {
+        previewHeld?.let { if (it.first == k) return it.second }
+        if (!settings.useHeldObjects) return null
+        val enc = settings.heldObjects[activePlayers[k].id] ?: return null
+        return heldCache.getOrPut(enc) { com.clrg.core.pose.ObjectColorModel.decode(enc) }
+    }
+
+    /** Tells the camera thread whose object to look for, and where those players are (only when it changes). */
+    private fun updateHeldObjects() {
+        val models = Array(2) { k -> if (tracker.slots[k].enabled) heldModelFor(k) else null }
+        val tracks = IntArray(2) { k -> tracker.slots[k].trackHint }
+        if (!models.contentEquals(heldSentModels) || !tracks.contentEquals(heldSentTracks)) {
+            heldSentModels = models; heldSentTracks = tracks
+            platform.setHeldObjects(models, tracks)
+        }
+    }
 
     /** One steady pointer per player (see [HandPointer]). */
     val pointers = arrayOf(com.clrg.core.ui.HandPointer(), com.clrg.core.ui.HandPointer())

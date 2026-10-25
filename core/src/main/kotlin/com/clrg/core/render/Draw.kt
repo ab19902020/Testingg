@@ -470,7 +470,13 @@ object Draw {
             // held in both hands: the shaft carries on from the arms, away from the shoulders
             val hx = (bothX[0] + bothX[1]) / 2f; val hy = (bothY[0] + bothY[1]) / 2f + lift
             golfClub(g, hx, hy, hx - x, hy - (sy + lift), h, prop == Prop.PUTTER)
-        } else if (prop != Prop.NONE) drawProp(g, prop, mittenX, mittenY + lift, foreAng, h, tilt)
+        } else if (prop != Prop.NONE) {
+            // a real object held by the player: the racket / bat points the way the object does, in the hand holding it
+            val pa = pose?.propAngle ?: Float.NaN
+            val ph = pose?.propHand ?: -1
+            if (!pa.isNaN() && ph in 0..1) drawProp(g, prop, bothX[ph], bothY[ph] + lift, pa, h, tilt)
+            else drawProp(g, prop, mittenX, mittenY + lift, foreAng, h, tilt)
+        }
         if (shielded) {
             val cy = y - h * 0.55f
             g.fillCircleRadial(x, cy, h * 0.62f, x - h * 0.2f, cy - h * 0.25f, h * 0.9f, 0x1880D8FF, 0x5540C4FF)

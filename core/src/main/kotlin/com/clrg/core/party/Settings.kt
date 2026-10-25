@@ -62,6 +62,15 @@ data class Settings(
     var showCameraInset: Boolean = true,
     // developer
     var devOverlay: Boolean = false,
+    /** Learned held objects (stick / toy racket) by player profile id: their encoded colour models. */
+    val heldObjects: MutableMap<Int, String> = mutableMapOf(),
+    /** Use the learned held objects in games (racket, bat, club follow the object). */
+    var useHeldObjects: Boolean = true,
+    /**
+     * Sharper fast movements: a short camera exposure (less motion blur on swinging arms, at the cost of a slightly
+     * grainier picture) on phones that allow it.
+     */
+    var sharpMotion: Boolean = true,
     var skeletonOverlay: Boolean = false,
     var simulatedInput: Boolean = false,
 ) {
@@ -75,6 +84,8 @@ data class Settings(
             "upsideDownCameras" to upsideDownCameras.joinToString(","), "directionChecked" to directionChecked.joinToString(","), "quality" to quality.name, "highFpsCamera" to highFpsCamera,
             "displayDelayMs" to displayDelayMs, "timingMeasured" to timingMeasured, "preferTvAsSecondScreen" to preferTvAsSecondScreen,
             "showCameraInset" to showCameraInset, "devOverlay" to devOverlay, "skeletonOverlay" to skeletonOverlay,
+            "heldObjects" to heldObjects.entries.joinToString("|") { "${it.key}=${it.value}" }, "useHeldObjects" to useHeldObjects,
+            "sharpMotion" to sharpMotion,
         ),
     )
 
@@ -111,6 +122,9 @@ data class Settings(
                 preferTvAsSecondScreen = o.bool("preferTvAsSecondScreen", d.preferTvAsSecondScreen),
                 showCameraInset = o.bool("showCameraInset", d.showCameraInset),
                 devOverlay = o.bool("devOverlay", d.devOverlay),
+                heldObjects = o.str("heldObjects").split("|").mapNotNull { e -> val i = e.indexOf('='); if (i <= 0) null else e.substring(0, i).toIntOrNull()?.let { it to e.substring(i + 1) } }.toMap().toMutableMap(),
+                useHeldObjects = o.bool("useHeldObjects", d.useHeldObjects),
+                sharpMotion = o.bool("sharpMotion", d.sharpMotion),
                 skeletonOverlay = o.bool("skeletonOverlay", d.skeletonOverlay),
                 // simulated input is never restored from storage: it must be switched on deliberately each session
                 simulatedInput = false,

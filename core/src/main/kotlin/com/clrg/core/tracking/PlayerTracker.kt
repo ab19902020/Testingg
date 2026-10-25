@@ -93,6 +93,8 @@ class PlayerSlot(val index: Int) {
         internal set
     internal var lowConfSec = 0f
     internal var lastHint = -1
+    /** The camera pipeline's track id of this player (-1 unknown), e.g. to find their held object. */
+    val trackHint: Int get() = if (isPlaying) lastHint else -1
     /** Seconds the current (re)acquisition candidate has been stable, for progress display. */
     var acquireProgressSec = 0f
         internal set

@@ -154,3 +154,48 @@ class SwingRobustnessTest {
         assertEquals(0, r.swings().size, "no swings from jitter: ${r.swings()}")
     }
 }
+
+/** Swings seen through a held object (stick / toy racket), as the held-object tracker reports it. */
+class HeldObjectSwingTest {
+    @Test
+    fun aSwingIsSeenThroughTheObjectWhenTheArmIsBlurredAway() {
+        val r = Rig()
+        r.acquireAndLock()
+        r.p1.heldHand = RIGHT
+        val p = r.p1
+        val x0 = p.wristX[RIGHT]; val y0 = p.wristY[RIGHT]
+        r.seconds(0.9f) { t -> val k = (t / 0.9).toFloat().coerceIn(0f, 1f); p.setWrist(RIGHT, x0 + (0.9f - x0) * k, y0 + (-0.2f - y0) * k) }
+        r.seconds(0.3f) { }
+        r.clearEvents()
+        assertTrue(r.controls[0].hasObject, "the object is being followed")
+        // the arm (wrist and elbow) is lost to blur during the swing; the stick is still seen
+        r.seconds(0.28f) { t ->
+            val u = (t / 0.28).coerceIn(0.0, 1.0)
+            val e = ((1 - cos(PI * u)) / 2).toFloat()
+            p.setWrist(RIGHT, 0.9f + (-0.5f - 0.9f) * e, -0.2f)
+            p.wristVisibility[RIGHT] = if (u > 0.2) 0.05f else Float.NaN
+            p.armVisibility = if (u > 0.2) 0.05f else Float.NaN
+        }
+        p.wristVisibility[RIGHT] = Float.NaN; p.armVisibility = Float.NaN
+        r.seconds(0.3f) { }
+        val s = r.events[0].filterIsInstance<GestureEvent.Swing>()
+        assertEquals(1, s.size, "swing seen through the object: $s")
+        assertEquals(2, r.controls[0].lastSwingSource, "by the object")
+    }
+
+    @Test
+    fun theRacketPointsTheWayTheObjectDoes() {
+        val r = Rig()
+        r.acquireAndLock()
+        r.p1.heldHand = RIGHT
+        r.p1.heldBend = 1.2f // wrist cocked: the stick points well away from the forearm's line
+        r.seconds(0.6f) { r.p1.setWrist(RIGHT, 0.6f, -0.3f) }
+        val a = r.controls[0].avatar
+        assertTrue(!a.propAngle.isNaN() && a.propHand == RIGHT, "object angle known")
+        val diff = kotlin.math.abs(com.clrg.core.math.normalizeRadians(a.propAngle - a.fore[RIGHT]))
+        assertTrue(diff > 0.9f, "the drawn racket follows the object, not the forearm: $diff rad apart")
+        r.p1.heldHand = -1
+        r.seconds(0.8f) { }
+        assertTrue(a.propAngle.isNaN(), "object put down: props follow the arm again")
+    }
+}
