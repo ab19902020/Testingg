@@ -10,7 +10,7 @@ enum class Instrument { BELL, LEAD, PLUCK, BASS, PAD, KICK, SNARE, HAT, CLAP, SL
 
 fun midiToHz(m: Float): Float = (440.0 * 2.0.pow((m - 69.0) / 12.0)).toFloat()
 
-private const val TWO_PI = (2 * PI).toFloat()
+private const val TWO_PI = TAU
 
 /**
  * One playing note. Voices live in a fixed pool and keep their buffers between notes, so the audio thread does not
@@ -150,117 +150,5 @@ class Voice {
         }
         t += dt
         return out * vel
-    }
-}
-
-/** Short sound effects, rendered once at start-up into sample buffers. */
-enum class Sfx { HIT, BOUNCE, SWOOSH, CATCH, BAD, THROW, SPLAT, SHIELD, PINS, ROLL, WHISTLE, BEEP, GO, CHEER, POINT, MISS, SELECT, TICK, SPARKLE, JINGLE, GATE, CRASH, PICKUP, PLACE, SAVE, WIN, BANG, SHATTER, PUNCH, BLOCK, RING, TWANG, THUNK, LAUNCH }
-
-object SfxSynth {
-    fun render(sfx: Sfx, sr: Int): FloatArray {
-        val v = Voice()
-        fun note(inst: Instrument, midi: Float, vel: Float, dur: Float, at: Float, buf: FloatArray) {
-            v.start(inst, midiToHz(midi), vel, dur, 0f, 0, sr)
-            val start = (at * sr).toInt()
-            var i = start
-            while (v.active && i < buf.size) { buf[i] += v.next(sr); i++ }
-        }
-        fun buf(sec: Float) = FloatArray((sec * sr).toInt())
-        val b: FloatArray = when (sfx) {
-            Sfx.HIT -> buf(0.25f).also { note(Instrument.SNARE, 60f, 0.8f, 0.05f, 0f, it); note(Instrument.GLOCK, 84f, 0.6f, 0.05f, 0f, it) }
-            Sfx.BOUNCE -> buf(0.2f).also { note(Instrument.KICK, 50f, 0.5f, 0.05f, 0f, it) }
-            Sfx.SWOOSH -> noiseSweep(sr, 0.25f, 0.5f)
-            Sfx.CATCH -> buf(0.6f).also { note(Instrument.GLOCK, 79f, 0.7f, 0.1f, 0f, it); note(Instrument.GLOCK, 84f, 0.7f, 0.1f, 0.06f, it); note(Instrument.GLOCK, 88f, 0.7f, 0.2f, 0.12f, it) }
-            Sfx.BAD -> buf(0.5f).also { note(Instrument.BASS, 40f, 0.9f, 0.18f, 0f, it); note(Instrument.BASS, 36f, 0.9f, 0.2f, 0.15f, it) }
-            Sfx.THROW -> noiseSweep(sr, 0.22f, 0.4f)
-            Sfx.SPLAT -> buf(0.35f).also { note(Instrument.SNARE, 60f, 1f, 0.05f, 0f, it); note(Instrument.KICK, 40f, 0.6f, 0.1f, 0f, it) }
-            Sfx.SHIELD -> buf(0.6f).also { for (k in 0..4) note(Instrument.GLOCK, 76f + k * 3, 0.4f, 0.05f, k * 0.05f, it) }
-            Sfx.PINS -> buf(0.8f).also { for (k in 0..7) note(Instrument.SNARE, 60f, 0.5f + 0.06f * k, 0.03f, k * 0.035f + (k % 3) * 0.01f, it); note(Instrument.GLOCK, 72f, 0.3f, 0.05f, 0.02f, it) }
-            Sfx.ROLL -> buf(0.5f).also { for (k in 0..9) note(Instrument.KICK, 40f, 0.25f, 0.03f, k * 0.05f, it) }
-            Sfx.WHISTLE -> whistle(sr)
-            Sfx.BEEP -> buf(0.25f).also { note(Instrument.GLOCK, 81f, 0.8f, 0.15f, 0f, it) }
-            Sfx.GO -> buf(0.6f).also { note(Instrument.BELL, 81f, 0.7f, 0.1f, 0f, it); note(Instrument.BELL, 88f, 0.8f, 0.3f, 0.1f, it) }
-            Sfx.CHEER -> buf(1.6f).also { for (k in 0..11) note(Instrument.SLEIGH, 90f, 0.7f, 0.05f, k * 0.11f, it); note(Instrument.BELL, 72f, 0.6f, 0.5f, 0f, it); note(Instrument.BELL, 76f, 0.6f, 0.5f, 0.15f, it); note(Instrument.BELL, 79f, 0.6f, 0.5f, 0.3f, it); note(Instrument.BELL, 84f, 0.7f, 0.8f, 0.45f, it) }
-            Sfx.POINT -> buf(0.5f).also { note(Instrument.BELL, 84f, 0.7f, 0.2f, 0f, it); note(Instrument.BELL, 91f, 0.5f, 0.2f, 0.08f, it) }
-            Sfx.MISS -> buf(0.5f).also { note(Instrument.LEAD, 67f, 0.6f, 0.12f, 0f, it); note(Instrument.LEAD, 62f, 0.6f, 0.2f, 0.13f, it) }
-            Sfx.SELECT -> buf(0.3f).also { note(Instrument.GLOCK, 88f, 0.6f, 0.05f, 0f, it); note(Instrument.GLOCK, 93f, 0.6f, 0.08f, 0.05f, it) }
-            Sfx.TICK -> buf(0.08f).also { note(Instrument.HAT, 60f, 0.5f, 0.02f, 0f, it) }
-            Sfx.SPARKLE -> buf(0.7f).also { for (k in 0..5) note(Instrument.GLOCK, 88f + (k % 3) * 4, 0.35f, 0.04f, k * 0.06f, it) }
-            Sfx.JINGLE -> buf(0.6f).also { for (k in 0..4) note(Instrument.SLEIGH, 90f, 0.9f, 0.05f, k * 0.09f, it) }
-            Sfx.GATE -> buf(0.35f).also { note(Instrument.GLOCK, 86f, 0.6f, 0.08f, 0f, it) }
-            Sfx.CRASH -> buf(0.6f).also { note(Instrument.SNARE, 60f, 1f, 0.1f, 0f, it); note(Instrument.KICK, 40f, 1f, 0.1f, 0f, it); note(Instrument.SNARE, 60f, 0.6f, 0.1f, 0.08f, it) }
-            Sfx.PICKUP -> buf(0.3f).also { note(Instrument.PLUCK, 72f, 0.8f, 0.1f, 0f, it); note(Instrument.PLUCK, 79f, 0.8f, 0.15f, 0.05f, it) }
-            Sfx.PLACE -> buf(0.6f).also { note(Instrument.BELL, 79f, 0.6f, 0.1f, 0f, it); note(Instrument.BELL, 84f, 0.7f, 0.3f, 0.07f, it) }
-            Sfx.SAVE -> buf(0.5f).also { note(Instrument.KICK, 45f, 0.8f, 0.05f, 0f, it); note(Instrument.GLOCK, 84f, 0.6f, 0.1f, 0.03f, it); note(Instrument.GLOCK, 91f, 0.5f, 0.1f, 0.09f, it) }
-            Sfx.BANG -> burst(sr, 0.45f, 0.9f, 0.012f, 0.35f).also { note(Instrument.KICK, 34f, 1f, 0.12f, 0f, it) }
-            Sfx.SHATTER -> burst(sr, 0.35f, 0.5f, 0.05f, 0.9f).also { for (k in 0..4) note(Instrument.GLOCK, 94f + (k % 3) * 3, 0.3f, 0.03f, 0.01f + k * 0.035f, it) }
-            Sfx.PUNCH -> buf(0.3f).also { note(Instrument.KICK, 33f, 1f, 0.08f, 0f, it); note(Instrument.SNARE, 48f, 0.45f, 0.04f, 0f, it) }
-            Sfx.BLOCK -> buf(0.25f).also { note(Instrument.SNARE, 62f, 0.45f, 0.03f, 0f, it); note(Instrument.KICK, 52f, 0.35f, 0.03f, 0f, it) }
-            Sfx.RING -> buf(1.4f).also { for (k in 0..2) note(Instrument.BELL, 89f, 0.9f, 0.18f, k * 0.28f, it) }
-            Sfx.TWANG -> buf(0.45f).also { note(Instrument.PLUCK, 47f, 0.9f, 0.3f, 0f, it); note(Instrument.PLUCK, 59f, 0.4f, 0.2f, 0f, it) }
-            Sfx.THUNK -> buf(0.35f).also { note(Instrument.KICK, 46f, 0.9f, 0.05f, 0f, it); note(Instrument.PLUCK, 62f, 0.5f, 0.08f, 0.005f, it) }
-            Sfx.LAUNCH -> noiseSweep(sr, 0.3f, 0.35f).also { note(Instrument.KICK, 55f, 0.4f, 0.03f, 0f, it) }
-            Sfx.WIN -> buf(2.2f).also {
-                val mel = floatArrayOf(72f, 76f, 79f, 84f, 79f, 84f)
-                val at = floatArrayOf(0f, 0.15f, 0.3f, 0.45f, 0.8f, 0.95f)
-                for (k in mel.indices) note(Instrument.BELL, mel[k], 0.8f, 0.25f, at[k], it)
-                for (k in 0..7) note(Instrument.SLEIGH, 90f, 0.6f, 0.05f, 0.5f + k * 0.12f, it)
-            }
-        }
-        // gentle normalise
-        var peak = 1e-6f
-        for (s in b) peak = maxOf(peak, kotlin.math.abs(s))
-        val g = minOf(1f, 0.85f / peak)
-        for (i in b.indices) b[i] *= g
-        return b
-    }
-
-    /** A sharp noise burst (gunshot, breaking): instant attack, exponential decay [decay] s, low-passed by [bright] 0..1. */
-    private fun burst(sr: Int, sec: Float, vol: Float, decay: Float, bright: Float): FloatArray {
-        val n = (sec * sr).toInt()
-        val b = FloatArray(n)
-        var seed = 7
-        var lp = 0f
-        var lp2 = 0f
-        for (i in 0 until n) {
-            seed = seed * 1103515245 + 12345
-            val w = ((seed ushr 9) and 0xFFFF) / 32768f - 1f
-            val t = i.toFloat() / sr
-            lp += (0.05f + 0.6f * bright) * (w - lp)
-            lp2 += 0.02f * (lp - lp2)
-            val body = lp * exp(-t / decay) + lp2 * 3f * exp(-t / (decay * 6f))
-            b[i] = body * vol
-        }
-        return b
-    }
-
-    private fun noiseSweep(sr: Int, sec: Float, vol: Float): FloatArray {
-        val n = (sec * sr).toInt()
-        val b = FloatArray(n)
-        var seed = 99
-        var lp = 0f
-        for (i in 0 until n) {
-            seed = seed * 1103515245 + 12345
-            val w = ((seed ushr 9) and 0xFFFF) / 32768f - 1f
-            val k = i.toFloat() / n
-            val cutoff = 0.02f + 0.4f * sin((k * PI).toFloat())
-            lp += cutoff * (w - lp)
-            b[i] = lp * vol * sin((k * PI).toFloat())
-        }
-        return b
-    }
-
-    private fun whistle(sr: Int): FloatArray {
-        val n = (0.45f * sr).toInt()
-        val b = FloatArray(n)
-        var ph = 0f
-        for (i in 0 until n) {
-            val t = i.toFloat() / sr
-            val f = 2900f + 120f * sin(TWO_PI * 28f * t)
-            ph += TWO_PI * f / sr
-            val env = minOf(1f, t / 0.02f) * (if (t > 0.35f) exp(-(t - 0.35f) * 40f) else 1f)
-            b[i] = sin(ph) * env * 0.4f
-        }
-        return b
     }
 }

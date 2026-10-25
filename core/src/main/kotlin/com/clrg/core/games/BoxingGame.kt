@@ -107,7 +107,7 @@ class BoxingGame(env: GameEnv) : MiniGame(env) {
             for (h in 0..1) punchAnim[k][h] += dt
             // stamina comes back quickly when you stop throwing
             stamina[k] = (stamina[k] + dt * (if (inputs[k].guard) 24f else 18f)).coerceAtMost(100f)
-            if (down(k) && playTime >= downUntil[k]) { downUntil[k] = Double.NaN; hp[k] = MAX_HP * 0.6f; env.sfx(Sfx.CHEER, 0.6f) }
+            if (down(k) && playTime >= downUntil[k]) { downUntil[k] = Double.NaN; hp[k] = MAX_HP * 0.6f; env.sfx(Sfx.CROWD_CHEER, 0.55f) }
         }
         // punches thrown
         for (k in 0..1) {
@@ -138,7 +138,7 @@ class BoxingGame(env: GameEnv) : MiniGame(env) {
         punchAnim[k][h] = 0f; punchKind[k][h] = e.kind
         // the punch lands a short time after it was made, but never before now
         flying.add(Flying(k, e.kind, h, power, head, made, maxOf(playTime, made + travel(e.kind)), strength))
-        env.sfx(Sfx.SWOOSH, 0.5f, if (k == 0) -0.4f else 0.4f)
+        env.sfx(Sfx.SWOOSH, 0.4f, if (k == 0) -0.4f else 0.4f)
     }
 
     /** What the defender does about it: guard (head shots), slip by leaning away, duck (not uppercuts). */
@@ -176,6 +176,7 @@ class BoxingGame(env: GameEnv) : MiniGame(env) {
             Outcome.SLIPPED -> {
                 slipped[d]++
                 env.sfx(Sfx.SWOOSH, 0.8f, pan(d))
+                env.sfx(Sfx.CROWD_OOH, 0.3f, pan(d))
                 env.popups.add("SLIPPED!", px, py - 120f, Colors.GOOD, 46f)
             }
             Outcome.HIT -> {
@@ -184,7 +185,8 @@ class BoxingGame(env: GameEnv) : MiniGame(env) {
                 points[f.from] += dmg.toInt().coerceAtLeast(1)
                 landed[f.from]++
                 hitFlash[d] = 0f
-                env.sfx(Sfx.PUNCH, 1f, pan(d))
+                env.sfx(if (f.kind == PunchKind.STRAIGHT) Sfx.PUNCH else Sfx.PUNCH_HEAVY, 1f, pan(d))
+                if (f.kind == PunchKind.UPPERCUT && f.head) env.sfx(Sfx.CROWD_OOH, 0.35f, pan(d))
                 env.shake.kick(if (f.kind == PunchKind.STRAIGHT) 6f else 10f)
                 val label = when (f.kind) { PunchKind.STRAIGHT -> if (f.head) "JAB!" else "BODY!"; PunchKind.HOOK -> "HOOK!"; PunchKind.UPPERCUT -> "UPPERCUT!" }
                 env.popups.add(label, px, py - 120f, env.color(f.from), 58f)
@@ -198,9 +200,10 @@ class BoxingGame(env: GameEnv) : MiniGame(env) {
         hp[d] = 0f
         knockdowns[d]++
         flying.clear()
-        env.sfx(Sfx.CRASH)
-        env.sfx(Sfx.CHEER, 0.8f)
+        env.sfx(Sfx.KNOCKDOWN, 1f, pan(d))
+        env.sfx(Sfx.CROWD_CHEER, 0.9f)
         if (knockdowns[d] >= KNOCKDOWNS_TO_KO) {
+            env.sfx(Sfx.RING, 0.9f)
             koWinner = 1 - d
             endAt = playTime
             points[1 - d] += 30

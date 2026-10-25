@@ -30,7 +30,7 @@ class AndroidAudio(private val engine: AudioEngine) {
 
     private fun loop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
-        if (!engine.ready) engine.prepare()
+        // effects are rendered on their own thread (MainActivity); music plays straight away and effects join as they are ready
         val sr = engine.sampleRate
         val frames = 256
         val track = try {

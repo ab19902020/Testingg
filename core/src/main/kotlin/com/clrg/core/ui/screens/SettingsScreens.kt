@@ -32,8 +32,10 @@ class SettingsScreen(app: GameApp) : Screen(app) {
             0 -> {
                 when (ui.stepper(g, "music", row(), "Music volume", pct(s.musicVolume))) { -1 -> { s.musicVolume = (s.musicVolume - 0.1f).coerceAtLeast(0f); changed = true }; 1 -> { s.musicVolume = (s.musicVolume + 0.1f).coerceAtMost(1f); changed = true } }
                 when (ui.stepper(g, "sfx", row(), "Effects volume", pct(s.sfxVolume))) { -1 -> { s.sfxVolume = (s.sfxVolume - 0.1f).coerceAtLeast(0f); changed = true }; 1 -> { s.sfxVolume = (s.sfxVolume + 0.1f).coerceAtMost(1f); changed = true } }
+                when (ui.stepper(g, "amb", row(), "Background sounds", pct(s.ambienceVolume))) { -1 -> { s.ambienceVolume = (s.ambienceVolume - 0.1f).coerceAtLeast(0f); changed = true }; 1 -> { s.ambienceVolume = (s.ambienceVolume + 0.1f).coerceAtMost(1f); changed = true } }
                 if (ui.toggle(g, "captions", row(), "Show captions for sound effects", s.captions)) { s.captions = !s.captions; changed = true }
-                ui.paragraph(g, listOf("All music and sound effects are original and generated on the phone."), 160f, y + 20f, 30f, app.theme.dim)
+                ui.paragraph(g, listOf("All music and sound effects are original and generated on the phone.",
+                    "Background sounds are the crowd, birdsong, wind or fire behind each game."), 160f, y + 20f, 30f, app.theme.dim)
             }
             1 -> {
                 if (ui.toggle(g, "hc", row(), "High contrast", s.highContrast)) { s.highContrast = !s.highContrast; changed = true }

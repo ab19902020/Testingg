@@ -37,10 +37,10 @@ tasks.test {
     useJUnitPlatform()
     maxHeapSize = "2g"
     // Optional real-model validation (see tools/pose-validation/run_real_model_tests.sh)
-    for (k in listOf("clrg.validation.python", "clrg.validation.models", "clrg.validation.scenes", "clrg.cpudiag", "clrg.rallydiag")) {
+    for (k in listOf("clrg.validation.python", "clrg.validation.models", "clrg.validation.scenes", "clrg.cpudiag", "clrg.rallydiag", "clrg.sfxdump")) {
         (project.findProperty(k) as String?)?.let { systemProperty(k, it) }
     }
-    testLogging.showStandardStreams = (project.findProperty("clrg.validation.python") != null)
+    testLogging.showStandardStreams = (project.findProperty("clrg.validation.python") != null || project.findProperty("clrg.sfxdump") != null)
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

@@ -124,7 +124,8 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
                     bx = if (bx > 0) LANE_HALF + 0.05f else -LANE_HALF - 0.05f
                     bvx = 0f
                     message = "Gutter!"
-                    env.sfx(Sfx.MISS, 0.5f, pan(k))
+                    env.sfx(Sfx.MISS, 0.4f, pan(k))
+                    env.sfx(Sfx.CROWD_AW, 0.3f, pan(k))
                 }
                 if (!gutter) for (p in pins) if (!p.removed) collideBall(p)
                 if (by > PIT_Y + 0.5f) rolling = false
@@ -213,7 +214,9 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
                 if (knocked == 10) {
                     frameScore[frame] = STRIKE_SCORE; marks[frame] = "X"; strikes++
                     message = "STRIKE!"
-                    env.sfx(Sfx.CHEER, 1f, pan(k))
+                    env.sfx(Sfx.STRIKE, 0.9f, pan(k))
+                    env.sfx(if (env.sporty) Sfx.CROWD_CHEER else Sfx.CHEER, 0.9f, pan(k))
+                    if (!env.sporty) env.sfx(Sfx.JINGLE, 0.6f, pan(k))
                     env.particles.confetti(laneRect(k).left, laneRect(k).right, 200f, 60)
                     env.popups.add("STRIKE! +15", laneRect(k).cx, 420f, Colors.GOLD, 80f, 1.4f)
                 } else {
@@ -225,7 +228,7 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
                 if (total == 10) {
                     frameScore[frame] = SPARE_SCORE; marks[frame] = "${firstBallPins} /"; spares++
                     message = "SPARE!"
-                    env.sfx(Sfx.CHEER, 0.8f, pan(k))
+                    env.sfx(Sfx.APPLAUSE, 0.7f, pan(k))
                     env.popups.add("SPARE! +13", laneRect(k).cx, 420f, Colors.GOLD, 70f, 1.3f)
                 } else {
                     frameScore[frame] = total; marks[frame] = "$firstBallPins ${knocked}"

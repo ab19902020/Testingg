@@ -40,7 +40,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
     val tracker = PlayerTracker(2)
     val controls = arrayOf(PlayerControls(0), PlayerControls(1))
     val theme = Theme(settings.highContrast, settings.largeText)
-    val ui = Ui(theme) { audio.play(it, 0.5f) }
+    val ui = Ui(theme) { s, pitch -> audio.play(s, 0.6f, 0f, pitch) }
     val sim = SimulatedInput()
     val devOverlay = DevOverlay(this)
     /** Camera and display delays: timing games judge movements by when they were made. */
@@ -105,13 +105,20 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         s.onEnter()
         fade = 1f
         ui.focusId = null
+        enterSound(s)
+    }
+
+    /** Music, background ambience and acoustics for the screen being shown. */
+    private fun enterSound(s: Screen) {
         s.music?.let { audio.playMusic(it) }
+        s.ambience?.let { audio.setAmbience(it) }
+        s.room?.let { audio.setRoom(it) }
     }
 
     fun pop() {
         if (stack.size <= 1) return
         stack.removeAt(stack.size - 1).onExit()
-        current?.let { it.onEnter(); it.music?.let { m -> audio.playMusic(m) } }
+        current?.let { it.onEnter(); enterSound(it) }
         fade = 1f
         ui.focusId = null
     }
@@ -122,12 +129,12 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         s.onEnter()
         fade = 1f
         ui.focusId = null
-        s.music?.let { audio.playMusic(it) }
+        enterSound(s)
     }
 
     fun popToRoot() {
         while (stack.size > 1) stack.removeAt(stack.size - 1).onExit()
-        current?.let { it.onEnter(); it.music?.let { m -> audio.playMusic(m) } }
+        current?.let { it.onEnter(); enterSound(it) }
         fade = 1f
     }
 
@@ -138,6 +145,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
     fun applySettings() {
         audio.musicVolume = settings.musicVolume
         audio.sfxVolume = settings.sfxVolume
+        audio.ambienceVolume = settings.ambienceVolume
         theme.highContrast = settings.highContrast
         theme.largeText = settings.largeText
         ui.dwellSeconds = settings.dwellSeconds
@@ -362,7 +370,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         // no pointer on screen while pointing does nothing (live play, flights in golf, the left/right check)
         if (!cursorsOn) for (c in ui.cursors) { c.visible = false; c.active = false }
         ui.begin(dt, events, cursorsOn)
-        if (ui.backPressed && scr.onBack()) { /* handled */ }
+        if (ui.backPressed && scr.onBack()) audio.play(Sfx.UI_BACK, 0.6f)
         g.fillRect(0f, 0f, g.width, g.height, Colors.NIGHT_TOP)
         scr.frame(g, ui, dt)
         drawGlobalOverlays(g, scr)

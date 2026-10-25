@@ -30,7 +30,7 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
     override val info: GameInfo get() = if (env.sporty) SPORTS_INFO else INFO
 
     class Shot(val time: Double, val tx: Float, val ty: Float, val flight: Float, val round: Int)
-    class LiveShot(val shot: Shot, var resolved: Boolean = false, var saved: Boolean = false, var t: Float = 0f)
+    class LiveShot(val shot: Shot, var resolved: Boolean = false, var saved: Boolean = false, var t: Float = 0f, var kicked: Boolean = false)
 
     companion object {
         const val ROUNDS = 3
@@ -112,6 +112,7 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
             while (it.hasNext()) {
                 val ls = it.next()
                 ls.t += dt
+                if (!ls.kicked && ls.t >= WINDUP) { ls.kicked = true; env.sfx(Sfx.KICK, 0.75f, pan(k)) }
                 val arrive = WINDUP + ls.shot.flight
                 if (!ls.resolved && ls.t >= arrive - 0.06f) {
                     // a hand at the target spot as the ball arrives (small grace before) saves it; camera players'
@@ -126,12 +127,15 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
                         if (saved) {
                             saves[k]++; streak[k]++; bestStreak[k] = maxOf(bestStreak[k], streak[k]); saveFlash[k] = 0f
                             env.sfx(Sfx.SAVE, 1f, pan(k))
+                            if (streak[k] >= 3) env.sfx(if (env.sporty) Sfx.CROWD_CHEER else Sfx.CHEER, 0.5f, pan(k))
+                            else if (env.sporty) env.sfx(Sfx.APPLAUSE, 0.35f, pan(k))
                             env.popups.add(if (streak[k] >= 3) "SAVE! x${streak[k]}" else "SAVE!", px, py - 70f, Colors.GOOD, 60f)
                             env.particles.burst(px, py, env.color(k), 20, kind = Particles.Kind.STAR, size = 12f)
                             env.particles.ring(px, py, Colors.GOOD, 120f)
                         } else {
                             goals[k]++; streak[k] = 0; goalFlash[k] = 0f
-                            env.sfx(Sfx.MISS, 0.8f, pan(k))
+                            env.sfx(Sfx.GOAL_NET, 0.9f, pan(k))
+                            if (env.sporty) env.sfx(Sfx.CROWD_AW, 0.3f, pan(k)) else env.sfx(Sfx.MISS, 0.5f, pan(k))
                             env.popups.add("GOAL", px, py - 70f, Colors.BAD, 50f)
                         }
                     }

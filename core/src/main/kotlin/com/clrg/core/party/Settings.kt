@@ -23,6 +23,8 @@ enum class QualityMode(val label: String) { AUTO("Auto"), PERFORMANCE("Performan
 data class Settings(
     var musicVolume: Float = 0.6f,
     var sfxVolume: Float = 0.85f,
+    /** Background sounds (crowd, birdsong, wind, fire), relative to the effects volume. */
+    var ambienceVolume: Float = 0.7f,
     // accessibility
     var highContrast: Boolean = false,
     var reducedEffects: Boolean = false,
@@ -80,7 +82,7 @@ data class Settings(
 ) {
     fun toJson(): String = Json.stringify(
         mapOf(
-            "v" to 2, "musicVolume" to musicVolume, "sfxVolume" to sfxVolume, "highContrast" to highContrast,
+            "v" to 2, "musicVolume" to musicVolume, "sfxVolume" to sfxVolume, "ambienceVolume" to ambienceVolume, "highContrast" to highContrast,
             "reducedEffects" to reducedEffects, "largeText" to largeText, "captions" to captions, "dwellSeconds" to dwellSeconds,
             "gestureSensitivity" to gestureSensitivity, "steeringOnlySlalom" to steeringOnlySlalom, "cpuLevel" to cpuLevel, "cameraId" to cameraId,
             "wideAngle" to wideAngle, "mirror" to mirror,
@@ -105,6 +107,7 @@ data class Settings(
             return Settings(
                 musicVolume = o.float("musicVolume", d.musicVolume).coerceIn(0f, 1f),
                 sfxVolume = o.float("sfxVolume", d.sfxVolume).coerceIn(0f, 1f),
+                ambienceVolume = o.float("ambienceVolume", d.ambienceVolume).coerceIn(0f, 1f),
                 highContrast = o.bool("highContrast", d.highContrast),
                 reducedEffects = o.bool("reducedEffects", d.reducedEffects),
                 largeText = o.bool("largeText", d.largeText),

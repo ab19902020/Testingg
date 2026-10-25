@@ -1,7 +1,10 @@
 package com.clrg.core.ui.screens
 
 import com.clrg.core.app.GameApp
+import com.clrg.core.audio.Ambience
 import com.clrg.core.audio.MusicTrack
+import com.clrg.core.audio.Room
+import com.clrg.core.audio.Soundscape
 import com.clrg.core.game.GameEnv
 import com.clrg.core.game.GameSession
 import com.clrg.core.game.MatchResult
@@ -25,6 +28,8 @@ import com.clrg.core.ui.Ui
 /** Hosts one match: instructions, countdown, play, tracking pauses, user pause, finish. */
 class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) : Screen(app) {
     override val music: MusicTrack? = null
+    override val ambience: Ambience? get() = Soundscape.ambience(gameId)
+    override val room: Room? get() = Soundscape.room(gameId)
     override val needsCamera = true
     private val entry = GameRegistry.byId(gameId)!!
     private val seed = app.platform.nowNanos() xor 0x5EEDL
@@ -230,6 +235,8 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
 
 class ResultsScreen(app: GameApp, val result: MatchResult, private val gameId: String, private val match: TournamentMatch?) : Screen(app) {
     override val music = MusicTrack.VICTORY
+    override val ambience: Ambience? = null
+    override val room: Room? = null
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
         Common.backdrop(g, app)

@@ -138,7 +138,7 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
             muzzle[k] += dt
             if (botDriven[k]) aim[k].set(botX[k], botY[k], playTime) else aim[k].update(inp, playTime, dt)
             botDriven[k] = false
-            if (ammo[k] == 0 && playTime >= reloadUntil[k]) ammo[k] = ROUNDS_IN_GUN
+            if (ammo[k] == 0 && playTime >= reloadUntil[k]) { ammo[k] = ROUNDS_IN_GUN; env.sfx(Sfx.RELOAD, 0.6f, if (k == 0) -0.4f else 0.4f) }
             while (true) { val e = inp.take<GestureEvent.Shot>() ?: break; fire(k, e) }
             if (env.players[k].mode != MovementMode.STANDARD && !env.players[k].cpu && loaded[k]) {
                 dwell[k] = if (targetUnder(k, playTime) != null) dwell[k] + dt else 0f
@@ -153,18 +153,18 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
             // the bullseye: this shot sets where "straight ahead" is
             if (e != null && !e.aimX.isNaN()) aim[k].recentre(e.aimX, e.aimY)
             loaded[k] = true
-            env.sfx(Sfx.BANG, 0.7f, if (k == 0) -0.4f else 0.4f)
+            env.sfx(Sfx.GALLERY_SHOT, 0.8f, if (k == 0) -0.4f else 0.4f)
             env.popups.add("Aim set!", screenW / 2f, 420f, env.color(k), 50f)
             return
         }
-        if (ammo[k] == 0 || playTime > INTRO_SEC + GAME_SEC) { env.sfx(Sfx.TICK, 0.6f); return }
+        if (ammo[k] == 0 || playTime > INTRO_SEC + GAME_SEC) { env.sfx(Sfx.EMPTY, 0.8f, if (k == 0) -0.4f else 0.4f); return }
         ammo[k]--
         if (ammo[k] == 0) reloadUntil[k] = playTime + RELOAD_SEC
         shotsFired[k]++
         muzzle[k] = 0f
         val at = if (e == null) playTime else madeAt(e).coerceIn(playTime - 0.4, playTime)
         val (ax, _) = aim[k].at(at)
-        env.sfx(Sfx.BANG, 0.7f, (ax / 960f).coerceIn(-1f, 1f))
+        env.sfx(Sfx.GALLERY_SHOT, 0.8f, (ax / 960f).coerceIn(-1f, 1f))
         val tg = targetUnder(k, at) ?: return
         val other = tg.hitBy
         if (other >= 0 && other != k) {
@@ -176,10 +176,10 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
         points[k] += tg.kind.points; hits[k]++
         val sx = tg.x(at) + screenW / 2f; val sy = tg.y(at) + 540f
         when (tg.kind) {
-            Kind.BOTTLE -> { env.sfx(Sfx.SHATTER, 0.9f); env.particles.burst(sx, sy, tg.color, 22, speed = 360f, size = 8f) }
-            Kind.BALLOON -> { env.sfx(Sfx.SPLAT, 0.8f); env.particles.burst(sx, sy, tg.color, 16, speed = 300f, kind = Particles.Kind.CONFETTI, size = 10f) }
-            Kind.STAR -> { env.sfx(Sfx.SPARKLE, 1f); env.particles.burst(sx, sy, Colors.GOLD, 30, kind = Particles.Kind.STAR, size = 14f) }
-            Kind.DUCK -> { env.sfx(Sfx.HIT, 0.9f); env.particles.burst(sx, sy, Colors.GOLD, 12, speed = 260f, size = 7f) }
+            Kind.BOTTLE -> { env.sfx(Sfx.GLASS, 0.9f, (sx / 960f - 1f).coerceIn(-1f, 1f)); env.particles.burst(sx, sy, tg.color, 22, speed = 360f, size = 8f) }
+            Kind.BALLOON -> { env.sfx(Sfx.BALLOON_POP, 0.9f, (sx / 960f - 1f).coerceIn(-1f, 1f)); env.particles.burst(sx, sy, tg.color, 16, speed = 300f, kind = Particles.Kind.CONFETTI, size = 10f) }
+            Kind.STAR -> { env.sfx(Sfx.SPARKLE, 1f); env.sfx(Sfx.APPLAUSE, 0.4f); env.particles.burst(sx, sy, Colors.GOLD, 30, kind = Particles.Kind.STAR, size = 14f) }
+            Kind.DUCK -> { env.sfx(Sfx.TIN_HIT, 0.8f, (sx / 960f - 1f).coerceIn(-1f, 1f)); env.particles.burst(sx, sy, Colors.GOLD, 12, speed = 260f, size = 7f) }
         }
         env.popups.add("+${tg.kind.points}", sx, sy - 50f, env.color(k), if (tg.kind == Kind.STAR) 60f else 44f)
     }

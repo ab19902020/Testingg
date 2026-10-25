@@ -149,7 +149,7 @@ class PresentCatchGame(env: GameEnv) : MiniGame(env) {
                 // on the ground: a present that got away
                 if (position(d, age, k).second < FLOOR) {
                     li.state = Live.MISSED; li.t = 0f
-                    if (d.kind != Kind.COAL) { streak[k] = 0; missed[k]++; env.sfx(Sfx.MISS, 0.35f, pan(k)) }
+                    if (d.kind != Kind.COAL) { streak[k] = 0; missed[k]++; env.sfx(Sfx.SNOW_CRUNCH, 0.7f, pan(k)); env.sfx(Sfx.MISS, 0.25f, pan(k)) }
                     continue
                 }
                 // where it was as the player saw it when their hands were where they are now
@@ -187,6 +187,7 @@ class PresentCatchGame(env: GameEnv) : MiniGame(env) {
                 env.particles.burst(px, py, col, if (d.kind == Kind.GOLD) 30 else 20, kind = Particles.Kind.STAR, size = 12f)
                 env.particles.ring(px, py, col, 110f)
                 env.sfx(Sfx.CATCH, 0.9f, pan(k), 1f + 0.04f * min(10, streak[k]))
+                if (streak[k] > 0 && streak[k] % 5 == 0 && streak[k] <= 15) env.sfx(Sfx.JINGLE, 0.7f, pan(k))
                 if (streak[k] > 0 && streak[k] % 5 == 0 && streak[k] <= 15) env.popups.add("COMBO x${multiplier(k)}!", laneRect(k).cx, 330f, Colors.GOLD, 64f, 1.3f)
             }
         }

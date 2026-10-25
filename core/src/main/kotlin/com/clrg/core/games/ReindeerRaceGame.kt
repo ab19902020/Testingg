@@ -106,7 +106,7 @@ class ReindeerRaceGame(env: GameEnv) : MiniGame(env) {
                     hitSet[k].add(i)
                     stumble[k] = 1.0f
                     bumps[k]++
-                    env.sfx(Sfx.CRASH, 0.7f, pan(k))
+                    env.sfx(Sfx.CRASH, 0.55f, pan(k), 1.2f)
                     env.popups.add("Bump!", laneCx(k), 640f, Colors.BAD, 50f)
                     env.particles.burst(laneCx(k), 820f, Colors.SNOW, 18, kind = Particles.Kind.PUFF)
                 }
@@ -125,6 +125,7 @@ class ReindeerRaceGame(env: GameEnv) : MiniGame(env) {
                 finishTime[k] = playTime
                 if (firstFinish < 0) firstFinish = playTime
                 env.sfx(Sfx.CHEER, 0.9f, pan(k))
+                env.sfx(Sfx.JINGLE, 0.7f, pan(k))
                 env.particles.confetti(laneCx(k) - 300f, laneCx(k) + 300f, 200f, 60)
                 env.popups.add(if (place(k) == 1) "1st!" else "2nd", laneCx(k), 420f, env.color(k), 90f, 1.6f)
             }

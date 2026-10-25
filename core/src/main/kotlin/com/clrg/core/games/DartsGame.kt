@@ -95,6 +95,7 @@ class DartsGame(env: GameEnv) : MiniGame(env) {
             val inp = inputs[k]
             lastAge[k] += dt
             inp.gunHand = inp.dominant
+            for (d in darts) if (d.player == k && playTime >= d.thrownAt + FLIGHT_SEC && landedSound.add(d)) dartLands(d)
             if (botDriven[k]) aim[k].set(botX[k], botY[k], playTime) else aim[k].update(inp, playTime, dt)
             botDriven[k] = false
             if (finished(k)) { if (doneAt[k].isNaN()) doneAt[k] = playTime; inp.events.clear(); continue }
@@ -107,6 +108,19 @@ class DartsGame(env: GameEnv) : MiniGame(env) {
                 if (finished(k)) break
             }
             if (clock[k] > DART_TIME_LIMIT) { thrown[k]++; clock[k] = 0.0; lastLabel[k] = "Time - 0"; lastAge[k] = 0f }
+        }
+    }
+
+    private val landedSound = HashSet<Dart>()
+
+    /** The dart arrives: a thud into the board, a clatter off it, a cheer for the bull or a treble twenty. */
+    private fun dartLands(d: Dart) {
+        val pan = if (d.player == 0) -0.4f else 0.4f
+        if (d.score == 0) { env.sfx(Sfx.DART_MISS, 0.8f, pan); return }
+        env.sfx(Sfx.DART_HIT, 1f, pan)
+        when {
+            d.label == "BULL" -> { env.sfx(Sfx.BULLSEYE, 0.7f, pan); env.sfx(Sfx.CROWD_CHEER, 0.6f) }
+            d.score >= 40 || d.label == "25" -> env.sfx(Sfx.APPLAUSE, 0.45f)
         }
     }
 
@@ -136,7 +150,7 @@ class DartsGame(env: GameEnv) : MiniGame(env) {
         clock[k] = 0.0
         lastLabel[k] = if (pts == 0) "Miss" else if (label == "BULL") "BULLSEYE! 50" else "$label = $pts"
         lastAge[k] = -FLIGHT_SEC.toFloat()
-        env.sfx(Sfx.SWOOSH, 0.6f, if (k == 0) -0.5f else 0.5f)
+        env.sfx(Sfx.SWOOSH, 0.45f, if (k == 0) -0.5f else 0.5f, 1.4f)
     }
 
     override val isOver: Boolean get() = (0..1).all { finished(it) } && darts.all { playTime >= it.thrownAt + FLIGHT_SEC + 1.0 }

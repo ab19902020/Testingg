@@ -188,7 +188,7 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
             // reload: one shell back every RELOAD_SEC after the last shot
             if (shells[k] < SHELLS && playTime - lastShot[k] >= RELOAD_SEC) {
                 reloadClock[k] += dt
-                if (reloadClock[k] >= RELOAD_SEC) { shells[k]++; reloadClock[k] = 0.0 }
+                if (reloadClock[k] >= RELOAD_SEC) { shells[k]++; reloadClock[k] = 0.0; env.sfx(Sfx.RELOAD, 0.35f, pan(k)) }
             }
             while (true) {
                 val e = inp.take<GestureEvent.Shot>() ?: break
@@ -257,7 +257,7 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
             env.particles.ring(screenW / 2f, 540f, env.color(k), 160f)
             return
         }
-        if (shells[k] <= 0) { env.sfx(Sfx.TICK, 0.6f, pan(k)); return }
+        if (shells[k] <= 0) { env.sfx(Sfx.EMPTY, 0.8f, pan(k)); return }
         shells[k]--
         lastShot[k] = playTime
         reloadClock[k] = 0.0
@@ -282,6 +282,7 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         val s = screenOf(c, at) ?: return
         val sx = s[0] + screenW / 2f; val sy = s[1] + 540f
         env.sfx(Sfx.SHATTER, 0.9f, (s[0] / 960f).coerceIn(-1f, 1f))
+        if (c.gold) env.sfx(Sfx.SPARKLE, 0.6f, (s[0] / 960f).coerceIn(-1f, 1f))
         env.particles.burst(sx, sy, if (c.gold) Colors.GOLD else 0xFFFF7043.toInt(), 26, speed = 380f, size = 8f, gravity = 500f)
         env.particles.burst(sx, sy, 0xCCFFFFFF.toInt(), 8, speed = 120f, kind = Particles.Kind.PUFF, size = 22f, gravity = 0f)
         env.popups.add(if (c.gold) "+3 GOLD!" else "+1", sx, sy - 40f, env.color(k), if (c.gold) 56f else 46f)

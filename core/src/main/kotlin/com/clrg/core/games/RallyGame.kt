@@ -62,6 +62,9 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
     enum class PointReason(val text: String) { OUT("Out!"), NET("Into the net!"), MISSED("Missed!"), WINNER("Winner!") }
 
     protected abstract val cfg: Config
+    /** Sound of a racket or bat meeting the ball, and of the ball landing. */
+    protected open val hitSfx: Sfx get() = Sfx.RACKET
+    protected open val bounceSfx: Sfx get() = Sfx.BOUNCE
 
     val scores = IntArray(2)
     var state = State.SERVE
@@ -251,7 +254,7 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
         val q = if (auto) 0.2f else 0.75f
         val startX = px[server] + dirToward(target) * cfg.racketReach
         launch(server, startX, cfg.hitH * 1.6f, dirToward(target) * lerp(0.55f, 0.8f, power), flightTime(q, power) * 1.08f, net = false)
-        env.sfx(Sfx.HIT, 0.9f, if (server == 0) -0.5f else 0.5f)
+        env.sfx(hitSfx, 0.9f, if (server == 0) -0.5f else 0.5f)
         swingAge[server] = 0f
         onServe(server, auto)
     }
@@ -339,7 +342,7 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
                 vx = -vx * 0.12f
                 bh = minOf(bh, cfg.netH * 0.8f)
                 vh = 0f
-                env.sfx(Sfx.BOUNCE, 0.6f)
+                env.sfx(Sfx.NET, 0.8f)
                 endPoint(1 - lastHitter, PointReason.NET)
                 return
             }
@@ -351,14 +354,14 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
                 val inSide = rx >= 0 && sign(bx) == dirToward(rx) && abs(bx) <= 1.03f
                 if (!inSide) {
                     vh = -vh * cfg.restitution * 0.6f
-                    env.sfx(Sfx.BOUNCE, 0.5f)
+                    env.sfx(bounceSfx, 0.5f, (bx * 0.6f).coerceIn(-1f, 1f))
                     endPoint(1 - lastHitter, PointReason.OUT)
                     return
                 }
                 bounced = true
                 vh = -vh * cfg.restitution
                 vx *= cfg.friction
-                env.sfx(Sfx.BOUNCE, 0.7f, bx * 0.6f)
+                env.sfx(bounceSfx, 0.7f, (bx * 0.6f).coerceIn(-1f, 1f))
                 computeHitTime()
             } else {
                 vh = -vh * cfg.restitution * 0.6f
@@ -407,7 +410,7 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
                 onGoodHit(player, q, modifier)
             }
         }
-        env.sfx(Sfx.HIT, 0.7f + 0.3f * q, if (player == 0) -0.5f else 0.5f, 0.9f + 0.25f * q)
+        env.sfx(hitSfx, 0.7f + 0.3f * q, if (player == 0) -0.5f else 0.5f, 0.92f + 0.16f * q)
         if (q > 0.85f) env.shake.kick(6f)
     }
 
@@ -435,7 +438,13 @@ abstract class RallyGame(env: GameEnv) : MiniGame(env) {
         receiver = -1
         hitTime = Double.NaN
         candidates.clear()
-        env.sfx(Sfx.POINT)
+        env.sfx(Sfx.POINT, 0.8f)
+        // the crowd: applause for a long rally or a clean winner, a groan for one into the net
+        when {
+            rally >= 6 -> env.sfx(Sfx.APPLAUSE, 0.7f)
+            reason == PointReason.WINNER -> env.sfx(Sfx.APPLAUSE, 0.45f)
+            reason == PointReason.NET -> env.sfx(Sfx.CROWD_AW, 0.4f)
+        }
         onPoint(winner, reason)
     }
 

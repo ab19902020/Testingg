@@ -119,9 +119,12 @@ class ArcheryGame(env: GameEnv) : MiniGame(env) {
     }
 
     override fun update(dt: Float, inputs: Array<PlayerInput>) {
+        for (a in arrows) if (playTime >= a.shotAt + a.flight && landedSound.add(a)) arrowLands(a)
         for (k in 0..1) {
             val inp = inputs[k]
             lastScoreAge[k] += dt
+            if (inp.bowState == 2 && lastBowState[k] != 2) env.sfx(Sfx.BOW_DRAW, 0.5f, if (k == 0) -0.5f else 0.5f)
+            lastBowState[k] = inp.bowState
             // aim with the bow hand (the gun-hand aim of the bow hand)
             inp.gunHand = inp.bowHand
             if (botDriven[k]) aim[k].set(botX[k], botY[k], playTime) else aim[k].update(inp, playTime, dt)
@@ -142,6 +145,17 @@ class ArcheryGame(env: GameEnv) : MiniGame(env) {
 
     private fun laneX(k: Int) = if (k == 0) screenW * 0.25f else screenW * 0.75f
 
+    private val landedSound = HashSet<Arrow>()
+    private val lastBowState = IntArray(2)
+
+    /** The arrow arrives: a thud in the boss (or the grass), and applause for the gold. */
+    private fun arrowLands(a: Arrow) {
+        val pan = if (a.player == 0) -0.5f else 0.5f
+        if (a.score == 0) env.sfx(Sfx.GOLF_LAND, 0.6f, pan) else env.sfx(Sfx.THUNK, 0.9f, pan)
+        if (a.score == 10) { env.sfx(Sfx.BULLSEYE, 0.8f, pan); env.sfx(Sfx.APPLAUSE, 0.5f, pan) }
+        else if (a.score >= 8) env.sfx(Sfx.APPLAUSE, 0.3f, pan)
+    }
+
     private fun shoot(k: Int, e: GestureEvent.Release) {
         val at = madeAt(e).coerceIn(playTime - 0.4, playTime)
         val (sx, sy) = aim[k].at(at)
@@ -156,6 +170,7 @@ class ArcheryGame(env: GameEnv) : MiniGame(env) {
         arrowClock[k] = 0.0
         lastScore[k] = score; lastScoreAge[k] = -flight.toFloat()
         env.sfx(Sfx.TWANG, 0.9f, if (k == 0) -0.5f else 0.5f)
+        env.sfx(Sfx.ARROW_FLY, 0.5f, if (k == 0) -0.3f else 0.3f)
     }
 
     override val isOver: Boolean get() = (0..1).all { finished(it) } && arrows.all { playTime >= it.shotAt + it.flight + 0.8 }

@@ -95,7 +95,8 @@ class GameSession(val game: MiniGame, val env: GameEnv) {
         when (p) {
             Phase.COUNTDOWN -> { game.start(); env.audio?.playMusic(game.info.music) }
             Phase.FINISHED -> {
-                env.sfx(Sfx.WIN)
+                if (env.sporty) { env.sfx(Sfx.FANFARE); env.sfx(Sfx.CROWD_CHEER, 0.7f) } else env.sfx(Sfx.WIN)
+                env.sfx(Sfx.CONFETTI, 0.6f)
                 env.audio?.playMusic(MusicTrack.VICTORY, restart = true)
                 env.particles.confetti(0f, 1920f * 1.3f, -20f, 120)
             }

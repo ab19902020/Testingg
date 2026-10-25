@@ -1,7 +1,9 @@
 package com.clrg.core.ui.screens
 
 import com.clrg.core.app.GameApp
+import com.clrg.core.audio.Ambience
 import com.clrg.core.audio.MusicTrack
+import com.clrg.core.audio.Room
 import com.clrg.core.audio.Sfx
 import com.clrg.core.game.CpuLevel
 import com.clrg.core.gesture.GestureEvent
@@ -119,6 +121,8 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
     private enum class Step { NEW, LOOKING, CONFIRM }
 
     override val music = MusicTrack.CALM
+    override val ambience: Ambience? = Ambience.PARK
+    override val room: Room? = Room.OUTDOOR
     override val needsCamera = true
     override val allowCursors: Boolean get() = when {
         paused -> true
@@ -192,7 +196,13 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
                 match.update(dt)
                 if (p != null && match.phase == GolfMatch.Phase.FLIGHT && !landed && match.animTime >= p.flightSec && p.club != Club.PUTTER) {
                     landed = true
-                    app.audio.play(if (p.outcome == Outcome.WATER) Sfx.SPLAT else Sfx.BOUNCE, 0.7f)
+                    if (p.hitTree) app.audio.play(Sfx.GOLF_TREE, 0.8f)
+                    when (match.hole.surface(p.land)) {
+                        Surface.WATER -> { app.audio.play(Sfx.GOLF_SPLASH, 0.9f); app.audio.play(Sfx.CROWD_AW, 0.3f) }
+                        Surface.SAND -> app.audio.play(Sfx.GOLF_SAND, 0.8f)
+                        Surface.TREES -> if (!p.hitTree) app.audio.play(Sfx.GOLF_TREE, 0.8f)
+                        else -> app.audio.play(Sfx.GOLF_LAND, 0.8f)
+                    }
                 }
             }
             GolfMatch.Phase.HOLE_DONE -> { holeDoneTime += dt; if (holeDoneTime > 14f) nextHole() }
@@ -207,16 +217,22 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
             val p = match.plan
             when {
                 p?.outcome == Outcome.HOLED || match.message.contains("HOLE IN ONE") || match.message.startsWith("Tapped in") || match.strokes[match.current][match.holeIndex] > 0 -> {
-                    val good = match.strokes[match.current][match.holeIndex] <= match.hole.par
-                    app.audio.play(if (good) Sfx.CHEER else Sfx.CATCH)
+                    val toPar = match.strokes[match.current][match.holeIndex] - match.hole.par
+                    val good = toPar <= 0
+                    app.audio.play(Sfx.GOLF_CUP, 0.9f)
+                    when {
+                        toPar <= -2 || match.message.contains("HOLE IN ONE") -> { app.audio.play(Sfx.GOLF_BIRDIE); app.audio.play(Sfx.CROWD_CHEER, 0.8f) }
+                        toPar == -1 -> app.audio.play(Sfx.GOLF_BIRDIE)
+                        toPar == 0 -> app.audio.play(Sfx.APPLAUSE, 0.6f)
+                    }
                     if (good) particles.confetti(0f, 1920f, -20f, 70)
                 }
-                p?.outcome == Outcome.OUT -> app.audio.play(Sfx.BAD)
-                match.message.startsWith("On the green") -> app.audio.play(Sfx.SPARKLE, 0.7f)
+                p?.outcome == Outcome.OUT -> { app.audio.play(Sfx.BAD, 0.7f); app.audio.play(Sfx.CROWD_AW, 0.35f) }
+                match.message.startsWith("On the green") -> app.audio.play(Sfx.APPLAUSE, 0.35f)
             }
         }
-        if (to == GolfMatch.Phase.HOLE_DONE) { holeDoneTime = 0f; app.audio.play(Sfx.JINGLE) }
-        if (to == GolfMatch.Phase.COURSE_DONE) { app.audio.play(Sfx.WIN); app.audio.playMusic(MusicTrack.VICTORY, restart = true); particles.confetti(0f, 1920f, -20f, 120) }
+        if (to == GolfMatch.Phase.HOLE_DONE) { holeDoneTime = 0f; app.audio.play(if (app.christmasMode) Sfx.JINGLE else Sfx.UI_OPEN) }
+        if (to == GolfMatch.Phase.COURSE_DONE) { app.audio.play(if (app.christmasMode) Sfx.WIN else Sfx.FANFARE); app.audio.play(Sfx.APPLAUSE, 0.8f); app.audio.playMusic(MusicTrack.VICTORY, restart = true); particles.confetti(0f, 1920f, -20f, 120) }
         if (to == GolfMatch.Phase.TURN_START) { step = Step.NEW; stepTime = 0f }
         if (to == GolfMatch.Phase.AIM) { cpuTime = 0f; cpuShot = null }
     }
@@ -274,7 +290,11 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
         match.shoot(power, offset) ?: return
         landed = false
         swingAnim = 0f
-        app.audio.play(Sfx.HIT, if (club == Club.PUTTER) 0.4f else 0.9f, 0f, if (club == Club.DRIVER) 0.8f else if (club == Club.PUTTER) 1.5f else 1f)
+        when (club) {
+            Club.PUTTER -> app.audio.play(Sfx.GOLF_PUTT, 0.5f + 0.5f * power.coerceIn(0f, 1f))
+            Club.DRIVER, Club.WOOD -> app.audio.play(Sfx.GOLF_DRIVE, 0.95f, 0f, if (club == Club.WOOD) 1.05f else 1f)
+            else -> app.audio.play(Sfx.GOLF_IRON, 0.9f, 0f, if (club == Club.WEDGE) 1.08f else 1f)
+        }
     }
 
     /** Computer golfer (and developer autoplay): picks a club and aim, then swings after a moment's thought. */

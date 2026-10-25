@@ -52,7 +52,7 @@ class Theme(var highContrast: Boolean = false, var largeText: Boolean = false) {
  * (3) dwell: a player's raised hand held over a button until the ring fills ([dwellSeconds]), after which the
  * cursor must leave the button before it can activate again.
  */
-class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
+class Ui(val theme: Theme, private val sound: (Sfx, Float) -> Unit) {
     class Box(val id: String, val rect: Rect, val enabled: Boolean)
 
     private var boxes = ArrayList<Box>()
@@ -131,13 +131,15 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
                     c.awaySec = 0f; c.otherSec = 0f
                     val before = c.dwell
                     c.dwell += dt
-                    if ((before * 4).toInt() != (c.dwell * 4).toInt()) sound(Sfx.TICK)
+                    // the hold-to-choose ring ticks, rising in pitch as it fills
+                    val q = (c.dwell / dwellSeconds * 4).toInt()
+                    if ((before / dwellSeconds * 4).toInt() != q && q < 4) sound(Sfx.TICK, 1f + 0.15f * q)
                 }
                 // a moment off the button (a wobble, a tracking blip): the ring pauses rather than restarting
                 c.hoverId != null && id == null && c.awaySec + dt < SLIP_GRACE -> c.awaySec += dt
                 c.hoverId != null && id != null && c.otherSec + dt < SWITCH_SEC -> c.otherSec += dt
                 else -> {
-                    if (id != null && id != c.hoverId) sound(Sfx.TICK)
+                    if (id != null && id != c.hoverId) sound(Sfx.UI_HOVER, 1f)
                     c.hoverId = id; c.dwell = 0f; c.awaySec = 0f; c.otherSec = 0f
                 }
             }
@@ -156,7 +158,7 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
     private fun activate(id: String) {
         if (activated == null) {
             activated = id
-            sound(Sfx.SELECT)
+            sound(if (id == "back" || id.startsWith("quit") || id.startsWith("cancel")) Sfx.UI_BACK else Sfx.UI_CONFIRM, 1f)
         }
     }
 

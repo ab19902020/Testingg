@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 
 /** Hands-free dwell selection: progress, timing and accidental-activation protection. */
 class UiDwellTest {
-    private val ui = Ui(Theme()) {}
+    private val ui = Ui(Theme()) { _, _ -> }
     private val dt = 1f / 60f
     private val boxes = mapOf("a" to Rect(0f, 0f, 200f, 100f), "b" to Rect(300f, 0f, 500f, 100f), "off" to Rect(600f, 0f, 800f, 100f))
     private val activations = ArrayList<Pair<Double, String>>()

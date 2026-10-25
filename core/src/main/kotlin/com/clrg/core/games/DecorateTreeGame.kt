@@ -120,6 +120,7 @@ class DecorateTreeGame(env: GameEnv) : MiniGame(env) {
                 if (placed[k] >= SPOTS) {
                     finishTime[k] = playTime
                     env.sfx(Sfx.CHEER, 1f, pan(k))
+                    env.sfx(Sfx.SPARKLE, 0.8f, pan(k))
                     env.particles.confetti(laneRect(k).left, laneRect(k).right, 150f, 80)
                 }
             }

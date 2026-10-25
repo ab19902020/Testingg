@@ -144,11 +144,16 @@ class Captions {
     val lines = ArrayList<Line>()
     fun add(s: Sfx) {
         val text = when (s) {
-            Sfx.WHISTLE -> "whistle"; Sfx.CHEER -> "crowd cheers"; Sfx.WIN -> "victory bells"; Sfx.BAD -> "bonk"
-            Sfx.MISS -> "miss"; Sfx.SPLAT -> "splat"; Sfx.PINS -> "pins crash"; Sfx.GO -> "go!"; Sfx.BEEP -> "beep"
+            Sfx.WHISTLE -> "whistle"; Sfx.CHEER, Sfx.CROWD_CHEER -> "crowd cheers"; Sfx.WIN -> "victory bells"; Sfx.BAD -> "bonk"
+            Sfx.FANFARE -> "fanfare"; Sfx.APPLAUSE -> "applause"; Sfx.CROWD_OOH -> "crowd: ooh!"; Sfx.CROWD_AW -> "crowd: aww"
+            Sfx.MISS -> "miss"; Sfx.SPLAT -> "splat"; Sfx.PINS -> "pins crash"; Sfx.STRIKE -> "pins scatter"; Sfx.GO -> "go!"; Sfx.BEEP -> "beep"
             Sfx.CATCH -> "catch chime"; Sfx.SAVE -> "save!"; Sfx.CRASH -> "crash"; Sfx.SHIELD -> "shield up"
-            Sfx.BANG -> "bang"; Sfx.SHATTER -> "clay shatters"; Sfx.PUNCH -> "punch lands"; Sfx.BLOCK -> "blocked"
-            Sfx.RING -> "bell rings"; Sfx.TWANG -> "bow twangs"; Sfx.THUNK -> "arrow hits"
+            Sfx.BANG -> "bang"; Sfx.GALLERY_SHOT -> "pop"; Sfx.SHATTER -> "clay shatters"; Sfx.GLASS -> "glass smashes"
+            Sfx.TIN_HIT -> "ding"; Sfx.BALLOON_POP -> "balloon pops"; Sfx.EMPTY -> "click - empty"; Sfx.RELOAD -> "reload"
+            Sfx.PUNCH, Sfx.PUNCH_HEAVY -> "punch lands"; Sfx.BLOCK -> "blocked"; Sfx.KNOCKDOWN -> "knockdown!"
+            Sfx.RING -> "bell rings"; Sfx.TWANG -> "bow twangs"; Sfx.THUNK -> "arrow hits"; Sfx.BULLSEYE -> "bullseye!"
+            Sfx.DART_HIT -> "dart thuds in"; Sfx.DART_MISS -> "dart bounces off"; Sfx.POST -> "off the post"; Sfx.GOAL_NET -> "into the net"
+            Sfx.NET -> "net"; Sfx.JINGLE -> "sleigh bells"
             else -> return
         }
         lines.removeAll { it.text == text }

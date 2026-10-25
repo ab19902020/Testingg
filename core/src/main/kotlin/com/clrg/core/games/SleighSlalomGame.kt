@@ -119,7 +119,7 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
                     Kind.GATE -> if (dx <= t.halfWidth) {
                         gates[k]++; env.sfx(Sfx.GATE, 0.7f, pan(k))
                     } else {
-                        missed[k]++; env.sfx(Sfx.MISS, 0.6f, pan(k))
+                        missed[k]++; env.sfx(Sfx.MISS, 0.5f, pan(k)); env.sfx(Sfx.SNOW_CRUNCH, 0.6f, pan(k))
                         env.popups.add("Missed gate +2s", laneCx(k), 520f, Colors.BAD, 46f)
                     }
                     Kind.PRESENT -> if (dx < 0.13f) {
@@ -139,6 +139,7 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
                 finish[k] = total(k, playTime)
                 if (firstFinish < 0) firstFinish = playTime
                 env.sfx(Sfx.CHEER, 0.9f, pan(k))
+                env.sfx(Sfx.JINGLE, 0.7f, pan(k))
             }
         }
     }

@@ -111,7 +111,7 @@ class HandPointerTest {
     @Test
     fun holdingOverAButtonSelectsItWithJitter() {
         val r = rigWithJitter(0.012f)
-        val ui = Ui(Theme()) {}
+        val ui = Ui(Theme()) { _, _ -> }
         ui.dwellSeconds = 1.2f
         val button = Rect(1500f, 900f, 1800f, 1020f)
         val (rx, ry) = pointer.reachFor(RIGHT, button.cx, button.cy, w, h)

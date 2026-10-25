@@ -118,6 +118,7 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
                         env.particles.ring(sx(px[target]), 560f, Colors.ICE, 200f)
                         env.particles.burst(sx(px[target]), 560f, Colors.ICE, 18, kind = Particles.Kind.PUFF)
                         env.sfx(Sfx.SHIELD, 0.6f, pan(target))
+                        env.sfx(Sfx.SNOW_CRUNCH, 0.8f, pan(target))
                     } else {
                         scores[b.owner]++
                         stun[target] = 0.6f
@@ -131,7 +132,7 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
                     dodges[target]++
                     env.popups.add("Dodged!", sx(px[target]), 390f, env.color(target), 44f)
                     env.particles.burst(sx(hitX), groundY, Colors.SNOW, 14, kind = Particles.Kind.PUFF)
-                    env.sfx(Sfx.SPLAT, 0.4f, pan(target), 1.3f)
+                    env.sfx(Sfx.SNOW_CRUNCH, 0.7f, pan(target))
                 }
             }
             if (b.done && b.t > b.doneAt + 0.3f) it.remove()

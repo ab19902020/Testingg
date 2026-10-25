@@ -26,6 +26,8 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
     override val info: GameInfo get() = if (env.sporty) SPORTS_INFO else INFO
     override val compactSwings = true
 
+    override val hitSfx: Sfx get() = Sfx.PADDLE
+    override val bounceSfx: Sfx get() = Sfx.TABLE
     override val cfg = Config(
         gravity = 3.6f, netH = 0.07f, hitH = 0.15f, window = 0.3f,
         slowFlight = 0.85f, fastFlight = 0.55f, speedupPerHit = 0.02f, minFlightFactor = 0.75f,
@@ -72,7 +74,7 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
     override fun onGoodHit(player: Int, quality: Float, m: ShotModifier) {
         super.onGoodHit(player, quality, m)
         smashChance = m.timeFactor > 1.2f
-        if (m.label == "SMASH!") env.sfx(Sfx.CRASH, 0.6f)
+        if (m.label == "SMASH!") { env.sfx(Sfx.PADDLE, 1f, 0f, 0.8f); env.sfx(Sfx.CROWD_OOH, 0.35f) }
         chooseSide(1 - player)
     }
 
