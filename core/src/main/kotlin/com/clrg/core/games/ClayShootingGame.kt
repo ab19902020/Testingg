@@ -517,6 +517,6 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         g.strokeCircle(aimX, aimY, 34f, 4f, Colors.GOLD)
         val thumb = if (phase in 0.5f..0.7f) 1f else 0f
         SportsDraw.fingerGun(g, r.cx + r.width * 0.12f, r.bottom - r.height * 0.18f, r.height * 0.42f, -0.5f, thumb)
-        g.text(if (thumb > 0f) "BANG!" else "thumb up...", r.left + r.width * 0.2f, r.bottom - 30f, 30f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 4f)
+        g.text(if (thumb > 0f) "BANG!" else "thumb up...", r.left + r.width * 0.28f, r.bottom - 30f, 28f, Colors.WHITE, outline = Colors.BLACK, outlineWidth = 4f)
     }
 }

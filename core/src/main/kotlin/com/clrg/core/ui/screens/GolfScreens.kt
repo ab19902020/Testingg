@@ -82,7 +82,7 @@ class GolfSetupScreen(app: GameApp) : Screen(app) {
             val r = Rect(right.left + 30f, right.top + 90f + i * 196f, right.right - 30f, right.top + 270f + i * 196f)
             if (ui.button(g, "golf_course$i", r, "", accent = Colors.GOOD, selected = course == i)) course = i
             val tc = if (course == i) Colors.BLACK else Colors.WHITE
-            g.text(c.name, r.left + 30f, r.top + 50f, 42f, tc, Align.LEFT)
+            g.text(c.title(!app.christmasMode), r.left + 30f, r.top + 50f, 42f, tc, Align.LEFT)
             g.text(c.tagline, r.left + 30f, r.top + 100f, 28f, if (course == i) Colors.BLACK else app.theme.dim, Align.LEFT, bold = false)
             g.text("Par ${c.par}  -  " + c.holes.joinToString("  ") { "${it.length} m" }, r.left + 30f, r.top + 145f, 26f, if (course == i) Colors.BLACK else app.theme.dim, Align.LEFT, bold = false)
             miniHole(g, c, Rect(r.right - 150f, r.top + 12f, r.right - 20f, r.bottom - 12f))
@@ -99,7 +99,7 @@ class GolfSetupScreen(app: GameApp) : Screen(app) {
         if (i >= 0) entries.removeAt(i) else if (entries.size < 4) entries.add(e) else app.notify("Up to four golfers")
     }
 
-    private val mini = GolfView()
+    private val mini = GolfView().also { it.summer = !app.christmasMode }
 
     /** Tiny overview of a course's first hole on its card. */
     private fun miniHole(g: Gfx, c: Course, r: Rect) {
@@ -136,7 +136,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
     }
     val match = GolfMatch(course, players, seed)
     private val rng = Rng(seed + 7)
-    private val view = GolfView()
+    private val view = GolfView().also { it.summer = !app.christmasMode }
     private val particles = Particles()
     private var paused = false
     private var step = Step.NEW
@@ -300,7 +300,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
         fillExtras(dt)
         scene.draw(g, Rect(0f, 0f, g.width, g.height), hole, app.time, extras)
         Common.header(g, ui, "Hole ${hole.number} of ${course.holes.size}  -  Par ${hole.par}  -  ${hole.length} m", app = app)
-        g.text(course.name, g.width - 30f, 70f, 30f, app.theme.dim, Align.RIGHT, bold = false)
+        g.text(course.title(!app.christmasMode), g.width - 30f, 70f, 30f, app.theme.dim, Align.RIGHT, bold = false)
         val mapR = centre(g)
         infoPanel(g, Rect(20f, 140f, 500f, 400f))
         cameraInset(g, Rect(20f, 410f, 500f, 680f))
@@ -657,7 +657,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
     /** Players x holes, totals and score to par. */
     private fun scorecard(g: Gfx, r: Rect) {
         Draw.panel(g, r, app.theme.panel, app.theme.panelBorder)
-        g.text("Scorecard - ${course.name}", r.cx, r.top + 50f, 44f, Colors.GOLD)
+        g.text("Scorecard - ${course.title(!app.christmasMode)}", r.cx, r.top + 50f, 44f, Colors.GOLD)
         val cols = course.holes.size + 2
         val nameW = r.width * 0.34f
         val cw = (r.width - nameW - 40f) / cols

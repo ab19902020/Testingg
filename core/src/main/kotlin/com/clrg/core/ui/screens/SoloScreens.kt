@@ -61,7 +61,7 @@ class SoloSetupScreen(app: GameApp) : Screen(app) {
                 upper[0] = -1.9f; fore[0] = -1.8f
                 if (sel) { upper[1] = 1.1f + 0.2f * wave; fore[1] = 1.7f + 0.3f * wave } else { upper[1] = -1.3f; fore[1] = -1.4f }
             }
-            Draw.buddy(g, r.cx, r.top + 330f, 260f, levelColor(lv), pose, if (sel) Expression.EXCITED else Expression.HAPPY, t = app.time + i)
+            Draw.person(g, !app.christmasMode, r.cx, r.top + 330f, 260f, levelColor(lv), pose, if (sel) Expression.EXCITED else Expression.HAPPY, t = app.time + i)
             val textC = if (sel) Colors.BLACK else Colors.WHITE
             g.text(lv.botName, r.cx, r.top + 385f, 42f, textC)
             g.text(lv.label, r.cx, r.top + 440f, 36f, if (sel) Colors.BLACK else levelColor(lv))

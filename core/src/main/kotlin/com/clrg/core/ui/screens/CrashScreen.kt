@@ -42,7 +42,7 @@ class CrashReportScreen(app: GameApp, private val report: String) : Screen(app) 
 
         val by = r.bottom - 125f
         if (ui.button(g, "share", Rect(r.left + 40f, by, r.left + 560f, by + 100f), "Share details", accent = Colors.GOOD, size = 38f)) {
-            app.platform.shareText("Christmas Living Room Games - crash report", report)
+            app.platform.shareText("Living Room Games - crash report", report)
         }
         val more = wrapped.size > perPage
         if (more) {

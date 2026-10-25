@@ -200,7 +200,7 @@ class GolfMatch(val course: Course, val players: List<GolfPlayer>, seed: Long = 
                     lie == Surface.GREEN -> "${fmt(left)} left"
                     lie == Surface.SAND -> "In the bunker"
                     lie == Surface.TREES -> "In the trees"
-                    lie == Surface.ROUGH -> "Snowy rough - ${p.total.toInt()} m"
+                    lie == Surface.ROUGH -> "In the rough - ${p.total.toInt()} m"
                     else -> "Fairway - ${p.total.toInt()} m"
                 })
             }

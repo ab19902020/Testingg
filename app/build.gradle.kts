@@ -8,7 +8,7 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 // =============================================================================================
-// Christmas Living Room Games - Android application module.
+// Living Room Games - Android application module.
 //
 // This module is built WITHOUT the Android Gradle Plugin: Kotlin is compiled against android.jar and
 // the APK is assembled with the standard SDK tools (aapt2, D8, zipalign, apksigner). See BUILDING.md

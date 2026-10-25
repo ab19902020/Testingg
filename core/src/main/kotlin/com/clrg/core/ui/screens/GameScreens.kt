@@ -241,7 +241,7 @@ class ResultsScreen(app: GameApp, val result: MatchResult, private val gameId: S
         for (k in 0..1) {
             val x = if (k == 0) g.width * 0.3f else g.width * 0.7f
             val win = result.winner == k
-            Draw.buddy(g, x, 720f, 380f, app.playerColor(k), null, if (win || result.winner < 0) com.clrg.core.render.Expression.EXCITED else com.clrg.core.render.Expression.OOPS, t = app.time + k)
+            Draw.person(g, !app.christmasMode, x, 720f, 380f, app.playerColor(k), null, if (win || result.winner < 0) com.clrg.core.render.Expression.EXCITED else com.clrg.core.render.Expression.OOPS, t = app.time + k)
             if (win) Draw.star(g, x, 300f, 50f, Colors.GOLD, app.time.toFloat())
             g.text(app.activePlayers[k].name, x, 780f, 50f, app.playerColor(k))
             g.text("${result.scores[k]} ${result.scoreUnit}", x, 845f, 54f, Colors.WHITE)

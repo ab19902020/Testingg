@@ -186,7 +186,7 @@ object CrashReporter {
             "${pi.versionName} (${if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode else 0})"
         } catch (_: Throwable) { "?" }
         val soc = if (Build.VERSION.SDK_INT >= 31) "${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}" else "not reported"
-        return "Christmas Living Room Games $version\nPhone: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), chip: $soc\n"
+        return "Living Room Games $version\nPhone: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), chip: $soc\n"
     }
 
     private fun now() = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())

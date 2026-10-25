@@ -139,6 +139,24 @@ class SportsFlowTest {
     }
 
     @Test
+    fun golfInSportsModeIsASummerCourse() {
+        frames(10)
+        tap("golf")
+        assertTrue(app.current is com.clrg.core.ui.screens.GolfSetupScreen)
+        val second = app.activePlayers[1].id
+        tap("golf_p$second")
+        tap("golf_cpu_EASY")
+        tap("golf_go")
+        val gs = app.current as com.clrg.core.ui.screens.GolfScreen
+        assertEquals(ObjectKind.CLUB, app.objectKind, "golf uses a club object")
+        seconds(2.5f)
+        app.sim.trigger(0, SimAction.RAISE)
+        seconds(2f)
+        assertEquals(com.clrg.core.golf.GolfMatch.Phase.AIM, gs.match.phase)
+        shot("golf_summer")
+    }
+
+    @Test
     fun boxingAndArcheryRunThroughTheApp() {
         for (id in listOf("game_boxing", "game_archery")) {
             app.popToRoot(); frames(5)

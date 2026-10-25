@@ -270,9 +270,9 @@ class CalibrationScreen(app: GameApp, private val then: () -> Unit, private val 
             CalibrationStep.REACH_UP -> { demo.upper[0] = 1.75f; demo.fore[0] = 1.7f; demo.upper[1] = 1.4f; demo.fore[1] = 1.45f }
             CalibrationStep.PLAYING_HAND, CalibrationStep.DONE -> { demo.upper[0] = -1.8f; demo.fore[0] = -1.75f; demo.upper[1] = 1.4f + wave; demo.fore[1] = 1.5f }
         }
-        Draw.buddy(g, r.left + r.width * 0.25f, r.bottom - 150f, 340f, 0xFF90A4AE.toInt(), demo, Expression.HAPPY, t = app.time)
+        Draw.person(g, !app.christmasMode, r.left + r.width * 0.25f, r.bottom - 150f, 340f, 0xFF90A4AE.toInt(), demo, Expression.HAPPY, t = app.time)
         g.text("Do this", r.left + r.width * 0.25f, r.bottom - 112f, 28f, app.theme.dim)
-        Draw.buddy(g, r.left + r.width * 0.75f, r.bottom - 150f, 340f, c, if (app.controls[k].avatar.valid && slot.isPlaying) app.controls[k].avatar else null, Expression.FOCUSED, t = app.time)
+        Draw.person(g, !app.christmasMode, r.left + r.width * 0.75f, r.bottom - 150f, 340f, c, if (app.controls[k].avatar.valid && slot.isPlaying) app.controls[k].avatar else null, Expression.FOCUSED, t = app.time)
         g.text("You", r.left + r.width * 0.75f, r.bottom - 112f, 28f, app.theme.dim)
         Draw.progressRing(g, r.cx, r.top + 420f, 60f, if (p.isDone) 1f else p.progress, if (p.isDone) Colors.GOOD else c, 14f)
         if (p.isDone) g.text("OK", r.cx, r.top + 420f, 44f, Colors.GOOD)
@@ -317,7 +317,7 @@ class ReadyScreen(app: GameApp, private val then: () -> Unit, private val full: 
                 // the computer opponent is always ready
                 ready[1] = true
                 val p = AvatarPose().apply { valid = true; upper[0] = -1.9f; fore[0] = -1.8f; upper[1] = 1.2f + 0.2f * sin(app.time * 4).toFloat(); fore[1] = 1.8f }
-                Draw.buddy(g, x, 860f, 420f, c, p, Expression.EXCITED, t = app.time)
+                Draw.person(g, !app.christmasMode, x, 860f, 420f, c, p, Expression.EXCITED, t = app.time)
                 g.text("${app.activePlayers[1].name} (CPU)", x, 905f, 46f, c, outline = Colors.BLACK, outlineWidth = 5f)
                 Draw.progressRing(g, x, 320f, 66f, 1f, Colors.GOOD, 16f)
                 g.text("READY", x, 320f, 36f, Colors.GOOD)
@@ -331,7 +331,7 @@ class ReadyScreen(app: GameApp, private val then: () -> Unit, private val full: 
             app.controls[k].drainEvents(events)
             if (events.any { it is GestureEvent.RaiseHold } && app.tracker.slots[k].isPlaying) { if (!ready[k]) app.audio.play(Sfx.SELECT); ready[k] = true }
             val slot = app.tracker.slots[k]
-            Draw.buddy(g, x, 860f, 420f, c, if (slot.isPlaying) app.controls[k].avatar else null, if (ready[k]) Expression.EXCITED else Expression.HAPPY, t = app.time)
+            Draw.person(g, !app.christmasMode, x, 860f, 420f, c, if (slot.isPlaying) app.controls[k].avatar else null, if (ready[k]) Expression.EXCITED else Expression.HAPPY, t = app.time)
             val prog = if (ready[k]) 1f else app.controls[k].raiseProgress
             Draw.progressRing(g, x, 320f, 66f, prog, if (ready[k]) Colors.GOOD else c, 16f)
             g.text(if (ready[k]) "READY" else "${(prog * 100).toInt()}%", x, 320f, 36f, if (ready[k]) Colors.GOOD else Colors.WHITE)

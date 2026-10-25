@@ -20,6 +20,8 @@ import kotlin.math.sin
 
 /** Top-down drawing of a golf hole, seen from above with the green up the screen. Distances are metres. */
 class GolfView {
+    /** Summer course (sports mode): grass beyond the boundary instead of snow. */
+    var summer = false
     /** Camera: world point at the centre of the view and pixels per metre. */
     var cx = 0f
     var cy = 0f
@@ -58,8 +60,9 @@ class GolfView {
     fun drawHole(g: Gfx, h: Hole, time: Double, putting: Boolean) {
         g.save()
         g.clipRect(r.left, r.top, r.right, r.bottom)
-        // snow beyond the boundary
-        g.gradientRect(r.left, r.top, r.right, r.bottom, 0xFFE8F1FB.toInt(), 0xFFCBDCEF.toInt())
+        // snow (or long summer grass) beyond the boundary
+        if (summer) g.gradientRect(r.left, r.top, r.right, r.bottom, 0xFF8DB86E.toInt(), 0xFF6E9C55.toInt())
+        else g.gradientRect(r.left, r.top, r.right, r.bottom, 0xFFE8F1FB.toInt(), 0xFFCBDCEF.toInt())
         // rough inside the boundary, with out-of-bounds stakes
         val bl = sx(h.xMin); val br = sx(h.xMax); val bt = sy(h.yMax); val bb = sy(h.yMin)
         g.fillRect(bl, bt, br, bb, 0xFF6F9E6A.toInt())

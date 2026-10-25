@@ -20,7 +20,7 @@ class Blob(val x: Float, val y: Float, val rx: Float, val ry: Float) {
 }
 
 enum class Surface(val label: String) {
-    TEE("Tee"), FAIRWAY("Fairway"), ROUGH("Snowy rough"), SAND("Bunker"), GREEN("Green"), WATER("Water"), TREES("Trees"), OUT("Out of bounds")
+    TEE("Tee"), FAIRWAY("Fairway"), ROUGH("Rough"), SAND("Bunker"), GREEN("Green"), WATER("Water"), TREES("Trees"), OUT("Out of bounds")
 }
 
 /**
@@ -96,6 +96,14 @@ class Hole(
 
 class Course(val name: String, val tagline: String, val holes: List<Hole>) {
     val par: Int get() = holes.sumOf { it.par }
+
+    /** The name shown: the Christmas name, or its summer counterpart in sports mode. */
+    fun title(summer: Boolean): String = if (!summer) name else when (name) {
+        "Candy Cane Links" -> "Meadow Links"
+        "Frozen Lake Club" -> "Lakeside Club"
+        "North Pole Peaks" -> "Highland Peaks"
+        else -> name
+    }
 }
 
 /** The three courses (three holes each). Original layouts. */

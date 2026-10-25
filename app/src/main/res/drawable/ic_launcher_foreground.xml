@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <!-- tree -->
-    <path android:fillColor="#FF2E9E4F" android:pathData="M54,26 L40,46 L46,46 L36,60 L43,60 L32,74 L76,74 L65,60 L72,60 L62,46 L68,46 Z" />
-    <path android:fillColor="#FF7A4A22" android:pathData="M50,74 h8 v8 h-8 z" />
-    <!-- star -->
-    <path android:fillColor="#FFFFD54F" android:pathData="M54,18 L56.4,23.6 L62,24 L57.6,27.6 L59,33 L54,30 L49,33 L50.4,27.6 L46,24 L51.6,23.6 Z" />
-    <!-- baubles -->
-    <path android:fillColor="#FFFF5252" android:pathData="M48,52m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
-    <path android:fillColor="#FF4FC3F7" android:pathData="M60,62m-2.6,0a2.6,2.6 0,1 1,5.2 0a2.6,2.6 0,1 1,-5.2 0" />
-    <path android:fillColor="#FFFFD54F" android:pathData="M45,67m-2.4,0a2.4,2.4 0,1 1,4.8 0a2.4,2.4 0,1 1,-4.8 0" />
+    <!-- a player with both arms up (motion-controlled games) -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54,34m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+    <path android:fillColor="#FF40A9FF" android:pathData="M47,43 h14 l2,20 h-18 z" />
+    <path android:strokeColor="#FF40A9FF" android:strokeWidth="5" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M48,45 L38,32" />
+    <path android:strokeColor="#FF40A9FF" android:strokeWidth="5" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M60,45 L70,32" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M49,63 L46,78" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M59,63 L62,78" />
+    <!-- ball -->
+    <path android:fillColor="#FFE6FF5C" android:pathData="M76,24m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
     <!-- motion arcs -->
-    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M28,40 Q22,52 28,64" />
-    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M80,40 Q86,52 80,64" />
+    <path android:strokeColor="#FFFFD54F" android:strokeWidth="3" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M30,38 Q24,50 30,62" />
+    <path android:strokeColor="#FFFFD54F" android:strokeWidth="3" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M78,40 Q84,52 78,64" />
 </vector>
