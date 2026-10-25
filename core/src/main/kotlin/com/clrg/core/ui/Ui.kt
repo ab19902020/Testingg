@@ -28,6 +28,11 @@ class HandCursor(val player: Int) {
     var hoverId: String? = null
     var dwell = 0f
     var lockoutUntilLeave: String? = null
+    /** Seconds the cursor has been off its button / on a different one (brief slips do not restart the ring). */
+    var awaySec = 0f
+    var otherSec = 0f
+    /** Seconds since this cursor selected something (for the "pop" on screen), large when long ago. */
+    var sinceSelect = 9f
 }
 
 /** Visual theme; high-contrast and large-text accessibility options adjust it. */
@@ -65,9 +70,13 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
         private set
     companion object {
         /** A hand cursor this close (virtual px) to a button points at it. */
-        const val MAGNET_PX = 40f
+        const val MAGNET_PX = 60f
         /** A hand cursor on a button keeps pointing at it until it is this far (px) outside. */
-        const val STICKY_PX = 48f
+        const val STICKY_PX = 70f
+        /** Slipping off a button for less than this (s) pauses the ring instead of restarting it. */
+        const val SLIP_GRACE = 0.35f
+        /** Hovering a different button this long (s) moves the ring to it. */
+        const val SWITCH_SEC = 0.12f
     }
 
     var dwellSeconds = 1.5f
@@ -112,19 +121,32 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
         }
         // hands-free dwell
         for (c in cursors) {
-            if (!cursorsEnabled || !c.active) { c.dwell = 0f; c.hoverId = null; continue }
+            c.sinceSelect += dt
+            if (!cursorsEnabled || !c.active) { c.dwell = 0f; c.hoverId = null; c.awaySec = 0f; c.otherSec = 0f; continue }
             val id = hitMagnetic(c)
             if (c.lockoutUntilLeave != null && id != c.lockoutUntilLeave) c.lockoutUntilLeave = null
-            if (id == null || id == c.lockoutUntilLeave || globalLock > 0f) { c.hoverId = id; c.dwell = 0f; continue }
-            if (id == c.hoverId) {
-                val before = c.dwell
-                c.dwell += dt
-                if ((before * 4).toInt() != (c.dwell * 4).toInt()) sound(Sfx.TICK)
-            } else { c.hoverId = id; c.dwell = 0f }
-            if (c.dwell >= dwellSeconds) {
-                activate(id)
+            if (globalLock > 0f || (id != null && id == c.lockoutUntilLeave)) { c.hoverId = id; c.dwell = 0f; continue }
+            when {
+                id != null && id == c.hoverId -> {
+                    c.awaySec = 0f; c.otherSec = 0f
+                    val before = c.dwell
+                    c.dwell += dt
+                    if ((before * 4).toInt() != (c.dwell * 4).toInt()) sound(Sfx.TICK)
+                }
+                // a moment off the button (a wobble, a tracking blip): the ring pauses rather than restarting
+                c.hoverId != null && id == null && c.awaySec + dt < SLIP_GRACE -> c.awaySec += dt
+                c.hoverId != null && id != null && c.otherSec + dt < SWITCH_SEC -> c.otherSec += dt
+                else -> {
+                    if (id != null && id != c.hoverId) sound(Sfx.TICK)
+                    c.hoverId = id; c.dwell = 0f; c.awaySec = 0f; c.otherSec = 0f
+                }
+            }
+            val target = c.hoverId ?: continue
+            if (c.dwell >= dwellSeconds && boxes.any { it.id == target && it.enabled }) {
+                activate(target)
                 c.dwell = 0f
-                c.lockoutUntilLeave = id
+                c.lockoutUntilLeave = target
+                c.sinceSelect = 0f
                 globalLock = 0.8f
             }
         }
@@ -297,20 +319,46 @@ class Ui(val theme: Theme, private val sound: (Sfx) -> Unit) {
         return yy
     }
 
-    /** Draws the hands-free cursors on top of everything. */
+    /**
+     * Draws the hands-free cursors on top of everything: a mitten in the player's colour, a big ring that fills
+     * while holding over a button, a "pop" when something is chosen, and a faded mitten with an up arrow while the
+     * hand is lowered (seen, but not pointing).
+     */
     fun drawCursors(g: Gfx) {
         for (c in cursors) {
             if (!c.visible) continue
-            val a = if (c.active) 1f else 0.35f
-            g.save(); g.setAlpha(a)
-            g.glow(c.x, c.y, 70f, Colors.withAlpha(c.color, 0.35f))
-            g.fillCircle(c.x + 4f, c.y + 6f, 30f, Colors.SHADOW)
-            g.fillCircleRadial(c.x, c.y, 28f, c.x - 9f, c.y - 10f, 40f, Colors.lighter(c.color, 0.4f), Colors.darker(c.color, 0.7f))
-            g.strokeCircle(c.x, c.y, 28f, 5f, Colors.WHITE)
-            if (c.dwell > 0f) Draw.progressRing(g, c.x, c.y, 44f, c.dwell / dwellSeconds, Colors.GOLD, 9f)
-            g.text("P${c.player + 1}", c.x, c.y, 24f, Colors.BLACK)
+            val x = c.x; val y = c.y
+            g.save()
+            if (!c.active) {
+                g.setAlpha(0.45f)
+                mitten(g, x, y, 0.8f, c.color)
+                Draw.tri(g, x - 16f, y - 52f, x + 16f, y - 52f, x, y - 74f, Colors.WHITE)
+                g.restore()
+                continue
+            }
+            val pointing = c.hoverId != null
+            g.glow(x, y, if (pointing) 110f else 86f, Colors.withAlpha(c.color, if (pointing) 0.5f else 0.35f))
+            if (c.dwell > 0f || pointing) {
+                g.strokeCircle(x, y, 66f, 13f, 0x66000000)
+                Draw.progressRing(g, x, y, 66f, (c.dwell / dwellSeconds).coerceIn(0f, 1f), Colors.GOLD, 13f)
+            }
+            mitten(g, x, y, 1.25f, c.color)
+            g.text("P${c.player + 1}", x, y + 8f, 26f, Colors.BLACK)
+            if (c.sinceSelect < 0.45f) {
+                val k = c.sinceSelect / 0.45f
+                g.strokeCircle(x, y, 66f + 80f * k, 12f * (1f - k), Colors.withAlpha(Colors.GOLD, 1f - k))
+            }
             g.restore()
         }
+    }
+
+    /** A knitted mitten (palm, thumb, white cuff) centred at ([x], [y]). */
+    private fun mitten(g: Gfx, x: Float, y: Float, s: Float, color: Int) {
+        g.fillCircle(x + 4f * s, y + 7f * s, 32f * s, Colors.SHADOW)
+        g.fillRoundRect(x - 14f * s, y + 18f * s, x + 14f * s, y + 34f * s, 7f * s, 0xFFF1F5FA.toInt())
+        g.fillCircleRadial(x - 22f * s, y + 2f * s, 11f * s, x - 25f * s, y - 2f * s, 16f * s, Colors.lighter(color, 0.4f), Colors.darker(color, 0.7f))
+        g.fillRoundRectGradient(x - 20f * s, y - 30f * s, x + 20f * s, y + 22f * s, 19f * s, Colors.lighter(color, 0.45f), Colors.darker(color, 0.72f))
+        g.strokeRoundRect(x - 20f * s, y - 30f * s, x + 20f * s, y + 22f * s, 19f * s, 4f * s, Colors.WHITE)
     }
 
     fun fit(g: Gfx, s: String, size: Float, maxW: Float, bold: Boolean = true): Float {

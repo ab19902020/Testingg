@@ -340,7 +340,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
 
         // 2) latency compensation for what players see, then hands-free cursors from calibrated, tracked players
         if (!settings.simulatedInput) for (c in controls) c.predict(nowNanos / 1e9)
-        updateCursors(g)
+        updateCursors(g, dt)
 
         // 3) input + screens
         val events = ArrayList<InputEvent>()
@@ -380,28 +380,24 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
     /** True when someone in front of the camera has a hand cursor on screen right now. */
     val handCursorShown: Boolean get() = ui.cursors.any { it.visible }
 
+    /** One steady pointer per player (see [HandPointer]). */
+    val pointers = arrayOf(com.clrg.core.ui.HandPointer(), com.clrg.core.ui.HandPointer())
+
     /**
      * Hand cursors for everyone the camera is following - calibrated players, or anyone standing in front of the
-     * camera before set-up (with typical arm reach until they calibrate). A cursor only acts while its hand is
-     * raised above the waist, and only by holding still on a button.
+     * camera before set-up (with typical arm reach until they calibrate). A cursor acts while its hand is lifted to
+     * the chest, and selects by holding over a button.
      */
-    private fun updateCursors(g: Gfx) {
+    private fun updateCursors(g: Gfx, dt: Float) {
         for (k in 0..1) {
             val c = ui.cursors[k]
             val slot = tracker.slots[k]
-            val ctl = controls[k]
+            val p = pointers[k]
             c.color = playerColor(k)
-            if (!slot.enabled || !slot.isPlaying || !ctl.hasPose) { c.active = false; c.visible = false; continue }
-            // the higher of the two hands steers the cursor; it only acts when raised above the waist
-            val h = if (!ctl.handVisible[0]) 1 else if (!ctl.handVisible[1]) 0 else if (ctl.handY[0] > ctl.handY[1]) 0 else 1
-            val rx = ctl.handX[h]
-            val ry = ctl.handY[h]
-            val tx = g.width / 2f + rx / 0.9f * g.width / 2f
-            val ty = g.height * (1.1f - ry) / 1.45f
-            c.x += (tx.coerceIn(0f, g.width) - c.x) * 0.5f
-            c.y += (ty.coerceIn(0f, g.height) - c.y) * 0.5f
-            c.visible = ctl.handVisible[h]
-            c.active = c.visible && ry > -0.3f
+            p.update(controls[k], slot.enabled && slot.isPlaying, g.width, g.height, dt)
+            c.visible = p.visible && !p.x.isNaN()
+            c.active = c.visible && p.active
+            if (c.visible) { c.x = p.x; c.y = p.y }
         }
     }
 

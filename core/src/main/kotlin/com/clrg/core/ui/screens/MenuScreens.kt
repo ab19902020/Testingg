@@ -65,9 +65,10 @@ class MainMenuScreen(app: GameApp) : Screen(app) {
         // hands-free: anyone in front of the camera can steer the menus with a raised hand
         run {
             val hint = when {
-                app.ui.cursors.any { it.active } -> "Hold your hand still over a button to choose it"
-                app.handCursorShown -> "Raise your hand higher to point"
-                else -> "Hands-free: stand in front of the camera and raise a hand, then hold it over a button"
+                app.ui.cursors.any { it.active && it.hoverId != null } -> "Keep your hand there until the ring fills"
+                app.ui.cursors.any { it.active } -> "Move your hand over a button and hold it there - small movements are enough"
+                app.handCursorShown -> "Lift your hand to chest height to point"
+                else -> "Hands-free: stand in front of the camera and lift a hand to chest height to point"
             }
             val hw = g.measureText(hint, 30f, false) + 70f
             g.fillRoundRect(g.width / 2f - hw / 2f, y + 4f, g.width / 2f + hw / 2f, y + 58f, 27f, 0xAA0B2A4F.toInt())

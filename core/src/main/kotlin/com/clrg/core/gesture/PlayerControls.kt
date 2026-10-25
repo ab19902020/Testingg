@@ -145,6 +145,13 @@ class PlayerControls(val playerIndex: Int) {
     val handX = FloatArray(2)
     val handY = FloatArray(2)
     val handVisible = BooleanArray(2)
+    /**
+     * Hand positions for pointing (menus): reach space like [handX], measured and smoothed but *not* moved forward
+     * in time - prediction is right for characters, but makes a pointer overshoot and wobble.
+     */
+    val pointX = FloatArray(2)
+    val pointY = FloatArray(2)
+    val pointSeen = BooleanArray(2)
     var hasPose = false
         private set
 
@@ -155,6 +162,7 @@ class PlayerControls(val playerIndex: Int) {
         pending.clear()
         lastT = -1.0
         hasPose = false
+        pointSeen.fill(false)
     }
 
     /** Call after each tracker update; does nothing unless the slot received new pose data. */
@@ -192,6 +200,7 @@ class PlayerControls(val playerIndex: Int) {
             handX[h] = frame.wx[h] / reach
             handY[h] = frame.wy[h] / reach
             handVisible[h] = frame.wv[h] > 0.3f
+            pointX[h] = handX[h]; pointY[h] = handY[h]; pointSeen[h] = handVisible[h]
         }
         tuck = frame.wv[0] > 0.3f && frame.wv[1] > 0.3f &&
             hypot(frame.wx[0] - frame.wx[1], frame.wy[0] - frame.wy[1]) < 0.6f &&

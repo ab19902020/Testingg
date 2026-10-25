@@ -28,7 +28,7 @@ data class Settings(
     var reducedEffects: Boolean = false,
     var largeText: Boolean = false,
     var captions: Boolean = true,
-    var dwellSeconds: Float = 1.5f,
+    var dwellSeconds: Float = 1.2f,
     var gestureSensitivity: Float = 1f,
     var steeringOnlySlalom: Boolean = false,
     // solo play
@@ -67,7 +67,7 @@ data class Settings(
 ) {
     fun toJson(): String = Json.stringify(
         mapOf(
-            "v" to 1, "musicVolume" to musicVolume, "sfxVolume" to sfxVolume, "highContrast" to highContrast,
+            "v" to 2, "musicVolume" to musicVolume, "sfxVolume" to sfxVolume, "highContrast" to highContrast,
             "reducedEffects" to reducedEffects, "largeText" to largeText, "captions" to captions, "dwellSeconds" to dwellSeconds,
             "gestureSensitivity" to gestureSensitivity, "steeringOnlySlalom" to steeringOnlySlalom, "cpuLevel" to cpuLevel, "cameraId" to cameraId,
             "wideAngle" to wideAngle, "mirror" to mirror,
@@ -93,7 +93,8 @@ data class Settings(
                 reducedEffects = o.bool("reducedEffects", d.reducedEffects),
                 largeText = o.bool("largeText", d.largeText),
                 captions = o.bool("captions", d.captions),
-                dwellSeconds = o.float("dwellSeconds", d.dwellSeconds).coerceIn(0.8f, 3f),
+                // version 1 saved the old 1.5 s default; the steadier pointer of version 2 selects well in 1.2 s
+                dwellSeconds = o.float("dwellSeconds", d.dwellSeconds).let { if (o.int("v", 1) < 2 && it == 1.5f) d.dwellSeconds else it }.coerceIn(0.8f, 3f),
                 gestureSensitivity = o.float("gestureSensitivity", d.gestureSensitivity).coerceIn(0.5f, 2f),
                 steeringOnlySlalom = o.bool("steeringOnlySlalom", d.steeringOnlySlalom),
                 cpuLevel = o.str("cpuLevel", d.cpuLevel),

@@ -48,9 +48,7 @@ class GolfFlowTest {
     private fun hover(id: String) {
         frames(2)
         val r = assertNotNull(app.ui.boxRect(id), "button '$id' not on screen ${app.current?.javaClass?.simpleName}: ${app.ui.boxIds()}")
-        val rx = (r.cx - g.width / 2f) / (g.width / 2f) * 0.9f
-        val ry = 1.1f - r.cy * 1.45f / g.height
-        app.sim.reach(0, rx, ry)
+        app.sim.pointAt(0, r.cx, r.cy, g.width, g.height)
         seconds(app.settings.dwellSeconds + 0.9f)
         app.sim.releaseReach(0)
         seconds(1.2f)

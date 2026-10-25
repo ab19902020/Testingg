@@ -75,6 +75,21 @@ class SimulatedInput(private val aspect: Float = 16f / 9f) {
 
     fun releaseReach(p: Int) { reachHold[p] = false }
 
+    /**
+     * Raises one of player [p]'s hands to point at screen point ([sx], [sy]) of a [w] x [h] screen, through the
+     * same pointing box the camera players use (left half of the screen: left hand; right half: right hand).
+     */
+    fun pointAt(p: Int, sx: Float, sy: Float, w: Float, h: Float) {
+        val hand = if (sx < w / 2f) com.clrg.core.gesture.LEFT else com.clrg.core.gesture.RIGHT
+        val (rx, ry) = pointerMath.reachFor(hand, sx, sy, w, h)
+        reachHold[p] = true
+        motion[p] = null
+        puppets[p].setWrist(hand, rx * 1.5f, ry * 1.5f)
+        puppets[p].setWrist(1 - hand, if (hand == 1) -0.42f else 0.42f, -1.05f)
+    }
+
+    private val pointerMath = com.clrg.core.ui.HandPointer()
+
     /** Advances time and returns the pose frames (30 Hz) generated during [dt]. */
     fun update(dt: Float): List<PoseFrame> {
         t += dt
