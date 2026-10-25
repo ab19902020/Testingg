@@ -91,6 +91,7 @@ class SwingDetector {
     private val lastDirX = FloatArray(2)
     private val lastDirY = FloatArray(2)
     private val lastEventT = doubleArrayOf(-9.0, -9.0)
+    private var deferredAt = -9.0
     /** Frames up to the last detection are never measured again: one movement is one swing. */
     private var usedUpTo = -9.0
     private var cooldownUntil = -1.0
@@ -109,7 +110,9 @@ class SwingDetector {
         var dx = 0f; var dy = 0f
         var peakT = 0.0; var peakV = 0f
         var lastStepX = 0f; var lastStepY = 0f; var lastStepV = 0f; var lastStepFrom = 0.0
-        fun clear() { ok = false; disp = 0f; path = 0f; speed = 0f; dx = 0f; dy = 0f; peakV = 0f; lastStepV = 0f }
+        /** The fastest step is the newest one: the hand may still be speeding up. */
+        var peakNewest = false
+        fun clear() { ok = false; disp = 0f; path = 0f; speed = 0f; dx = 0f; dy = 0f; peakV = 0f; lastStepV = 0f; peakNewest = false }
     }
 
     private val sig = Array(3) { Signal() }
@@ -185,15 +188,16 @@ class SwingDetector {
     private fun peak(steps: Int, out: Signal) {
         if (steps == 0) return
         // light 1-2-1 smoothing: one noisy step should not decide where the peak is
+        // (the newest and oldest steps have a neighbour on one side only: left as measured, so they are not pulled
+        // towards it - that would move a peak at the newest step back in time)
         for (k in 0 until steps) {
-            val newer = if (k > 0) stepV[k - 1] else stepV[k]
-            val older = if (k < steps - 1) stepV[k + 1] else stepV[k]
-            stepS[k] = (newer + 2f * stepV[k] + older) / 4f
+            stepS[k] = if (k == 0 || k == steps - 1) stepV[k] else (stepV[k - 1] + 2f * stepV[k] + stepV[k + 1]) / 4f
         }
         var i = 0
         for (k in 1 until steps) if (stepS[k] > stepS[i]) i = k
         out.peakV = stepV[i]
         out.peakT = stepT[i]
+        out.peakNewest = i == 0
         if (i == 0 || i == steps - 1) return
         val a = stepS[i - 1]; val b = stepS[i]; val c = stepS[i + 1] // newer, peak, older
         val den = a - 2f * b + c
@@ -219,6 +223,7 @@ class SwingDetector {
         var bestKind = 0
         var bestPeakT = now.t
         var bdx = 0f; var bdy = 0f; var bSpeed = 0f
+        var bestStillRising = false
         for (hand in 0..1) {
             for (kind in 0..2) measure(h, hand, kind, GAIN[kind], sig[kind])
             val w = sig[0]; val e = sig[1]; val o = sig[2]
@@ -256,7 +261,7 @@ class SwingDetector {
                 if (s.disp >= minDist && s.speed >= minSpeed) {
                     if (s.disp > bestDisp) {
                         bestDisp = s.disp; bestHand = hand; bestKind = kind; bestPeakT = s.peakT
-                        bdx = s.dx; bdy = s.dy; bSpeed = s.speed
+                        bdx = s.dx; bdy = s.dy; bSpeed = s.speed; bestStillRising = s.peakNewest
                     }
                     break
                 }
@@ -271,7 +276,11 @@ class SwingDetector {
                 }
             }
         }
-        if (bestHand < 0) return
+        if (bestHand < 0) { deferredAt = -9.0; return }
+        // recognised while the hand is still speeding up: wait one more picture so the fastest moment is seen
+        // (the swing is judged by that moment, so stamping it now would make every quick swing look early)
+        if (bestStillRising && now.t - deferredAt > 0.1) { deferredAt = now.t; return }
+        deferredAt = -9.0
         if (now.t < cooldownUntil) {
             // allowed sooner only for a swing back the other way (a backswing followed by the real swing)
             val back = bdx * lastDirX[bestHand] + bdy * lastDirY[bestHand] < -0.5f * hypot(bdx, bdy) && now.t - lastEventT[bestHand] > 0.12

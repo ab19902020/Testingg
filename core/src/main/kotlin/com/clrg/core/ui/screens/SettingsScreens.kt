@@ -150,10 +150,12 @@ class HelpScreen(app: GameApp) : Screen(app) {
             1 -> infoPanel(g, app, body, "Christmas Golf (1 to 4 players, taking turns)", listOf(
                 "Take turns: only the golfer whose turn it is stands in front of the camera. Raise a hand to start.",
                 "Choose a club or turn your aim: raise a hand and hold it over the button (hold on an arrow to keep turning).",
-                "Swing: hands together, low and still - then swing back and through like a real golf swing.",
+                "Grip: put your hands together as if holding a club (the mittens on screen join up), low and still.",
+                "Swing: then swing back and through like a real golf swing - your snowman copies it.",
                 "     The higher your backswing, the further the ball goes. Swing back down quickly.",
                 "     Bring your hands back through where they started for a straight shot.",
-                "Putt: hands together and low, draw them back sideways (further = harder) and stroke through.",
+                "Putt: grip, draw your hands back sideways (further = harder) and stroke through.",
+                "The camera follows the ball down the fairway; the small map shows the whole hole.",
                 "Drive with the Driver, hit the approach with an iron or the wedge, then putt on the green.",
                 "Watch the wind and the slope arrows on the green. Water or out of bounds: one penalty stroke.",
                 "Three courses of three holes each. Fewest strokes wins.",
@@ -165,7 +167,10 @@ class HelpScreen(app: GameApp) : Screen(app) {
                 "Space: stand 2-3 m away, side by side, an arm's length apart. Player 1 left, Player 2 right.",
                 "Light: make the room bright; avoid strong light behind you.",
                 "Calibration measures each player's size and comfortable reach so everybody plays fairly.",
-                "Hands-free menus: stand in front of the camera, raise a hand and hold it over a button to choose.",
+                "Hands-free menus: lift a hand to chest height to point, and hold it over a button to choose.",
+                "     Small, relaxed movements are enough - the right hand points from your right side, the left from your left.",
+                "A real object (toy racket, stick, pool noodle) can be your racket or club: Settings > Motion.",
+                "Motion test (Settings > Motion) shows what the camera sees of you - handy when something isn't picked up.",
                 "If someone steps away the game pauses and waits for them - spectators can't take over.",
                 "On your own? Play Solo: you against a computer player (Easy, Medium or Hard). Stand in the middle.",
             ), 32f)
@@ -174,7 +179,8 @@ class HelpScreen(app: GameApp) : Screen(app) {
                 "No video or photos are recorded, stored or uploaded - not even temporarily to disk.",
                 "The app has no internet permission at all. Player names and scores stay on this phone.",
                 "Clothing colours are used only in memory to tell the two players apart, and are forgotten",
-                "when the app closes. You can switch the camera permission off in Android settings.",
+                "when the app closes. If you keep a learned held object, only its colours (a list of numbers,",
+                "not a picture) are saved. You can switch the camera permission off in Android settings.",
             ), 34f)
             4 -> infoPanel(g, app, body, "About", listOf(
                 "Christmas Living Room Games - an original family party game.",
