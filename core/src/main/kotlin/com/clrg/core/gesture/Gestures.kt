@@ -36,6 +36,8 @@ sealed class GestureEvent(val t: Double, val hand: Int) {
      * the hand was pointing just before (reach units, like the hand positions); [byThumb]: fired with the thumb.
      */
     class Shot(t: Double, hand: Int, val aimX: Float, val aimY: Float, val byThumb: Boolean) : GestureEvent(t, hand)
+    /** An arrow let go: [power] 0..1 (how far it was drawn), aimed where the bow hand pointed ([aimX], [aimY], reach units). */
+    class Release(t: Double, hand: Int, val power: Float, val aimX: Float, val aimY: Float) : GestureEvent(t, hand)
     /**
      * A punch. [kind]: straight (towards the camera), hook (round from the side) or uppercut (upwards). [power] 0..1.
      * [x]/[y]: where the fist ended up (reach units), i.e. what it was aimed at.

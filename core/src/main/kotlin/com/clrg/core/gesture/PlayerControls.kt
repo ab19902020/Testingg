@@ -128,8 +128,15 @@ class PlayerControls(val playerIndex: Int) {
     val gunCtl = GunControls()
     /** Punches (boxing). */
     val punch = PunchDetector()
+    /** Bow and arrow (archery). */
+    val bow = BowDetector()
     /** Hands the finger tracker should follow now (see [GunControls.fingerMask]); 0 when no game asks for fingers. */
-    val fingerMask: Int get() = if (wantFingers && hasPose) gunCtl.fingerMask(history.latest) else 0
+    val fingerMask: Int get() = when {
+        !wantFingers || !hasPose -> 0
+        // drawing a bow: watch the string hand's fingers every frame (opening them lets go)
+        bow.state != BowDetector.State.IDLE -> (1 shl bow.drawHand) or (4 shl bow.bowHand)
+        else -> gunCtl.fingerMask(history.latest)
+    }
 
     var golfStroke = GolfStroke.NONE
     val golf = GolfSwingDetector()
@@ -176,7 +183,7 @@ class PlayerControls(val playerIndex: Int) {
         history.clear()
         swing.reset(); throwD.reset(); bowl.reset(); leanT.reset(); pump.reset(); raise.reset()
         golf.reset(); golfShots.clear()
-        gunCtl.reset(); punch.reset()
+        gunCtl.reset(); punch.reset(); bow.reset()
         pending.clear()
         lastT = -1.0
         hasPose = false
@@ -218,6 +225,7 @@ class PlayerControls(val playerIndex: Int) {
         val dominant = if (calibration?.dominantHand == Hand.LEFT) LEFT else RIGHT
         gunCtl.update(frame, reach, dominant, if (frame.objConf >= 0.25f) frame.objHand else -1, sensitivity, pending)
         punch.update(history, reach, calibration?.mode ?: MovementMode.STANDARD, sensitivity, pending)
+        bow.update(frame, dominant, calibration?.mode ?: MovementMode.STANDARD, sensitivity, { h, t -> gunCtl.aimAt(h, t) }, pending)
         for (h in 0..1) {
             handX[h] = frame.wx[h] / reach
             handY[h] = frame.wy[h] / reach

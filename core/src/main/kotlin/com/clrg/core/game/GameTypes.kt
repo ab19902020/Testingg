@@ -59,6 +59,10 @@ class PlayerInput(val index: Int) {
     var gunHand = RIGHT
     /** Boxing: both fists up in front of the face. */
     var guard = false
+    /** Archery: 0 = no arrow, 1 = arrow nocked, 2 = drawing; how far drawn (0..1); the bow (aiming) hand. */
+    var bowState = 0
+    var bowDraw = 0f
+    var bowHand = LEFT
 
     /** Copies continuous state from the player's controls (events are delivered separately). */
     fun fill(c: PlayerControls, isTracked: Boolean) {
@@ -77,6 +81,9 @@ class PlayerInput(val index: Int) {
         for (h in 0..1) cocked[h] = g.trigger[h].cocked
         gunHand = g.gunHand
         guard = c.punch.guard
+        bowState = c.bow.state.ordinal
+        bowDraw = c.bow.draw
+        bowHand = c.bow.bowHand
     }
 
     fun clearState() {

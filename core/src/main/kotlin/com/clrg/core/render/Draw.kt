@@ -10,7 +10,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 enum class Expression { HAPPY, EXCITED, OOPS, FOCUSED }
-enum class Prop { NONE, RACKET, PADDLE, SNOWBALL, BOWLING_BALL, MITTENS_BIG, SHIELD, GOLF_CLUB, PUTTER }
+enum class Prop { NONE, RACKET, PADDLE, SNOWBALL, BOWLING_BALL, MITTENS_BIG, SHIELD, GOLF_CLUB, PUTTER, GLOVES, BOW, GUN }
 
 /**
  * Original, procedurally drawn art used across the collection (no external assets). Lighting convention: a soft key
@@ -577,7 +577,8 @@ object Draw {
             g.line(ex, ey, wx, wy, armW * 0.85f, skin)
             g.line(sx, sy, sx + (ex - sx) * 0.45f, sy + (ey - sy) * 0.45f, armW * 1.3f, color)
             val hr = h * 0.045f * mittenScale
-            g.fillCircleRadial(wx, wy, hr, wx - hr * 0.3f, wy - hr * 0.3f, hr * 1.4f, Colors.lighter(skin, 0.15f), skinDark)
+            if (prop == Prop.GLOVES) SportsDraw.glove(g, wx, wy, h * 0.15f * mittenScale, if (side == 0) 0xFFD32F2F.toInt() else 0xFFC62828.toInt(), fo)
+            else g.fillCircleRadial(wx, wy, hr, wx - hr * 0.3f, wy - hr * 0.3f, hr * 1.4f, Colors.lighter(skin, 0.15f), skinDark)
             if (side == propHand) { handX = wx; handY = wy; foreAng = fo }
             bothX[side] = wx; bothY[side] = wy
         }
@@ -723,7 +724,7 @@ object Draw {
             Prop.SNOWBALL -> g.fillCircle(mx, my - h * 0.04f, h * 0.06f, Colors.SNOW)
             Prop.BOWLING_BALL -> { g.fillCircle(mx, my, h * 0.075f, 0xFF7B1FA2.toInt()); g.fillCircle(mx - h * 0.02f, my - h * 0.025f, h * 0.012f, 0xFF311B92.toInt()) }
             Prop.MITTENS_BIG -> g.fillCircle(mx, my, h * 0.07f, Colors.withAlpha(Colors.WHITE, 0.5f))
-            Prop.SHIELD, Prop.NONE, Prop.GOLF_CLUB, Prop.PUTTER -> Unit
+            Prop.SHIELD, Prop.NONE, Prop.GOLF_CLUB, Prop.PUTTER, Prop.GLOVES, Prop.BOW, Prop.GUN -> Unit
         }
     }
 

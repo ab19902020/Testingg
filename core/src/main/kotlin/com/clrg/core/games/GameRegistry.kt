@@ -36,6 +36,8 @@ object GameRegistry {
 
     val sports: List<Entry> = listOf(
         sport(ClayShootingGame.INFO, ::ClayShootingGame),
+        sport(BoxingGame.INFO, ::BoxingGame),
+        sport(ArcheryGame.INFO, ::ArcheryGame),
         sport(TennisGame.SPORTS_INFO, ::TennisGame),
         sport(TableTennisGame.SPORTS_INFO, ::TableTennisGame),
         sport(BowlingGame.SPORTS_INFO, ::BowlingGame),
