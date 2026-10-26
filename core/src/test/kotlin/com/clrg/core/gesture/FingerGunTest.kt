@@ -24,8 +24,9 @@ class FingerGunTest {
         val gunUp = shapeOf(FingerShape.GUN, 1f)
         val gunDown = shapeOf(FingerShape.GUN, 0f)
         assertTrue(gunUp.gun && gunDown.gun)
-        assertTrue(gunUp.thumbGap > FingerTrigger.OPEN_GAP, "raised thumb ${gunUp.thumbGap}")
-        assertTrue(gunDown.thumbGap < FingerTrigger.CLOSED_GAP, "dropped thumb ${gunDown.thumbGap}")
+        // the same thumb levels as the real hand model gives on real photos (HandProbe): ~0.2-0.35 down, ~1-1.5 up
+        assertTrue(gunUp.thumbLevel > 0.85f, "raised thumb ${gunUp.thumbLevel}")
+        assertTrue(gunDown.thumbLevel < 0.4f, "dropped thumb ${gunDown.thumbLevel}")
         assertFalse(shapeOf(FingerShape.FIST, 1f).gun)
         assertFalse(shapeOf(FingerShape.OPEN, 1f).gun)
     }

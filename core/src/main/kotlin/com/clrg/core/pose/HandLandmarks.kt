@@ -136,7 +136,7 @@ class HandLandmarkTracker(private val runner: HandModelRunner) {
                     obs = run(src, toBuffer, roi, p, h)
                 }
                 if (obs == null) { prevRoi[p][h] = null; continue }
-                prevRoi[p][h] = trackingRoi(obs)
+                prevRoi[p][h] = trackingRoi(obs, prevRoi[p][h]?.rotation ?: Float.NaN)
                 prevTrack[p][h] = pose.trackId
                 val arr = pose.hands ?: arrayOfNulls<HandObservation>(2).also { pose.hands = it }
                 arr[h] = obs
@@ -193,12 +193,19 @@ class HandLandmarkTracker(private val runner: HandModelRunner) {
             return RotatedRect(cx, cy, d * POSE_ROI_SIDE, rot)
         }
 
-        /** The next frame's crop from this frame's hand landmarks (MediaPipe HandLandmarksToRect + transformation). */
-        fun trackingRoi(o: HandObservation): RotatedRect {
+        /**
+         * The next frame's crop from this frame's hand landmarks (MediaPipe HandLandmarksToRect + transformation).
+         *
+         * MediaPipe turns the crop so the wrist-to-knuckles direction points up. A finger gun pointing at the camera
+         * is seen end-on: that direction is only a few pixels long and swings about from frame to frame, turning the
+         * crop with it. So the more end-on the hand, the more the crop's direction comes from the knuckle line
+         * instead (fingers up = across the knuckles), which stays long; and it eases from [prevRotation].
+         */
+        fun trackingRoi(o: HandObservation, prevRotation: Float = Float.NaN): RotatedRect {
             val x0 = o.x[HandLm.WRIST]; val y0 = o.y[HandLm.WRIST]
             val x1 = ((o.x[HandLm.INDEX_MCP] + o.x[HandLm.RING_MCP]) / 2f + o.x[HandLm.MIDDLE_MCP]) / 2f
             val y1 = ((o.y[HandLm.INDEX_MCP] + o.y[HandLm.RING_MCP]) / 2f + o.y[HandLm.MIDDLE_MCP]) / 2f
-            val rot = normalizeRadians((Math.PI / 2).toFloat() - atan2(-(y1 - y0), x1 - x0))
+            val rot = cropRotation(o, x1 - x0, y1 - y0, prevRotation)
             // bounding box of the steady landmarks in the rotated frame
             val c = cos(-rot); val s = sin(-rot)
             var minU = Float.MAX_VALUE; var maxU = -Float.MAX_VALUE; var minV = Float.MAX_VALUE; var maxV = -Float.MAX_VALUE
@@ -214,6 +221,41 @@ class HandLandmarkTracker(private val runner: HandModelRunner) {
             val cx = cr * cu - sr * cv; val cy = sr * cu + cr * cv
             return RotatedRect(cx, cy, max(w, hgt) * TRACK_ROI_SCALE, rot)
         }
+
+        /** Crop rotation (0 = fingers up) for a hand whose wrist-to-knuckles vector is ([px], [py]). */
+        private fun cropRotation(o: HandObservation, px: Float, py: Float, prevRotation: Float): Float {
+            fun rotOf(dx: Float, dy: Float) = normalizeRadians((Math.PI / 2).toFloat() - atan2(-dy, dx))
+            val kx = o.x[HandLm.PINKY_MCP] - o.x[HandLm.INDEX_MCP]; val ky = o.y[HandLm.PINKY_MCP] - o.y[HandLm.INDEX_MCP]
+            val kw = hypot(kx, ky)
+            val pl = hypot(px, py)
+            if (kw < 1e-3f) return if (pl > 1e-3f) rotOf(px, py) else (if (prevRotation.isNaN()) 0f else prevRotation)
+            // the two directions across the knuckle line; take the one on the fingers' side of the wrist, or (end-on,
+            // no clear side) the one nearer the last crop's direction, else nearer upright
+            var nx = ky / kw; var ny = -kx / kw
+            val dotPalm = nx * px + ny * py
+            val flip = when {
+                // the palm clearly shows which side the fingers are on
+                kotlin.math.abs(dotPalm) > 0.5f * kw -> dotPalm < 0f
+                // otherwise keep to the side the crop was already facing (noise must not flip it over)
+                !prevRotation.isNaN() -> kotlin.math.abs(angleDiff(rotOf(nx, ny), prevRotation)) > Math.PI / 2
+                pl > 1e-3f -> dotPalm < 0f
+                else -> kotlin.math.abs(rotOf(nx, ny)) > Math.PI / 2
+            }
+            if (flip) { nx = -nx; ny = -ny }
+            // how end-on: palm at least a knuckle width long on the picture = seen from the side, use it as MediaPipe does
+            val w = ((pl / kw - 0.5f) / 0.5f).coerceIn(0f, 1f)
+            val ux = if (pl > 1e-6f) px / pl else 0f; val uy = if (pl > 1e-6f) py / pl else 0f
+            val dx = w * ux + (1 - w) * nx; val dy = w * uy + (1 - w) * ny
+            var rot = if (hypot(dx, dy) < 1e-4f) rotOf(nx, ny) else rotOf(dx, dy)
+            if (!prevRotation.isNaN()) {
+                val d = angleDiff(rot, prevRotation)
+                // ease small changes (jitter), follow big ones (the hand really turned)
+                if (kotlin.math.abs(d) < 0.8f && w < 1f) rot = normalizeRadians(prevRotation + d * 0.4f)
+            }
+            return rot
+        }
+
+        private fun angleDiff(a: Float, b: Float): Float = normalizeRadians(a - b)
 
         /** Model output (crop pixels) -> image coordinates. */
         fun decode(raw: FloatArray, roi: RotatedRect, hand: Int, presence: Float): HandObservation {

@@ -51,6 +51,18 @@ class RealModelServer(python: String, models: String) : AutoCloseable {
         }
     }
 
+    var handCalls = 0
+
+    /** The MediaPipe hand landmark model: [variant] 'l' = lite, 'f' = full. */
+    fun handRunner(variant: Char): HandModelRunner = object : HandModelRunner {
+        override fun runHand(input: FloatArray, landmarks: FloatArray, presence: FloatArray) {
+            handCalls++
+            send('H', variant, input)
+            recv(63).copyInto(landmarks)
+            recv(1).copyInto(presence)
+        }
+    }
+
     override fun close() {
         try { p.outputStream.write(byteArrayOf('Q'.code.toByte(), 'Q'.code.toByte())); p.outputStream.close() } catch (_: java.io.IOException) {}
         if (!p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) p.destroyForcibly()

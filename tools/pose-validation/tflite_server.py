@@ -9,7 +9,7 @@ Protocol (little-endian float32):
             landmarks -> 195 landmarks + 1 flag + 64*64*39 heatmap
             hand      -> 63 hand landmarks + 1 presence
 Usage: python tflite_server.py <models_dir>   (models_dir contains lite/ and full/ with the two pose .tflite files,
-       and hand/hand_landmark_lite.tflite)
+       and hand/hand_landmark_lite.tflite and hand/hand_landmark_full.tflite; variant 'l'/'f' picks the hand model)
 """
 import sys
 import numpy as np
@@ -57,7 +57,7 @@ while True:
     elif op == b"H":
         n = 224 * 224 * 3
         x = np.frombuffer(inp.read(n * 4), dtype="<f4").reshape(1, 224, 224, 3)
-        it, i, o = interp("hand", "hand_landmark_lite")
+        it, i, o = interp("hand", "hand_landmark_lite" if variant == "lite" else "hand_landmark_full")
         it.set_tensor(i, x)
         it.invoke()
         out.write(it.get_tensor(o["Identity"]).astype("<f4").tobytes())
