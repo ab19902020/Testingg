@@ -9,7 +9,8 @@ Nothing in any game asks you to run, jump, cross over to the other player, crouc
 > These controls are implemented and covered by automated tests that feed in synthetic body movements (and, for
 > held objects, generated pictures; for finger guns, the real hand model on still photos of hands). The owner has
 > played up to 1.6.0 on their phone; the 1.7.0 games and movements (finger guns, punches, the bow, darts throws)
-> have **not yet been tried with real people in front of a real camera** (see [TEST_REPORT.md](TEST_REPORT.md)).
+> and the 1.8.0 menus, golf screens and tracking changes have **not yet been tried with real people in front of a
+> real camera** (see [TEST_REPORT.md](TEST_REPORT.md)). The controls themselves did not change in 1.8.0.
 
 The main menu has two halves - **Sports & Arcade** and **Christmas** - switched with the two buttons under the
 title. Quick Match, Play Solo, tournaments and How to Play show the games of the chosen half.
@@ -33,6 +34,7 @@ title. Quick Match, Play Solo, tournaments and How to Play show the games of the
 | Timing test | **Settings -> Timing -> Run the timing test**: a snowball flies into a ring ten times; swing like a tennis shot as each one reaches the ring *on the TV*. The game measures your phone + TV delay and allows for it in the timing games. If swings still feel judged late, raise the allowance a little on the same page; early, lower it. |
 | Tracking meter | On the "Stand in your areas" screen, each player's bars (Excellent, Good, Fair, Weak) show how well the camera sees them, with a tip when something would help (come closer, step back, more light, keep both hands in the picture). |
 | After a match | Rematch, Choose another game, Main menu (or Continue tournament). |
+| Sound | **Settings -> Sound**: music, effects and **Background sounds** (the crowd, birdsong, wind or fire behind each game, new in 1.8.0) each have their own volume. |
 
 **Left-handed players:** during calibration, raise the hand you want to play with. Games that use one "playing
 hand" (table tennis forehand/backhand) follow that choice; games that accept either hand accept both.
@@ -139,7 +141,7 @@ x2, bull 50, outer bull 25.
 ### Penalty Save, Tennis, Table Tennis, Bowling, Golf
 
 The same controls as their Christmas versions below (Goalkeepers, Christmas Tennis, Table Tennis, Festive Bowling,
-Christmas Golf), in sports dress. Golf has three summer courses.
+Christmas Golf), in sports dress. Golf has three summer courses plus the 9-hole Championship Tour.
 
 ---
 
@@ -149,9 +151,16 @@ Only the player whose turn it is stands in front of the camera; everyone else st
 step in, stand still a moment and **raise a hand** to start your turn. You play the whole hole, then the next golfer
 steps up. (Playing alone, or with only computer golfers, you just carry on.)
 
+Choose a course on the set-up screen: three 3-hole courses, or the **Sleigh Ride Tour** (Championship Tour in
+Sports mode) that plays all nine holes in a row. Each hole opens with a short **flyover** from the green back to the
+tee, with a card naming the par, length and hazards; raising a hand starts your turn straight away.
+
 The hole is shown in 3D from behind your ball: the planned flight is drawn through the air, the camera follows the
 ball down the fairway after each shot, and putts are seen low along the green. A snowman golfer beside the ball copies
-your swing, the small map shows the whole hole, and the camera inset marks your hands.
+your swing, the small map shows the whole hole, and the camera inset marks your hands. The cards at the top show
+the hole, your distance to the pin, your lie and the wind; a swing coach card appears only while a camera player is
+aiming. A coloured tracer follows each shot and a ring marks where it lands; BIRDIE!, EAGLE! or HOLE IN ONE! pop
+up when the ball drops.
 
 | Movement | Action |
 |---|---|
@@ -262,7 +271,7 @@ overhead and more tolerance.
 | Lean left / right | Steer |
 | Hands together in front of your chest | Tuck for speed |
 
-Pass between every pair of flags; a missed gate adds 2 seconds. Presents take 0.5 seconds off; trees and rocks stop
+Seen in 3D from behind your sleigh, racing down a forest piste. Pass between every pair of flags; a missed gate adds 2 seconds. Presents take 0.5 seconds off; trees and rocks stop
 you for a moment. **Steering-only mode** (Settings -> Accessibility): no tuck, speed is automatic for both.
 
 ## 9. Christmas Goalkeepers - most saves

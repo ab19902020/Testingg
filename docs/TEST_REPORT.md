@@ -1,6 +1,6 @@
 # Test report
 
-Date: 2026-10-25 (version 1.7.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+Date: 2026-10-26 (version 1.8.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
 (no KVM) or TV was available here.** The only real-device evidence is the owner's reports that versions 1.0.1 to
 1.6.0 run on their phone, with their comments on how well tracking works (section 4). Everything else that needs a device is marked **UNVERIFIED**.
 
@@ -8,7 +8,7 @@ Date: 2026-10-25 (version 1.7.0). Environment: Linux cloud container, OpenJDK 21
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **192 passed, 0 failed, 2 skipped** (the skipped ones are developer diagnostics) (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **208 passed, 0 failed, 6 skipped** (the skipped ones are developer tools: diagnostics, screenshots, a sound dump and the tracking benchmark) (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
 | Finger tracking with the real MediaPipe hand model (on still photos of hands, JVM) | **Passed** - finger shapes read correctly, also on hands shrunk to ~70 px; hands found from the body pose on a real two-person photo |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
@@ -21,6 +21,8 @@ Date: 2026-10-25 (version 1.7.0). Environment: Linux cloud container, OpenJDK 21
 | Left/right check, upside-down fix, new Present Catch, magnetic cursors (1.5.0) | Passed in JVM tests with a simulated mirrored / upside-down camera and simulated bodies; owner reports 1.5.0 runs |
 | Swing detection rework, tennis rules, hand pointer, 3D golf with grip, held objects, motion test, sharp-motion exposure (1.6.0) | Passed in JVM tests with simulated bodies, simulated tracking dropouts and jitter, and generated pictures (held objects); the camera exposure code builds but is **not yet tried on a phone**; none of 1.6.0 has been tried with a real camera yet |
 | Sports & Arcade mode, finger guns, recoil flick, punches, bow, Clay Shooting, Boxing, Archery, Shooting Gallery, Darts, Penalty Save, sports looks, toy-gun objects (1.7.0) | Passed in JVM tests with simulated bodies, scripted game input and simulated app flows; finger shapes also with the real hand model on still photos. The hand model's Android runner builds but is **not yet tried on a phone**; none of 1.7.0 has been tried with a real camera yet |
+| New sound, menus and game screens, graphics pass, golf upgrade (1.8.0) | Passed in JVM tests: sound rendering, levels, stereo, headroom, ambience and ducking measured on the JVM; screens and games rendered with Java2D and checked by eye; golf matches with simulated players. How the sound comes out of a phone or TV speaker and how smoothly the heavier graphics draw on a phone are **not yet tried** |
+| Tracking aids: dark-room search, brightened crops, jump guard, steadier crops (1.8.0) | Passed with the **real pose models on a real two-person photo turned into hard sequences** (noise, darkening, backlight, sway, lunges, jumps): better in most sequences, worse in one (section 1). A proxy for a camera: **not yet tried with a live camera** |
 | On-device performance (fps, latency, thermal) | **UNVERIFIED** - no numbers measured; none are claimed |
 | TV output over USB-C/HDMI, Presentation mode, cable unplug | **UNVERIFIED** |
 | Audio output and latency | **UNVERIFIED** |
@@ -29,10 +31,65 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (194: 192 passed, 2 skipped)
+## 1. Automated tests (214: 208 passed, 6 skipped)
 
-Run: `./gradlew :core:test` (184 tests, two of them skipped developer diagnostics) plus 10 real-model tests that need the validation environment
-(`tools/pose-validation/run_real_model_tests.sh`).
+Run: `./gradlew :core:test` with the real-model validation environment configured
+(`tools/pose-validation/run_real_model_tests.sh` sets it up). 13 of the tests use the real pose and hand models and are
+skipped without that environment. The 6 skipped tests are developer tools that run only when asked: two
+diagnostics, a sound dump, two screenshot tools and the tracking benchmark.
+
+### Sound, screens, golf and tracking (new in 1.8.0)
+
+* `AudioTest` (9 passed, plus the skipped dump tool) - every one of the 77 effects has a sensible length, does not
+  clip, is not near-silent and ends without a click, and the whole bank fits in 14 MiB; rendering is repeatable;
+  crowds and rooms are really stereo; a busy mix (many effects at once over music and ambience) stays inside full
+  scale; background sounds sit at a quiet level (-50 to -22 dB) and fade in and out cleanly; bigger rooms ring
+  longer; big moments dip the music; asking for effects before the bank has rendered is safe. All measured on the
+  rendered samples on the JVM - not heard through a phone or TV speaker.
+* Screens and games: rendered with Java2D by the developer screenshot tools and checked by eye
+  ([docs/images/screens_1_8_0.jpg](images/screens_1_8_0.jpg): menus, game list, instructions, boxing, results, golf
+  flyover and play, Sleigh Slalom, Reindeer Racing, clays, darts, bowling, snowballs). The existing game and flow
+  tests drive all of them with simulated players. `GolfMatchTest` now also plays the 9-hole tour.
+* `AutoLevelTest` (4 passed) - well-lit crops are left alone; dark crops are brightened; a dark figure in front of a
+  bright window is lifted; the detector's input range and black padding are handled.
+* `RealModelTrackingTest` (3 passed, **real BlazePose full models** on MediaPipe's Apache-2.0 photo of two people,
+  turned into sequences):
+
+  | Test | 1.7.0 settings | 1.8.0 settings |
+  |---|---|---|
+  | Dark room (picture darkened about 2.7 stops, with noise): frames with both players found | 0 / 16 | 16 / 16 |
+  | Fast side-by-side sway: times a track jumped clearly onto the other person | 1 | 0 |
+  | Noisy still picture: joint jitter (fraction of the picture height) | 0.0388 | 0.0267 |
+
+* `TrackingBench` (developer tool, `-Pclrg.trackbench=1`) - the same real models on 12 harder sequences made from the
+  same photo. Found = frames with both people found; error = average key-joint distance from MediaPipe's own result on the
+  untouched photo (moved and scaled along with the picture), as a fraction of the picture size; jitter = how much
+  the joints wander on the still sequences (standard deviation, fraction of the picture height); ids = track ids used (2 is
+  ideal); runs = body-model runs per frame (cost):
+
+  | Sequence | 1.7.0: found / error / jitter / ids / runs | 1.8.0: found / error / jitter / ids / runs |
+  |---|---|---|
+  | still | 100% / 0.0206 / 0.0238 / 2 / 2.0 | 100% / 0.0213 / 0.0204 / 2 / 2.0 |
+  | noise | 100% / 0.0299 / 0.0405 / 3 / 2.0 | 100% / 0.0288 / 0.0223 / 2 / 2.0 |
+  | dim (30% light) | 100% / 0.0509 / 0.0497 / 3 / 2.1 | 100% / 0.0331 / 0.0300 / 2 / 2.0 |
+  | dark (15%) | **0%** / 0.0256 (one person) / - / 1 / 1.0 | **100%** / 0.0384 / 0.0231 / 2 / 2.0 |
+  | very dark (9%) | 75% / 0.0576 / 0.0242 / 2 / 1.8 | 75% / 0.0430 / 0.0216 / 2 / 1.8 |
+  | backlit (bright window) | 100% / 0.0607 / 0.0540 / 3 / 2.1 | 100% / 0.0607 / 0.0355 / 2 / 2.0 |
+  | fast sway | 97% / 0.0372 / - / 4 / 2.1 | **87%** / 0.0391 / - / 4 / 2.2 |
+  | lunges | 93% / 0.0366 / - / 6 / 2.1 | 97% / 0.0314 / - / 6 / 2.3 |
+  | jumping | 100% / 0.0248 / - / 2 / 2.0 | 100% / 0.0223 / - / 2 / 2.0 |
+  | walking towards the camera | 100% / 0.0269 / - / 2 / 2.0 | 100% / 0.0281 / - / 2 / 2.0 |
+  | dropped frames | 100% / 0.0222 / - / 4 / 1.8 | 100% / 0.0218 / - / 4 / 1.9 |
+  | dark and swaying | 57% / 0.0494 / - / 3 / 1.6 | **97%** / 0.0438 / - / 4 / 2.1 |
+
+  Better on most sequences; **worse on fast sway** (87% against 97% of frames with both found - the lost frames are
+  where the sequence pushes a player partly out of the picture) and slightly worse on walking towards the camera
+  (error 0.0281 against 0.0269). On a second, generated two-person scene every sequence found both people in 100% of
+  frames with both settings; there the jump guard costs up to 2.4 runs per frame in fast sway (1.7.0: 2.0) and 2.6
+  in lunges (2.1). These sequences are made by moving, darkening and adding noise to a still photo: they have no
+  motion blur, rolling shutter, auto-exposure or real sensor noise, and say nothing about speed on a phone. **They
+  are a stand-in for a camera, not proof that tracking works in a real room.** Movement prediction of crops was also
+  measured and left off (worse on jumping and sway).
 
 ### Finger guns, punches, the bow and the new games (new in 1.7.0)
 
@@ -301,19 +358,20 @@ the other player's cursor is locked for 0.8 s and must then dwell again in full;
 progress; no selection while cursors are off (live gameplay) or on disabled buttons.
 
 Screens rendered by these tests (Java2D, simulated input, not device screenshots):
-[docs/images/test_render_contact_sheet.jpg](images/test_render_contact_sheet.jpg).
+[docs/images/test_render_contact_sheet.jpg](images/test_render_contact_sheet.jpg) (earlier versions) and
+[docs/images/screens_1_8_0.jpg](images/screens_1_8_0.jpg) (1.8.0).
 
 ## 2. APK checks (passed)
 
 | Check | Result |
 |---|---|
-| File | `dist/LivingRoomGames-debug.apk`, 23,532,760 bytes, SHA-256 `8534c26b88fee4b11ae3ca919b7c18a27e8e4d5bebdda15c4ff821cb18353802` |
-| Package / version | `com.clrg.christmasgames` (unchanged, so it installs over earlier versions), versionCode 9, versionName 1.7.0, label "Living Room Games" |
+| File | `dist/LivingRoomGames-debug.apk`, 23,631,064 bytes, SHA-256 `b2d1bc297f8004ac0baeb63ef6030dcb9453b07e8cce58c768cf881ed8b4c0ef` |
+| Package / version | `com.clrg.christmasgames` (unchanged, so it installs over earlier versions), versionCode 10, versionName 1.8.0, label "Living Room Games" |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
 | Signature | `apksigner verify --min-sdk-version 24`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
 | Reproducibility | Two clean builds (`./gradlew clean :app:assembleDebugApk`) produced byte-identical APKs with the same debug key |
 | Alignment | `zipalign -p 4` |
-| Code | single `classes.dex`, 1,686 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
+| Code | single `classes.dex`, 1,736 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
 | Models | 5 `.tflite` files (4 pose + 1 hand landmark), stored uncompressed (memory-mappable); the build downloads and checks each against a SHA-256 |
 | Native libs | TFLite + GPU delegate for `arm64-v8a` and `x86_64` |
 | Permissions | `CAMERA` only. No `INTERNET` (enforced by the build) |
@@ -355,6 +413,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Report | Version | Status |
 |---|---|---|
+| "Improve the UI menu and game screens, make golf better, massive graphics improvement on every mini game, massive sound FX upgrade ... then more upgrades for the camera tracking, we need it flawless" - owner | 1.7.0 | 1.8.0 rebuilds the sound, menus and in-game screens, improves the graphics of the mini games, upgrades golf and adds tracking aids for dark rooms, backlight and players swapping tracks (section 1). Tracking was measured with the real models on photo sequences only; "flawless" cannot be shown without the phone. **Not yet confirmed on the phone.** |
 | "It works better now. We're not perfect ... I don't want it now to be purely a Christmas game - like a Nintendo Wii ... boxing 1v1, archery, shooting with your hand like a gun, clay pigeon shooting, first to hit gets the point or most things out of the sky ... 3D where it can be ... add objects like a fake gun before a game, or use your fingers with the thumb clicking down to shoot" - owner | 1.6.0 | 1.7.0 adds the Sports & Arcade mode (Christmas kept as its own mode), finger tracking with the thumb trigger, Clay Shooting (first to hit, and a flurry round), Boxing, Archery, Shooting Gallery, Darts, Penalty Save, sports versions of tennis, table tennis, bowling and golf, and teaching a toy gun or racket from a game's start screen. **Not yet confirmed on the phone.** |
 | "The tennis game's no good - the ball goes past you even when you're swinging ... golf needs to be 3D, tell you to put your hands together ... add your own objects (a stick as the racket) ... the motion tracker: you've got to concentrate and move your hand all the time" - owner | 1.5.0 | Causes found in code: a swing before the bounce was ignored and an early swing (or a backswing) used up the shot and blocked the real swing for 0.35 s; fast arms were read from smoothed points and missed when the wrist blurred; the pointer's bottom row sat where it switched off, edges needed a stretch across the body, and forward prediction made it overshoot. 1.6.0 reworks swing detection and the rally rules, rebuilds the pointer, puts golf in 3D with a grip, adds held objects, the motion test screen and a sharper camera exposure. **Not yet confirmed on the phone.** |
 | "It's reverse mirroring - your hands go the opposite way to you moving them on the screen ... the present game is crap" - owner | 1.4.0 | The camera picture on the owner's phone is most likely delivered already mirrored for the camera they use, so the game's own mirroring reversed it. 1.5.0 detects and fixes this per camera (left/right check), adds Flip left/right, and rebuilds Present Catch. **Not yet confirmed on the phone.** |
@@ -430,6 +489,16 @@ overlay**. Record PASS/FAIL and the overlay numbers. Repeat key items on a secon
     releases; slowly bringing the hands together puts the arrow down.
 25l. [ ] Darts: the dart lands where the sight was held before the throw; a quick push throws, a slow reach does not.
 25m. [ ] Sports mode overall: mode switch, sports characters, summer golf; frame rate of the 3D scenes.
+25n. [ ] 1.8.0 sound: effects, music and background sounds all audible on the phone and on the TV; the three volume
+    settings work; nothing crackles or clips in a busy moment (a boxing knockdown, a clay flurry, a strike); menus
+    make sound straight after launch.
+25o. [ ] 1.8.0 screens: main menu cards, game list previews, instructions card, pause panel, podium and scoreboard
+    draw correctly on the TV; note the render fps in Sleigh Slalom (now 3D), Reindeer Racing and golf flyovers; turn
+    on Reduced effects and compare.
+25p. [ ] 1.8.0 tracking, compared with 1.7.0 if possible: (a) a dim room with one lamp - both players found, note the
+    tracking meter; (b) a bright window behind the players; (c) two players side by side swaying and lunging quickly
+    for a minute - colours never swap; (d) one player jumping. Note the pose time per frame in the overlay during
+    fast movement (the jump guard can add model runs).
 
 **TV**
 26. [ ] HDMI connected before launch: TV detected (name, resolution, Hz shown); game on TV, phone shows camera +

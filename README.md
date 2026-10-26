@@ -15,17 +15,19 @@ controlled with your body: lift a hand and hold it over a button. Real objects c
 racket or stick as your racket or club, a **toy gun** for the shooting games - right from a game's start screen.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
-> reports that versions up to 1.6.0 run on their phone and that 1.6.0 tracks better, "not perfect". 1.7.0 adds the
-> new games, finger tracking, punches and the bow. These are tested with simulated bodies, generated pictures and -
-> for finger tracking - the real hand model on real still photos of hands. **None of it has been tried on the
-> owner's phone yet**: how well finger guns, punches and the bow work in a real living room (distance, light,
-> motion blur, speed of the phone) is not known until then. See [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
+> reports that versions up to 1.6.0 run on their phone and that 1.6.0 tracks better, "not perfect". 1.7.0 added the
+> sports games, finger tracking, punches and the bow; 1.8.0 adds new sound, menus, graphics, golf and tracking
+> aids. These are tested with simulated bodies, generated pictures and the real pose and hand models on still
+> photos (turned into moving sequences for the tracking checks). **None of 1.7.0 or 1.8.0 has been tried on the
+> owner's phone yet**: how well tracking works in a real living room (distance, light, motion blur, speed of the
+> phone), how the sound comes out of a TV and how smoothly the new graphics draw are not known until then. See
+> [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
 
 ## What's in the box
 
 | | |
 |---|---|
-| APK | `dist/LivingRoomGames-debug.apk` (debug-signed, ~23.5 MB, arm64-v8a + x86_64), SHA-256 in `dist/SHA256SUMS` |
+| APK | `dist/LivingRoomGames-debug.apk` (debug-signed, ~23.6 MB, arm64-v8a + x86_64), SHA-256 in `dist/SHA256SUMS` |
 | Build guide + versions | [BUILDING.md](BUILDING.md) |
 | Install + TV setup | [docs/INSTALL_AND_TV_SETUP.md](docs/INSTALL_AND_TV_SETUP.md) |
 | Controls for every game | [docs/CONTROLS.md](docs/CONTROLS.md) |
@@ -33,6 +35,47 @@ racket or stick as your racket or club, a **toy gun** for the shooting games - r
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.8.0 - new sound, new menus, better graphics, golf and tracking
+
+* **Sound.** Every effect rebuilt in stereo from layered recipes (77 effects, 43 of them new: crowds, applause,
+  fanfares, golf, shooting, archery, darts, boxing, ball sports, menus), loudness-matched with a weighting for small
+  speakers. Each venue has its own room echo and a live background (arena crowd, park birdsong, winter wind,
+  fireside, bowling lanes) with its own **Background sounds** volume in Settings. Music dips under big moments and a
+  limiter stops loud moments from clipping. Captions cover the new sounds.
+* **Menus and game screens.** A drawn icon set, buttons that lift and glow under a hand, new game cards with live
+  previews, play-style tags and a hold-to-choose bar. New main menu (logo, Sports/Christmas switch, three big cards
+  for Quick Match, Play Solo and Golf), new instructions card, pause panel and podium results, a broadcast-style
+  scoreboard with score pops in every game, and a new countdown.
+* **Graphics.** Sleigh Slalom is now 3D from behind the sleigh, down a forest piste. Reindeer Racing has galloping
+  reindeer seen from behind and cheering snow buddies. Richer skies, clouds, mountains and tree lines outdoors; a
+  proper clay range; a lit dartboard cabinet; neighbouring bowling lanes; a new impact flash on punches, clays,
+  targets, saves, snowball hits and strikes.
+* **Golf.** The course fills the screen with a cleaner HUD (hole card, player card with distance, lie and wind,
+  swing coach only while you aim). Each hole opens with a flyover from the green to the tee. BIRDIE!/EAGLE!/HOLE IN
+  ONE! pop-ups, a coloured shot tracer and a ring where the ball lands, clouds, leafy trees, glinting water, raked
+  bunkers. New 9-hole course (Sleigh Ride Tour / Championship Tour) playing every hole in a row.
+* **Camera tracking.** Dark rooms: if the normal search finds nobody new, a brightened copy of the picture is
+  searched too, and every body and hand crop is brightened when it is dark or backlit. A person whose position
+  suddenly jumps (usually onto the other player) is re-checked where their own movement says they should be.
+  Steadier crops when still, one wider retry before a person is dropped, a lower bar for keeping someone already
+  tracked, and hand crops that move with the body's wrist. Movement prediction of crops was tried and left off: it
+  measured worse.
+
+  Measured with the real pose models on a real photo of two people turned into hard sequences (noise, dim, dark,
+  backlit, swaying, lunging, jumping) - **a stand-in for a camera, not proof of real-camera tracking**:
+
+  | Sequence | 1.7.0 settings | 1.8.0 settings |
+  |---|---|---|
+  | Dark room (~2.7 stops under): both players found | 0% of frames | 100% |
+  | Dark and swaying: both found | 57% | 97% |
+  | Dim: joint error / jitter (fraction of picture size) | 0.051 / 0.050 | 0.033 / 0.030 |
+  | Noisy still picture: jitter | 0.041 | 0.022 |
+  | Backlit: jitter | 0.054 | 0.036 |
+  | Fast side-to-side sway: track jumped onto the other player | 1 time | 0 |
+  | Fast sway: both found | 97% | **87%** (worse: frames where the test pushes a player half out of the picture) |
+
+  It is not "flawless" and cannot be shown to be from here: the real test is a session in your living room.
 
 ## Changes in 1.7.0 - a console, not just Christmas
 

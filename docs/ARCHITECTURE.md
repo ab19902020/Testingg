@@ -60,6 +60,26 @@ the steady landmarks, shifted towards the fingers), falling back to the body pos
 attached to the person (`RawPose.hands` -> `PersonPose.hands` -> `BodyFrame.fing`). On Android the model runs on the
 CPU (XNNPACK, 2 threads) in its own interpreter, created on first use.
 
+**Tracking aids (1.8.0).** Each is a switch in `PipelineConfig`, so old and new settings can be compared:
+
+* `autoLevel` / `autoLevelDetector` - `AutoLevel` reads a luminance histogram of each landmark or hand crop (every
+  5th pixel, padding ignored) and, when it is dark or backlit, applies a gain (up to 4x) and a gamma that lift the
+  middle tones. The detector first searches the raw picture; only if it finds nobody new does it search a
+  brightened copy (no model run when the picture is not dark).
+* `retryWider` - a tracked person whose crop fails is tried once more with a crop 1.45x wider before being dropped.
+* `smoothRoi` - the next frame's crop follows the landmarks with a gain that rises with movement, so a still player's
+  crop (and so their landmarks) is steadier while fast movement is followed at once.
+* `keepPresence` - a lower presence score is accepted for someone already tracked than for a new person.
+* `guardJumps` / `jumpDev` - each track keeps its measured box and velocity. If a new measurement lands further than
+  `jumpDev` (in crop sizes) from where the track's own motion predicts, the landmark model is run again at the
+  predicted spot and that result is used if it fits clearly better. With `jumpTargeted` (on) this check only runs
+  when the jump moved the track towards another tracked person - the case that swaps players - so ordinary fast
+  movement costs no extra model runs. When two tracks end up on one person, the one that jumped is dropped.
+* `predictMotion` - moving crops ahead along each person's velocity. Off: it measured worse on jumps and sways.
+
+Hand crops also move with the body pose's wrist between frames (`HandLandmarkTracker`). The measurements behind
+these choices are in [TEST_REPORT.md](TEST_REPORT.md) (`TrackingBench`, `RealModelTrackingTest`).
+
 ## Identity tracking (`core/tracking`)
 
 `PlayerTracker` keeps two slots (left and right player):
@@ -247,6 +267,18 @@ Immediate-mode UI on a virtual 1080-unit-high canvas (width follows the screen's
 D-pad/keyboard focus, and two hands-free dwell cursors (one per calibrated player). Dwell protection: full hold
 time, must leave a button before it can fire again, 0.8 s global lock after any selection, cursors off during
 live play.
+
+## Sound (`core/audio`)
+
+* `Dsp` - noise colours, biquad filters, a Freeverb-style reverb, resonator banks, a table sine and a limiter.
+* `SfxSynth` - every effect is a layered stereo recipe rendered at start-up (menu sounds first, so menus are never
+  silent while the rest render), loudness-normalised with a weighting for small speakers and stored as 16-bit.
+  Each `Sfx` carries its level, reverb send, pitch variation and whether it ducks the music.
+* `Ambience` / `AmbienceGen` - live background beds per venue (arena, park, winter, fireside, lanes), generated as
+  they play, with their own volume; `Soundscape` picks the ambience and `Room` (reverb size) for each game.
+* `AudioEngine` - the stereo mixer: voices with pan and pitch, one reverb bus set by the current room, music ducking
+  under big moments, and a master limiter. All of it runs on the JVM, so `AudioTest` checks levels, clipping,
+  stereo width, headroom, ambience and ducking without a device.
 
 ## Android layer (`app`)
 

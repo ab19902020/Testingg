@@ -20,7 +20,11 @@ device, though: the build environment had no Android device and no emulator, and
   the sharp-motion camera exposure;
 * the 1.7.0 changes are untested on a phone: finger tracking (finger guns and the thumb trigger), the recoil flick,
   punches, the bow, darts throws, all the new games (Clay Shooting, Boxing, Archery, Shooting Gallery, Darts,
-  Penalty Save), the sports looks and the toy-gun objects.
+  Penalty Save), the sports looks and the toy-gun objects;
+* the 1.8.0 changes are untested on a phone: the new sound (77 stereo effects, room echo, background sounds - how
+  they come out of a phone or TV speaker, and whether the phone keeps up with the extra mixing, is unknown), the new
+  menus and scoreboards, the 3D Sleigh Slalom and other heavier graphics (more drawing per frame; turn on **Reduced
+  effects** if a game stutters), the golf flyovers and HUD, and every tracking change listed below.
 
 ## Device compatibility
 
@@ -47,7 +51,23 @@ device, though: the build environment had no Android device and no emulator, and
   smaller players are untested and landmarks get less precise with distance.
 * **Look-alike players.** Identity protection uses position, movement continuity, body size and clothing colours.
   Two similar-sized people wearing similar colours who swap places while one is out of view can be mixed up.
-* **Lighting.** Dark rooms and strong backlight (window behind the players) reduce tracking quality.
+* **Lighting.** Dark rooms and strong backlight (window behind the players) reduce tracking quality. Since 1.8.0
+  dark and backlit pictures are brightened before the pose and hand models see them, and a brightened search runs
+  when the normal one finds nobody new. On a real photo darkened about 2.7 stops this found both players in every
+  frame (1.7.0: none); at about 3.5 stops both were found in 75% of frames, as before. Darkening a photo is not
+  the same as a dark room: a real camera adds its own noise, blur and auto-exposure, so how far this helps in your
+  room is unknown until tried. Brightening adds a little work to each crop (not measured on a phone).
+* **Tracking measurements are proxies.** The 1.8.0 tracking numbers come from the real pose models running on still
+  photos turned into hard sequences (added noise, darkening, backlight, sway, lunges, jumps). They do not show real
+  motion blur, rolling shutter, camera auto-exposure, frame drops or the phone's speed. On a fast sideways sway the
+  new settings found both players in fewer frames (87% against 97%), mostly when the test had pushed a player half
+  out of the picture, while no longer letting a track jump onto the other player. Tracking is better on these tests,
+  not perfect, and "flawless" cannot be shown without testing on the phone.
+* **Jump guard.** When a tracked person's position jumps towards the other player, away from where their own
+  movement puts them, the game checks again at the expected spot and keeps the better fit. Fast side-to-side
+  movement next to the other player can trigger this check, costing one extra body-model run for that person on
+  that frame: on the test sequences up to about 20-25% more model runs while swaying or lunging (none when still).
+  What that does to the frame rate on a phone is not measured.
 * **Spectators.** A spectator cannot take a player's place while that player is visible. If a player leaves, only a
   person in that player's area who matches their calibrated size and colours is accepted back.
 * **Timing allowance.** Timing games judge camera players by when they moved, using the camera's frame timestamps
