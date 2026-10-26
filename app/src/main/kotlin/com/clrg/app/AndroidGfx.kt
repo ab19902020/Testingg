@@ -1,6 +1,7 @@
 package com.clrg.app
 
 import android.graphics.Bitmap
+import android.graphics.BlendMode
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Matrix
@@ -11,7 +12,9 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import com.clrg.core.render.Align
+import com.clrg.core.render.Blend
 import com.clrg.core.render.Gfx
+import com.clrg.core.render.ImageOps
 import com.clrg.core.render.ImageRef
 
 /** Camera preview bitmap handed to the renderer. */
@@ -24,8 +27,13 @@ class AndroidImage(val bitmap: Bitmap) : ImageRef {
  * [Gfx] on a (hardware-accelerated) android.graphics.Canvas. The caller scales the canvas so that the virtual
  * height is 1080 units. Paints, paths and shaders are reused so drawing does not allocate per frame.
  */
-class AndroidGfx : Gfx {
+class AndroidGfx(
+    /** A layer being made: nested layers draw directly into it. */
+    private val inLayer: Boolean = false,
+) : Gfx {
     private lateinit var canvas: Canvas
+    /** Device pixels per virtual unit (for sizing cached layers). */
+    private var pixelScale = 1f
     override var width = 1920f
         private set
     override var height = 1080f
@@ -43,6 +51,8 @@ class AndroidGfx : Gfx {
     private val regular: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL) ?: Typeface.DEFAULT
     private var alpha = 1f
     private val alphaStack = FloatArray(64)
+    private var blend = Blend.NORMAL
+    private val blendStack = arrayOfNulls<Blend>(64)
     private var depth = 0
     private val glowCache = object : LinkedHashMap<Int, RadialGradient>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, RadialGradient>?) = size > 96
@@ -97,17 +107,109 @@ class AndroidGfx : Gfx {
         withShader(vertical(t, b, top, bottom)) { canvas.drawRoundRect(l, t, r, b, radius, radius, it) }
     }
 
+    private val linCache = object : LinkedHashMap<Long, LinearGradient>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, LinearGradient>?) = size > 96
+    }
+    private val matVals = FloatArray(9)
+
+    override fun fillPolygonLinear(pts: FloatArray, n: Int, x0: Float, y0: Float, x1: Float, y1: Float, c0: Int, c1: Int) {
+        buildPath(pts, n, true)
+        val sh = linCache.getOrPut(key(c0, c1)) { LinearGradient(0f, 0f, 1f, 0f, c0, c1, Shader.TileMode.CLAMP) }
+        var dx = x1 - x0; var dy = y1 - y0
+        if (dx * dx + dy * dy < 1e-4f) dx = 0.01f
+        // maps the unit gradient (u along 0..1) onto the line from (x0, y0) to (x1, y1)
+        matVals[0] = dx; matVals[1] = -dy; matVals[2] = x0
+        matVals[3] = dy; matVals[4] = dx; matVals[5] = y0
+        matVals[6] = 0f; matVals[7] = 0f; matVals[8] = 1f
+        shaderMatrix.setValues(matVals)
+        sh.setLocalMatrix(shaderMatrix)
+        withShader(sh) { canvas.drawPath(path, it) }
+    }
+
     override fun fillPolygonGradient(pts: FloatArray, n: Int, y0: Float, y1: Float, top: Int, bottom: Int) {
         buildPath(pts, n, true)
         withShader(vertical(y0, y1, top, bottom)) { canvas.drawPath(path, it) }
     }
 
-    fun begin(c: Canvas, virtualWidth: Float, virtualHeight: Float) {
+    fun begin(c: Canvas, virtualWidth: Float, virtualHeight: Float, scale: Float = 1f) {
         canvas = c
         width = virtualWidth
         height = virtualHeight
+        pixelScale = scale
         alpha = 1f
         depth = 0
+        if (blend != Blend.NORMAL) applyBlend(Blend.NORMAL)
+    }
+
+    // ---- blend modes
+
+    private fun androidMode(b: Blend): BlendMode? = when (b) {
+        Blend.NORMAL -> null
+        Blend.ADD -> BlendMode.PLUS
+        Blend.SCREEN -> BlendMode.SCREEN
+        Blend.MULTIPLY -> BlendMode.MULTIPLY
+    }
+
+    private fun applyBlend(b: Blend) {
+        blend = b
+        val m = androidMode(b)
+        for (p in arrayOf(fill, stroke, shaderPaint, textPaint, textStroke, bitmapPaint)) p.blendMode = m
+    }
+
+    override fun setBlend(mode: Blend) { if (mode != blend) applyBlend(mode) }
+
+    // ---- cached layers
+
+    private class Layer(val bmp: Bitmap, val version: Int, val w: Int, val h: Int) { val bytes = w.toLong() * h * 4 }
+    private val layers = LinkedHashMap<String, Layer>(16, 0.75f, true)
+    private var layerBytes = 0L
+
+    override fun layer(key: String, l: Float, t: Float, r: Float, b: Float, version: Int, res: Float, blur: Float,
+                       grain: Float, draw: (Gfx) -> Unit) {
+        if (r <= l || b <= t) return
+        if (inLayer) { super.layer(key, l, t, r, b, version, res, blur, grain, draw); return }
+        // never sharper than the virtual canvas (1920 x 1080 on a TV): plenty for backdrops, and bounded memory
+        val s = (minOf(pixelScale, 1f) * res).coerceIn(0.1f, 1f)
+        val pw = kotlin.math.ceil((r - l) * s).toInt().coerceAtLeast(1)
+        val ph = kotlin.math.ceil((b - t) * s).toInt().coerceAtLeast(1)
+        var lay = layers[key]
+        if (lay == null || lay.version != version || lay.w != pw || lay.h != ph) {
+            lay?.let { layers.remove(key); layerBytes -= it.bytes }
+            lay = makeLayer(l, t, r, b, pw, ph, s, version, blur, grain, draw)
+            if (lay == null) { super.layer(key, l, t, r, b, version, res, blur, grain, draw); return }
+            layers[key] = lay
+            layerBytes += lay.bytes
+            val it = layers.entries.iterator()
+            while (layerBytes > LAYER_BUDGET && layers.size > 1 && it.hasNext()) {
+                val e = it.next()
+                if (e.key == key) continue
+                layerBytes -= e.value.bytes
+                it.remove()
+            }
+        }
+        rect.set(l, t, r, b)
+        bitmapPaint.alpha = (alpha * 255).toInt()
+        canvas.drawBitmap(lay.bmp, null, rect, bitmapPaint)
+    }
+
+    private fun makeLayer(l: Float, t: Float, r: Float, b: Float, pw: Int, ph: Int, s: Float, version: Int, blur: Float,
+                          grain: Float, draw: (Gfx) -> Unit): Layer? {
+        val bmp = try { Bitmap.createBitmap(pw, ph, Bitmap.Config.ARGB_8888) } catch (e: Throwable) { return null }
+        val c = Canvas(bmp)
+        c.scale(s, s)
+        c.translate(-l, -t)
+        val sub = AndroidGfx(inLayer = true)
+        sub.begin(c, width, height, s)
+        try { draw(sub) } catch (e: Throwable) { return null }
+        if (blur > 0f || grain > 0f) {
+            val px = IntArray(pw * ph)
+            bmp.getPixels(px, 0, pw, 0, 0, pw, ph)
+            if (blur > 0f) ImageOps.blur(px, pw, ph, (blur * s).toInt().coerceAtLeast(1))
+            if (grain > 0f) ImageOps.grain(px, pw, ph, grain)
+            bmp.setPixels(px, 0, pw, 0, 0, pw, ph)
+        }
+        bmp.prepareToDraw()
+        return Layer(bmp, version, pw, ph)
     }
 
     private fun col(c: Int): Int {
@@ -118,14 +220,18 @@ class AndroidGfx : Gfx {
 
     override fun save() {
         canvas.save()
-        if (depth < alphaStack.size) alphaStack[depth] = alpha
+        if (depth < alphaStack.size) { alphaStack[depth] = alpha; blendStack[depth] = blend }
         depth++
     }
 
     override fun restore() {
         canvas.restore()
         depth--
-        if (depth in 0 until alphaStack.size) alpha = alphaStack[depth]
+        if (depth in 0 until alphaStack.size) {
+            alpha = alphaStack[depth]
+            val b = blendStack[depth] ?: Blend.NORMAL
+            if (b != blend) applyBlend(b)
+        }
     }
 
     override fun translate(dx: Float, dy: Float) = canvas.translate(dx, dy)
@@ -207,6 +313,11 @@ class AndroidGfx : Gfx {
         canvas.drawCircle(0f, 0f, 1f, shaderPaint)
         canvas.restore()
         shaderPaint.shader = null
+    }
+
+    companion object {
+        /** Memory for cached layers (bytes): about four full-screen pictures. */
+        const val LAYER_BUDGET = 36L * 1024 * 1024
     }
 
     override fun text(s: String, x: Float, y: Float, size: Float, color: Int, align: Align, bold: Boolean, outline: Int, outlineWidth: Float) {

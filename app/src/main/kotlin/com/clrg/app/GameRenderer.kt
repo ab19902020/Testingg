@@ -127,7 +127,7 @@ class GameRenderer(private val app: GameApp, private val router: DisplayRouter, 
             if (isPhone) phoneScale = s
             canvas.save()
             canvas.scale(s, s)
-            gameGfx.begin(canvas, canvas.width / s, 1080f)
+            gameGfx.begin(canvas, canvas.width / s, 1080f, s)
             app.frame(gameGfx, System.nanoTime())
             canvas.restore()
         } catch (t: Throwable) {
@@ -145,7 +145,7 @@ class GameRenderer(private val app: GameApp, private val router: DisplayRouter, 
             companionScale = s
             canvas.save(); canvas.scale(s, s)
             val g = companionGfx
-            g.begin(canvas, canvas.width / s, 1080f)
+            g.begin(canvas, canvas.width / s, 1080f, s)
             g.fillRect(0f, 0f, g.width, g.height, Colors.NIGHT_TOP)
             g.text("Game is on the TV", g.width / 2f, 70f, 60f, Colors.GOLD)
             PreviewView.draw(g, app, Rect(40f, 140f, g.width * 0.6f, 900f))

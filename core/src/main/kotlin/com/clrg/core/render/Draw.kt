@@ -329,7 +329,18 @@ object Draw {
     /** A lit snowball: highlight upper left, cool shadow lower right, faint rim. */
     private fun snowSphere(g: Gfx, cx: Float, cy: Float, r: Float) {
         g.fillCircleRadial(cx, cy, r, cx - r * 0.38f, cy - r * 0.45f, r * 1.75f, SNOW_LIT, SNOW_SHADE)
+        // packed-snow texture: a few soft dents and glints on the lit side
+        for (i in 0 until 6) {
+            val a = 2.2f + i * 0.55f; val d = r * (0.35f + 0.1f * (i % 3))
+            g.fillCircle(cx + cos(a) * d, cy + sin(a) * d * 0.9f, r * (0.05f + 0.015f * (i % 2)), 0x149AB6DA)
+        }
+        g.fillCircle(cx - r * 0.42f, cy - r * 0.5f, r * 0.05f, 0xCCFFFFFF.toInt())
+        g.fillCircle(cx - r * 0.25f, cy - r * 0.62f, r * 0.025f, 0x99FFFFFF.toInt())
         g.strokeCircle(cx, cy, r, maxOf(1.5f, r * 0.025f), 0x33335C8C)
+        // cool rim light on the shaded side
+        g.save(); g.setBlend(Blend.ADD)
+        g.arc(cx, cy, r * 0.965f, -0.55f, 1.6f, r * 0.05f, 0x2A7FB8FF)
+        g.restore()
     }
 
     /** Glossy knitted colour ball (mittens, pom-poms). */
@@ -374,6 +385,8 @@ object Draw {
             g.fillCircle(x, by, h * 0.02f, 0xFF263238.toInt())
             g.fillCircle(x - h * 0.006f, by - h * 0.007f, h * 0.006f, 0x66FFFFFF)
         }
+        // soft shadow the head casts on the body
+        g.fillOval(x - tr * 0.62f, ty - tr * 1.02f, x + tr * 0.62f, ty - tr * 0.68f, 0x228FA9CF)
         // arms
         val sxL = x - tr * 0.85f
         val sxR = x + tr * 0.85f
@@ -507,43 +520,93 @@ object Draw {
     ) {
         val skin = SKIN[((look % SKIN.size) + SKIN.size) % SKIN.size]
         val hair = HAIR[((look / 2 % HAIR.size) + HAIR.size) % HAIR.size]
-        val skinDark = Colors.darker(skin, 0.82f)
+        val style = ((look % 5) + 5) % 5
+        val skinDark = Colors.darker(skin, 0.78f)
+        val skinLight = Colors.lighter(skin, 0.18f)
+        val ink = 0xFF1E272C.toInt()
+        val shirtLight = Colors.lighter(color, 0.22f)
+        val shirtDark = Colors.darker(color, 0.62f)
+        val outline = Colors.withAlpha(Colors.darker(color, 0.3f), 0.85f)
+        val shorts = 0xFF263238.toInt()
         val rise = pose?.rise ?: 0f
         val crouch = (-rise).coerceIn(0f, 0.9f)
         val lift = (-rise * h * 0.16f).coerceIn(-h * 0.08f, h * 0.12f)
-        softShadow(g, x, y, h * 0.3f, h * 0.06f, 0.5f)
-        // legs and trainers (bend when crouching)
+        softShadow(g, x, y, h * 0.3f, h * 0.06f, 0.55f)
+        // ---- legs: shaded limbs, socks with a team stripe, trainers
         val hipY = y - h * 0.42f + lift + crouch * h * 0.1f
         for (s in intArrayOf(-1, 1)) {
             val fx = x + s * h * (0.09f + crouch * 0.05f)
             val kx = x + s * h * (0.07f + crouch * 0.12f)
             val ky = (hipY + y) / 2f
-            g.line(x + s * h * 0.06f, hipY, kx, ky, h * 0.07f, skin)
-            g.line(kx, ky, fx, y - h * 0.03f, h * 0.065f, skin)
-            g.fillRoundRect(fx - h * 0.055f + s * h * 0.02f, y - h * 0.06f, fx + h * 0.055f + s * h * 0.02f, y, h * 0.03f, Colors.WHITE)
-            g.fillRect(fx - h * 0.05f + s * h * 0.02f, y - h * 0.02f, fx + h * 0.05f + s * h * 0.02f, y, Colors.darker(color, 0.6f))
+            val ax = fx; val ay = y - h * 0.05f
+            limb(g, x + s * h * 0.06f, hipY, kx, ky, ax, ay, h * 0.08f, h * 0.068f, skin, skinDark, skinLight)
+            // sock with a team stripe, just above the trainer
+            val qx = kx + (ax - kx) * 0.68f; val qy = ky + (ay - ky) * 0.68f
+            g.line(qx, qy, ax, ay, h * 0.07f, 0xFFECEFF1.toInt())
+            g.line(qx + (ax - qx) * 0.25f, qy + (ay - qy) * 0.25f, qx + (ax - qx) * 0.42f, qy + (ay - qy) * 0.42f, h * 0.072f, color)
+            // trainer, seen from the front: rounded upper, sole, a stripe in the team colour
+            val sx0 = fx - h * 0.056f + s * h * 0.014f; val sx1 = fx + h * 0.056f + s * h * 0.014f
+            g.fillRoundRectGradient(sx0, y - h * 0.064f, sx1, y - h * 0.008f, h * 0.028f, Colors.WHITE, 0xFFB0BEC5.toInt())
+            g.fillRoundRect(sx0 - h * 0.004f, y - h * 0.018f, sx1 + h * 0.004f, y + h * 0.002f, h * 0.009f, 0xFF37474F.toInt())
+            g.line(sx0 + h * 0.016f, y - h * 0.028f, sx1 - h * 0.022f, y - h * 0.05f, h * 0.011f, color)
         }
-        // shorts
-        g.fillRoundRect(x - h * 0.15f, hipY - h * 0.06f, x + h * 0.15f, hipY + h * 0.09f, h * 0.03f, 0xFF263238.toInt())
+        // ---- shorts: waistband, leg openings, side stripe
+        g.fillRoundRectGradient(x - h * 0.152f, hipY - h * 0.065f, x + h * 0.152f, hipY + h * 0.05f, h * 0.03f, 0xFF37474F.toInt(), shorts)
+        for (s in intArrayOf(-1, 1)) {
+            val cx = x + s * h * 0.08f
+            g.fillRoundRectGradient(cx - h * 0.075f, hipY, cx + h * 0.075f, hipY + h * 0.095f, h * 0.025f, 0xFF2E3B42.toInt(), 0xFF1C252A.toInt())
+            g.line(x + s * h * 0.142f, hipY + h * 0.022f, x + s * h * 0.15f, hipY + h * 0.085f, h * 0.012f, color)
+        }
+        g.line(x - h * 0.14f, hipY - h * 0.058f, x + h * 0.14f, hipY - h * 0.058f, h * 0.008f, 0x55FFFFFF)
         g.save()
         val tilt = pose?.tilt ?: 0f
         g.translate(0f, lift)
         g.translate(x, y - h * 0.42f)
         g.rotate(tilt)
         g.translate(-x, -(y - h * 0.42f))
-        // torso: team shirt with a stripe
         val sy0 = y - h * 0.74f
         val sy1 = y - h * 0.4f
-        g.fillRoundRectGradient(x - h * 0.16f, sy0, x + h * 0.16f, sy1, h * 0.06f, Colors.lighter(color, 0.2f), Colors.darker(color, 0.75f))
-        g.fillRect(x - h * 0.16f, sy0 + h * 0.12f, x + h * 0.16f, sy0 + h * 0.15f, 0xCCFFFFFF.toInt())
-        g.fillOval(x - h * 0.05f, sy0 - h * 0.01f, x + h * 0.05f, sy0 + h * 0.04f, skinDark) // neck line
-        // arms (same joint solving as the buddy's)
+        val hr = h * 0.14f
+        val hy = sy0 - hr * 0.95f
+        val headTilt = pose?.head ?: 0f
+        // ponytail hangs behind the head and shoulders
+        if (style == 2) {
+            g.save(); g.translate(x, sy0); g.rotate(headTilt); g.translate(-x, -sy0)
+            val px = x + hr * 0.55f; val sway = sin(t.toFloat() * 3f) * hr * 0.12f
+            g.fillOval(px - hr * 0.32f + sway, hy - hr * 0.2f, px + hr * 0.32f + sway, hy + hr * 1.35f, Colors.darker(hair, 0.85f))
+            g.fillOval(px - hr * 0.2f + sway, hy - hr * 0.1f, px + hr * 0.1f + sway, hy + hr * 1.1f, Colors.withAlpha(Colors.lighter(hair, 0.25f), 0.5f))
+            g.restore()
+        }
+        // ---- neck
+        g.fillRoundRect(x - h * 0.042f, sy0 - h * 0.05f, x + h * 0.042f, sy0 + h * 0.03f, h * 0.02f, skinDark)
+        // ---- torso: tapered team shirt, lit from the upper left
+        val tw = h * 0.168f; val ww = h * 0.142f
+        var n = 0
+        fun p(px: Float, py: Float) { pts[n++] = px; pts[n++] = py }
+        p(x - h * 0.06f, sy0 - h * 0.004f)
+        p(x - tw * 0.82f, sy0 + h * 0.004f); p(x - tw * 0.97f, sy0 + h * 0.03f); p(x - tw, sy0 + h * 0.07f)
+        p(x - ww, sy1 - h * 0.03f); p(x - ww * 0.96f, sy1 - h * 0.006f); p(x - ww * 0.85f, sy1)
+        p(x + ww * 0.85f, sy1); p(x + ww * 0.96f, sy1 - h * 0.006f); p(x + ww, sy1 - h * 0.03f)
+        p(x + tw, sy0 + h * 0.07f); p(x + tw * 0.97f, sy0 + h * 0.03f); p(x + tw * 0.82f, sy0 + h * 0.004f)
+        p(x + h * 0.06f, sy0 - h * 0.004f)
+        val np = n / 2
+        // lit from the upper left: light to shade across, then a little darker towards the waist
+        g.fillPolygonLinear(pts, np, x - tw * 0.7f, sy0, x + tw * 1.05f, sy0 + h * 0.12f, shirtLight, Colors.darker(color, 0.72f))
+        g.fillPolygonGradient(pts, np, sy0 + h * 0.1f, sy1, 0x00000000, Colors.withAlpha(Colors.darker(color, 0.3f), 0.35f))
+        g.polyline(pts, np, h * 0.006f, outline, closed = true)
+        // collar, chest band and number
+        g.fillOval(x - h * 0.062f, sy0 - h * 0.012f, x + h * 0.062f, sy0 + h * 0.036f, skinDark)
+        g.arc(x, sy0 - h * 0.012f, h * 0.062f, 0.25f, PI_F - 0.5f, h * 0.014f, Colors.WHITE)
+        g.fillRect(x - ww * 0.99f, sy0 + h * 0.125f, x + ww * 0.99f, sy0 + h * 0.15f, 0xDDFFFFFF.toInt())
+        g.text("${(look % 9) + 1}", x + h * 0.07f, sy0 + h * 0.215f, h * 0.075f, 0xEEFFFFFF.toInt(), outline = Colors.withAlpha(shirtDark, 0.8f), outlineWidth = h * 0.006f)
+        g.line(x - ww * 0.85f, sy1 - h * 0.012f, x + ww * 0.85f, sy1 - h * 0.012f, h * 0.008f, Colors.withAlpha(shirtDark, 0.7f))
+        // ---- arms (same joint solving as the buddy's)
         val sxL = x - h * 0.15f
         val sxR = x + h * 0.15f
         val sy = sy0 + h * 0.04f
         val ua = h * 0.17f
         val fa = h * 0.16f
-        val armW = h * 0.055f
+        val armW = h * 0.058f
         var handX = 0f; var handY = 0f; var foreAng = 0f
         val bothX = FloatArray(2); val bothY = FloatArray(2)
         for (side in 0..1) {
@@ -570,58 +633,84 @@ object Draw {
                 ex = sx + ua * cos(up); ey = sy - ua * sin(up)
                 wx = ex + fa * cos(fo); wy = ey - fa * sin(fo)
             }
-            // sleeve, upper arm, forearm, hand
-            g.line(sx, sy, ex, ey, armW * 1.15f, skinDark)
-            g.line(ex, ey, wx, wy, armW * 1.0f, skinDark)
-            g.line(sx, sy, ex, ey, armW, skin)
-            g.line(ex, ey, wx, wy, armW * 0.85f, skin)
-            g.line(sx, sy, sx + (ex - sx) * 0.45f, sy + (ey - sy) * 0.45f, armW * 1.3f, color)
-            val hr = h * 0.045f * mittenScale
+            // upper arm and forearm as lit tubes, a short sleeve, a wristband in the team colour
+            limb(g, sx, sy, ex, ey, wx, wy, armW, armW * 0.9f, skin, skinDark, skinLight)
+            val mx = sx + (ex - sx) * 0.48f; val my = sy + (ey - sy) * 0.48f
+            tube(g, sx, sy, mx, my, armW * 1.38f, color, Colors.darker(color, 0.55f), shirtLight)
+            val al = len(ex - sx, ey - sy).coerceAtLeast(1e-3f)
+            val qx = -(ey - sy) / al * armW * 0.66f; val qy = (ex - sx) / al * armW * 0.66f
+            g.line(mx - qx, my - qy, mx + qx, my + qy, h * 0.008f, Colors.withAlpha(Colors.darker(color, 0.5f), 0.8f))
+            val hr2 = h * 0.047f * mittenScale
             if (prop == Prop.GLOVES) SportsDraw.glove(g, wx, wy, h * 0.15f * mittenScale, if (side == 0) 0xFFD32F2F.toInt() else 0xFFC62828.toInt(), fo)
-            else g.fillCircleRadial(wx, wy, hr, wx - hr * 0.3f, wy - hr * 0.3f, hr * 1.4f, Colors.lighter(skin, 0.15f), skinDark)
+            else {
+                g.line(ex + (wx - ex) * 0.78f, ey + (wy - ey) * 0.78f, ex + (wx - ex) * 0.9f, ey + (wy - ey) * 0.9f, armW * 1.05f, color)
+                // hand: palm with a thumb on the inside
+                val fl = len(wx - ex, wy - ey).coerceAtLeast(1e-3f)
+                val dx = (wx - ex) / fl; val dy = (wy - ey) / fl
+                val inward = if (side == 0) 1f else -1f
+                g.fillCircle(wx + dx * hr2 * 0.15f - dy * inward * hr2 * 0.75f, wy + dy * hr2 * 0.15f + dx * inward * hr2 * 0.75f, hr2 * 0.42f, skinDark)
+                g.fillCircleRadial(wx + dx * hr2 * 0.3f, wy + dy * hr2 * 0.3f, hr2, wx - hr2 * 0.4f, wy - hr2 * 0.4f, hr2 * 1.6f, skinLight, skinDark)
+            }
             if (side == propHand) { handX = wx; handY = wy; foreAng = fo }
             bothX[side] = wx; bothY[side] = wy
         }
-        // head
-        val hr = h * 0.14f
-        val hy = sy0 - hr * 0.95f
-        val headTilt = pose?.head ?: 0f
+        // ---- head
         g.save()
         g.translate(x, sy0)
         g.rotate(headTilt)
         g.translate(-x, -sy0)
-        g.fillCircleRadial(x, hy, hr, x - hr * 0.35f, hy - hr * 0.4f, hr * 1.5f, Colors.lighter(skin, 0.12f), skinDark)
-        g.fillCircle(x - hr * 0.98f, hy + hr * 0.05f, hr * 0.2f, skin) // ears
-        g.fillCircle(x + hr * 0.98f, hy + hr * 0.05f, hr * 0.2f, skin)
-        // hair: a cap of hair over the top of the head
-        g.save(); g.clipRect(x - hr * 1.2f, hy - hr * 1.3f, x + hr * 1.2f, hy - hr * 0.25f)
-        g.fillCircle(x, hy - hr * 0.08f, hr * 1.04f, hair)
-        g.restore()
-        g.fillOval(x - hr * 0.9f, hy - hr * 0.55f, x - hr * 0.1f, hy - hr * 0.15f, hair)
+        // ears, face with a lit cheek and a shaded jaw
+        for (s2 in intArrayOf(-1, 1)) {
+            g.fillCircle(x + s2 * hr * 0.96f, hy + hr * 0.08f, hr * 0.21f, skinDark)
+            g.fillCircle(x + s2 * hr * 0.96f, hy + hr * 0.08f, hr * 0.13f, Colors.darker(skin, 0.68f))
+        }
+        g.fillOval(x - hr * 0.97f, hy - hr, x + hr * 0.97f, hy + hr * 1.04f, skinDark)
+        g.fillCircleRadial(x - hr * 0.02f, hy - hr * 0.02f, hr * 0.95f, x - hr * 0.35f, hy - hr * 0.45f, hr * 1.55f, skinLight, skin)
+        hairCap(g, x, hy, hr, hair, style, t)
         // face
-        val ink = 0xFF1E272C.toInt()
         val blink = (t % 3.9) < 0.12
         for (s2 in intArrayOf(-1, 1)) {
-            val ex = x + s2 * hr * 0.36f; val eyeY = hy + hr * 0.02f
-            if (blink) g.line(ex - hr * 0.1f, eyeY, ex + hr * 0.1f, eyeY, hr * 0.06f, ink)
-            else { g.fillOval(ex - hr * 0.1f, eyeY - hr * 0.15f, ex + hr * 0.1f, eyeY + hr * 0.15f, ink); g.fillCircle(ex + hr * 0.03f, eyeY - hr * 0.06f, hr * 0.04f, Colors.WHITE) }
-            when (expr) {
-                Expression.FOCUSED -> g.line(ex - s2 * hr * 0.14f, eyeY - hr * 0.26f, ex + s2 * hr * 0.12f, eyeY - hr * 0.2f, hr * 0.06f, hair)
-                Expression.OOPS -> g.line(ex - s2 * hr * 0.14f, eyeY - hr * 0.2f, ex + s2 * hr * 0.12f, eyeY - hr * 0.28f, hr * 0.06f, hair)
-                else -> g.line(ex - hr * 0.12f, eyeY - hr * 0.27f, ex + hr * 0.12f, eyeY - hr * 0.27f, hr * 0.05f, hair)
+            val ex = x + s2 * hr * 0.35f; val eyeY = hy + hr * 0.04f
+            if (blink) g.line(ex - hr * 0.12f, eyeY, ex + hr * 0.12f, eyeY, hr * 0.06f, ink)
+            else {
+                val open = if (expr == Expression.EXCITED) 1.15f else if (expr == Expression.FOCUSED) 0.8f else 1f
+                g.fillOval(ex - hr * 0.15f, eyeY - hr * 0.17f * open, ex + hr * 0.15f, eyeY + hr * 0.17f * open, Colors.WHITE)
+                g.fillCircle(ex + s2 * hr * 0.01f, eyeY + hr * 0.015f, hr * 0.105f * minOf(open, 1f), 0xFF4E342E.toInt())
+                g.fillCircle(ex + s2 * hr * 0.01f, eyeY + hr * 0.015f, hr * 0.06f * minOf(open, 1f), ink)
+                g.fillCircle(ex + hr * 0.045f, eyeY - hr * 0.045f, hr * 0.035f, Colors.WHITE)
+                g.arc(ex, eyeY + hr * 0.02f, hr * 0.16f, PI_F + 0.35f, PI_F - 0.7f, hr * 0.035f, Colors.withAlpha(ink, 0.75f))
             }
-            g.glow(x + s2 * hr * 0.55f, hy + hr * 0.32f, hr * 0.2f, 0x66FF8A80)
+            val by = eyeY - hr * 0.3f
+            when (expr) {
+                Expression.FOCUSED -> g.line(ex - s2 * hr * 0.16f, by - hr * 0.02f, ex + s2 * hr * 0.14f, by + hr * 0.05f, hr * 0.075f, hair)
+                Expression.OOPS -> g.line(ex - s2 * hr * 0.16f, by + hr * 0.05f, ex + s2 * hr * 0.14f, by - hr * 0.03f, hr * 0.075f, hair)
+                Expression.EXCITED -> g.arc(ex, by + hr * 0.07f, hr * 0.16f, PI_F + 0.45f, PI_F - 0.9f, hr * 0.07f, hair)
+                Expression.HAPPY -> g.line(ex - hr * 0.15f, by + hr * 0.01f, ex + hr * 0.15f, by - hr * 0.01f, hr * 0.07f, hair)
+            }
+            g.glow(x + s2 * hr * 0.56f, hy + hr * 0.36f, hr * 0.22f, 0x66FF8A80)
         }
-        g.fillOval(x - hr * 0.07f, hy + hr * 0.12f, x + hr * 0.07f, hy + hr * 0.3f, skinDark) // nose
-        val mouthY = hy + hr * 0.5f
+        g.arc(x, hy + hr * 0.24f, hr * 0.09f, 0.3f, PI_F - 0.6f, hr * 0.05f, skinDark) // nose
+        val mouthY = hy + hr * 0.55f
         when (expr) {
-            Expression.HAPPY -> g.arc(x, mouthY - hr * 0.12f, hr * 0.25f, 0.4f, PI_F - 0.8f, hr * 0.07f, 0xFF8D3B3B.toInt())
-            Expression.EXCITED -> { g.fillOval(x - hr * 0.2f, mouthY - hr * 0.1f, x + hr * 0.2f, mouthY + hr * 0.2f, 0xFF4E1A1A.toInt()); g.fillOval(x - hr * 0.1f, mouthY + hr * 0.06f, x + hr * 0.1f, mouthY + hr * 0.18f, 0xFFE57373.toInt()) }
-            Expression.OOPS -> g.arc(x, mouthY + hr * 0.12f, hr * 0.2f, PI_F + 0.5f, PI_F - 1f, hr * 0.06f, 0xFF8D3B3B.toInt())
-            Expression.FOCUSED -> g.line(x - hr * 0.16f, mouthY, x + hr * 0.16f, mouthY, hr * 0.06f, 0xFF8D3B3B.toInt())
+            Expression.HAPPY -> {
+                g.fillPie(x, mouthY - hr * 0.1f, hr * 0.24f, 0.25f, PI_F - 0.5f, 0xFF7A2A2A.toInt())
+                g.fillPie(x, mouthY - hr * 0.1f, hr * 0.18f, 0.6f, PI_F - 1.2f, 0xFFE57373.toInt())
+                g.line(x - hr * 0.2f, mouthY - hr * 0.04f, x + hr * 0.2f, mouthY - hr * 0.04f, hr * 0.045f, Colors.WHITE)
+            }
+            Expression.EXCITED -> { g.fillOval(x - hr * 0.2f, mouthY - hr * 0.12f, x + hr * 0.2f, mouthY + hr * 0.22f, 0xFF4E1A1A.toInt()); g.fillOval(x - hr * 0.11f, mouthY + hr * 0.06f, x + hr * 0.11f, mouthY + hr * 0.2f, 0xFFE57373.toInt()) }
+            Expression.OOPS -> g.arc(x, mouthY + hr * 0.14f, hr * 0.2f, PI_F + 0.5f, PI_F - 1f, hr * 0.065f, 0xFF8D3B3B.toInt())
+            Expression.FOCUSED -> g.line(x - hr * 0.15f, mouthY, x + hr * 0.15f, mouthY - hr * 0.02f, hr * 0.065f, 0xFF8D3B3B.toInt())
         }
         // sweatband in the team colour
-        g.fillRoundRect(x - hr * 0.98f, hy - hr * 0.42f, x + hr * 0.98f, hy - hr * 0.26f, hr * 0.08f, color)
+        g.fillRoundRectGradient(x - hr * 0.99f, hy - hr * 0.44f, x + hr * 0.99f, hy - hr * 0.25f, hr * 0.09f, Colors.lighter(color, 0.25f), Colors.darker(color, 0.8f))
+        g.line(x - hr * 0.85f, hy - hr * 0.4f, x + hr * 0.6f, hy - hr * 0.4f, hr * 0.03f, 0x55FFFFFF)
+        // rim light on the side away from the key light
+        g.save(); g.setBlend(Blend.ADD)
+        g.arc(x, hy + hr * 0.02f, hr * 0.965f, -0.6f, 1.25f, hr * 0.045f, 0x2280B0FF)
+        g.restore()
+        g.restore()
+        g.save(); g.setBlend(Blend.ADD)
+        g.line(x + tw * 0.97f, sy0 + h * 0.08f, x + ww * 0.97f, sy1 - h * 0.04f, h * 0.008f, 0x2280B0FF)
         g.restore()
         g.restore()
         if (prop == Prop.GOLF_CLUB || prop == Prop.PUTTER) {
@@ -638,6 +727,62 @@ object Draw {
             g.fillCircleRadial(x, cy, h * 0.62f, x - h * 0.2f, cy - h * 0.25f, h * 0.9f, 0x1880D8FF, 0x5540C4FF)
             g.strokeCircle(x, cy, h * 0.62f, 6f, 0xCC80D8FF.toInt())
         }
+    }
+
+    /**
+     * A limb drawn as a lit tube: a dark edge, the base colour and a highlight along the side facing the key light
+     * (upper left). Four lines - cheap, but reads as round.
+     */
+    fun tube(g: Gfx, x0: Float, y0: Float, x1: Float, y1: Float, w: Float, base: Int, dark: Int, light: Int) {
+        g.line(x0, y0, x1, y1, w * 1.12f, dark)
+        g.line(x0, y0, x1, y1, w, base)
+        tubeLight(g, x0, y0, x1, y1, w, dark, light)
+    }
+
+    private fun tubeLight(g: Gfx, x0: Float, y0: Float, x1: Float, y1: Float, w: Float, dark: Int, light: Int) {
+        val l = len(x1 - x0, y1 - y0).coerceAtLeast(1e-3f)
+        var nx = -(y1 - y0) / l; var ny = (x1 - x0) / l
+        if (nx * -0.6f + ny * -0.8f < 0f) { nx = -nx; ny = -ny }
+        val o = w * 0.2f
+        g.line(x0 + nx * o, y0 + ny * o, x1 + nx * o, y1 + ny * o, w * 0.3f, Colors.withAlpha(light, 0.3f))
+        g.line(x0 - nx * w * 0.28f, y0 - ny * w * 0.28f, x1 - nx * w * 0.28f, y1 - ny * w * 0.28f, w * 0.34f, Colors.withAlpha(dark, 0.16f))
+    }
+
+    /** A two-part limb (upper and lower) as one smooth lit tube: edges first, then the colour, then the light. */
+    fun limb(g: Gfx, x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float, w0: Float, w1: Float, base: Int, dark: Int, light: Int) {
+        g.line(x0, y0, x1, y1, w0 * 1.12f, dark); g.line(x1, y1, x2, y2, w1 * 1.12f, dark)
+        g.line(x0, y0, x1, y1, w0, base); g.line(x1, y1, x2, y2, w1, base)
+        tubeLight(g, x0, y0, x1, y1, w0, dark, light); tubeLight(g, x1, y1, x2, y2, w1, dark, light)
+    }
+
+    /** Hair over the top of the head in one of five styles, with a sheen. */
+    private fun hairCap(g: Gfx, x: Float, hy: Float, hr: Float, hair: Int, style: Int, t: Double) {
+        val hairLight = Colors.lighter(hair, 0.3f)
+        when (style) {
+            1 -> { // spiky
+                for (i in -2..2) {
+                    val bx = x + i * hr * 0.36f
+                    tri(g, bx - hr * 0.26f, hy - hr * 0.55f, bx + hr * 0.26f, hy - hr * 0.55f, bx + i * hr * 0.08f, hy - hr * (1.22f - kotlin.math.abs(i) * 0.1f), hair)
+                }
+            }
+            3 -> { // curly
+                for (i in 0 until 11) {
+                    val a = PI_F + 0.15f + i * (PI_F - 0.3f) / 10f
+                    g.fillCircle(x + cos(a) * hr * 0.95f, hy - hr * 0.12f + sin(a) * hr * 0.95f, hr * 0.27f, hair)
+                }
+            }
+            4 -> { // bun
+                g.fillCircle(x, hy - hr * 1.08f, hr * 0.36f, hair)
+                g.arc(x, hy - hr * 1.08f, hr * 0.26f, PI_F + 0.4f, 1.2f, hr * 0.06f, hairLight)
+            }
+        }
+        g.save(); g.clipRect(x - hr * 1.2f, hy - hr * 1.35f, x + hr * 1.2f, hy - hr * 0.28f)
+        g.fillCircleRadial(x, hy - hr * 0.08f, hr * 1.04f, x - hr * 0.4f, hy - hr * 0.8f, hr * 1.6f, hairLight, hair)
+        g.restore()
+        // fringe swept to one side
+        if (style == 0 || style == 2) g.fillOval(x - hr * 0.92f, hy - hr * 0.6f, x - hr * 0.02f, hy - hr * 0.16f, hair)
+        else g.fillOval(x - hr * 0.6f, hy - hr * 0.58f, x + hr * 0.6f, hy - hr * 0.3f, hair)
+        g.arc(x, hy - hr * 0.12f, hr * 0.85f, PI_F + 0.55f, 0.9f, hr * 0.08f, Colors.withAlpha(hairLight, 0.8f))
     }
 
     private fun face(g: Gfx, x: Float, hy: Float, hr: Float, expr: Expression, t: Double) {

@@ -9,6 +9,13 @@ interface ImageRef {
 enum class Align { LEFT, CENTER, RIGHT }
 
 /**
+ * How what is drawn mixes with what is already there. [ADD] adds light (glows, sparks, lamps, beams: they brighten
+ * instead of washing colours out), [SCREEN] is a softer add that never goes past white, [MULTIPLY] darkens (shadows,
+ * tints).
+ */
+enum class Blend { NORMAL, ADD, SCREEN, MULTIPLY }
+
+/**
  * 2D drawing API used by every screen and minigame. The canvas is *virtual*: its height is always 1080 units and its
  * width follows the display aspect ratio (1920 on a 16:9 TV, ~2400 on a 20:9 phone screen), so layouts stay
  * readable on any screen. Colours are ARGB ints. Implemented with android.graphics.Canvas on the device.
@@ -65,6 +72,91 @@ interface Gfx {
     /** Polygon with a vertical gradient from [top] at y = [y0] to [bottom] at y = [y1]. */
     fun fillPolygonGradient(pts: FloatArray, n: Int, y0: Float, y1: Float, top: Int, bottom: Int) =
         fillPolygon(pts, n, Colors.lerp(top, bottom, 0.5f))
+
+    /** Polygon with a linear gradient in any direction: [c0] at ([x0], [y0]) to [c1] at ([x1], [y1]). */
+    fun fillPolygonLinear(pts: FloatArray, n: Int, x0: Float, y0: Float, x1: Float, y1: Float, c0: Int, c1: Int) =
+        fillPolygon(pts, n, Colors.lerp(c0, c1, 0.5f))
+
+    // ---- blending and cached layers. Defaults fall back to plain drawing for renderers without them.
+
+    /** Blend mode for what is drawn next (saved/restored with [save]/[restore]). */
+    fun setBlend(mode: Blend) = Unit
+
+    /**
+     * Draws a cached picture of [draw] covering ([l], [t], [r], [b]) in the current coordinates. The picture is drawn
+     * once (in the same virtual coordinates as everything else, so [draw] can be ordinary drawing code) and then
+     * reused every frame as one image - so a detailed, static backdrop costs about as much as a single rectangle.
+     * It is redrawn when [key], [version] or the size changes.
+     *
+     *  - [res]: resolution relative to the screen (0.5 = half; fine for blurred or soft layers).
+     *  - [blur]: blur radius in virtual units, applied once when the picture is made (depth of field, haze).
+     *  - [grain]: 0..1 fine film-grain texture, applied once.
+     *
+     * Only static content belongs in a layer; anything that moves is drawn on top as usual.
+     */
+    fun layer(key: String, l: Float, t: Float, r: Float, b: Float, version: Int = 0, res: Float = 1f, blur: Float = 0f,
+              grain: Float = 0f, draw: (Gfx) -> Unit) {
+        save(); clipRect(l, t, r, b); draw(this); restore()
+    }
+}
+
+/** Pixel operations used when cached layers are made (pure Kotlin, so the phone and the tests share them). */
+object ImageOps {
+    /**
+     * Box blur repeated three times (close to a Gaussian) on ARGB pixels, done on premultiplied colour so
+     * transparent edges don't darken.
+     */
+    fun blur(px: IntArray, w: Int, h: Int, radius: Int) {
+        if (radius < 1 || w < 2 || h < 2) return
+        val n = w * h
+        val a = IntArray(n); val r = IntArray(n); val g = IntArray(n); val b = IntArray(n)
+        for (i in 0 until n) {
+            val c = px[i]; val al = (c ushr 24) and 0xFF
+            a[i] = al; r[i] = ((c shr 16) and 0xFF) * al / 255; g[i] = ((c shr 8) and 0xFF) * al / 255; b[i] = (c and 0xFF) * al / 255
+        }
+        val tmp = IntArray(maxOf(w, h))
+        val rad = radius.coerceAtMost(maxOf(w, h) / 2)
+        repeat(3) {
+            for (ch in arrayOf(a, r, g, b)) {
+                for (y in 0 until h) boxLine(ch, y * w, 1, w, rad, tmp)
+                for (x in 0 until w) boxLine(ch, x, w, h, rad, tmp)
+            }
+        }
+        for (i in 0 until n) {
+            val al = a[i].coerceIn(0, 255)
+            px[i] = if (al == 0) 0 else (al shl 24) or ((r[i] * 255 / al).coerceIn(0, 255) shl 16) or
+                ((g[i] * 255 / al).coerceIn(0, 255) shl 8) or (b[i] * 255 / al).coerceIn(0, 255)
+        }
+    }
+
+    /** One line of a box blur with edge clamping: [len] values from [start], [stride] apart. */
+    private fun boxLine(ch: IntArray, start: Int, stride: Int, len: Int, rad: Int, tmp: IntArray) {
+        var sum = 0
+        for (k in -rad..rad) sum += ch[start + k.coerceIn(0, len - 1) * stride]
+        val win = rad * 2 + 1
+        for (i in 0 until len) {
+            tmp[i] = sum / win
+            val out = (i - rad).coerceIn(0, len - 1); val inn = (i + rad + 1).coerceIn(0, len - 1)
+            sum += ch[start + inn * stride] - ch[start + out * stride]
+        }
+        for (i in 0 until len) ch[start + i * stride] = tmp[i]
+    }
+
+    /** Fine monochrome grain: each pixel lighter or darker by up to [amount] x 24 levels (opaque pixels only). */
+    fun grain(px: IntArray, w: Int, h: Int, amount: Float, seed: Int = 1) {
+        if (amount <= 0f) return
+        val k = (amount.coerceIn(0f, 1f) * 24f)
+        for (i in 0 until w * h) {
+            val c = px[i]
+            if ((c ushr 24) < 8) continue
+            var x = (i + seed * 0x9E3779B1.toInt()) * 0x45D9F3B
+            x = (x ushr 16 xor x) * 0x45D9F3B
+            x = x ushr 16 xor x
+            val d = (((x and 0xFFFF) / 65535f) - 0.5f) * 2f * k
+            fun ch(s: Int) = (((c shr s) and 0xFF) + d).toInt().coerceIn(0, 255)
+            px[i] = (c and 0xFF000000.toInt()) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+        }
+    }
 }
 
 object Colors {

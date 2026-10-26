@@ -24,18 +24,29 @@ import javax.imageio.ImageIO
  * Java2D implementation of [Gfx] used by tests to render screenshots of screens and games on the build machine.
  * (On the device the same drawing code runs on android.graphics.Canvas.) It also fails fast on NaN coordinates.
  */
-class AwtGfx(val pixelWidth: Int, val pixelHeight: Int) : Gfx {
+class AwtGfx private constructor(
+    val pixelWidth: Int, val pixelHeight: Int, private val pxScale: Float, override val width: Float, private val inLayer: Boolean,
+) : Gfx {
+    constructor(pixelWidth: Int, pixelHeight: Int) : this(pixelWidth, pixelHeight, pixelHeight / 1080f, pixelWidth / (pixelHeight / 1080f), false)
+
     val image = BufferedImage(pixelWidth, pixelHeight, BufferedImage.TYPE_INT_ARGB)
     private val g2: Graphics2D = image.createGraphics()
-    private val pxScale = pixelHeight / 1080f
-    override val width: Float = pixelWidth / pxScale
     override val height: Float = 1080f
     private var alpha = 1f
-    private val stack = ArrayList<Triple<AffineTransform, Shape?, Float>>()
+    private var blend = Blend.NORMAL
+    private val stack = ArrayList<Triple<AffineTransform, Shape?, Pair<Float, Blend>>>()
+    /** Layers made (cache misses) and drawn from the cache, for tests. */
+    var layersMade = 0
+        private set
+    var layersDrawn = 0
+        private set
+    private class Layer(val img: BufferedImage, val version: Int)
+    private val layers = HashMap<String, Layer>()
     var calls = 0
         private set
 
     init {
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
         g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE)
@@ -52,8 +63,43 @@ class AwtGfx(val pixelWidth: Int, val pixelHeight: Int) : Gfx {
         return Color((c shr 16) and 0xFF, (c shr 8) and 0xFF, c and 0xFF, a.toInt().coerceIn(0, 255))
     }
 
-    override fun save() { stack.add(Triple(g2.transform, g2.clip, alpha)) }
-    override fun restore() { val (t, c, a) = stack.removeAt(stack.size - 1); g2.transform = t; g2.clip = c; alpha = a }
+    override fun save() { stack.add(Triple(g2.transform, g2.clip, alpha to blend)) }
+    override fun restore() { val (t, c, ab) = stack.removeAt(stack.size - 1); g2.transform = t; g2.clip = c; alpha = ab.first; setBlend(ab.second) }
+
+    override fun setBlend(mode: Blend) {
+        blend = mode
+        g2.composite = if (mode == Blend.NORMAL) AlphaComposite.SrcOver else BlendComposite(mode)
+    }
+
+    override fun layer(key: String, l: Float, t: Float, r: Float, b: Float, version: Int, res: Float, blur: Float, grain: Float, draw: (Gfx) -> Unit) {
+        chk(l, t, r, b)
+        if (r <= l || b <= t) return
+        if (inLayer) { super.layer(key, l, t, r, b, version, res, blur, grain, draw); return }
+        val s = (minOf(pxScale, 1f) * res).coerceIn(0.1f, 1f)
+        val pw = kotlin.math.ceil((r - l) * s).toInt().coerceAtLeast(1)
+        val ph = kotlin.math.ceil((b - t) * s).toInt().coerceAtLeast(1)
+        var lay = layers[key]
+        if (lay == null || lay.version != version || lay.img.width != pw || lay.img.height != ph) {
+            val sub = AwtGfx(pw, ph, s, width, true)
+            sub.g2.translate(-l.toDouble(), -t.toDouble())
+            draw(sub)
+            if (blur > 0f || grain > 0f) {
+                val px = sub.image.getRGB(0, 0, pw, ph, null, 0, pw)
+                if (blur > 0f) ImageOps.blur(px, pw, ph, (blur * s).toInt().coerceAtLeast(1))
+                if (grain > 0f) ImageOps.grain(px, pw, ph, grain)
+                sub.image.setRGB(0, 0, pw, ph, px, 0, pw)
+            }
+            lay = Layer(sub.image, version)
+            layers[key] = lay
+            layersMade++
+        }
+        layersDrawn++
+        val old = g2.composite
+        if (blend == Blend.NORMAL && alpha < 0.999f) g2.composite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha)
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        g2.drawImage(lay.img, AffineTransform(((r - l) / pw).toDouble(), 0.0, 0.0, ((b - t) / ph).toDouble(), l.toDouble(), t.toDouble()), null)
+        g2.composite = old
+    }
     override fun translate(dx: Float, dy: Float) { chk(dx, dy); g2.translate(dx.toDouble(), dy.toDouble()) }
     override fun scale(sx: Float, sy: Float) { chk(sx, sy); g2.scale(sx.toDouble(), sy.toDouble()) }
     override fun rotate(radians: Float) { chk(radians); g2.rotate(radians.toDouble()) }
@@ -130,6 +176,13 @@ class AwtGfx(val pixelWidth: Int, val pixelHeight: Int) : Gfx {
     override fun fillPolygonGradient(pts: FloatArray, n: Int, y0: Float, y1: Float, top: Int, bottom: Int) {
         chk(y0, y1)
         g2.paint = GradientPaint(0f, y0, col(top), 0f, if (y1 > y0) y1 else y0 + 0.01f, col(bottom))
+        g2.fill(path(pts, n, true))
+    }
+
+    override fun fillPolygonLinear(pts: FloatArray, n: Int, x0: Float, y0: Float, x1: Float, y1: Float, c0: Int, c1: Int) {
+        chk(x0, y0, x1, y1)
+        val ex = if (kotlin.math.abs(x1 - x0) + kotlin.math.abs(y1 - y0) < 0.01f) x0 + 0.01f else x1
+        g2.paint = GradientPaint(x0, y0, col(c0), ex, y1, col(c1))
         g2.fill(path(pts, n, true))
     }
 
