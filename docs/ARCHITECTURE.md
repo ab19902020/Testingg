@@ -298,6 +298,32 @@ D-pad/keyboard focus, and hands-free dwell cursors (Player 1's after a wave on m
 Dwell protection: full hold time held steady, must leave a button before it can fire again, 0.8 s global lock after
 any selection, cursors off during live play.
 
+## Rendering (1.11.0, `core/render`)
+
+* **Cached layers.** `Gfx.layer(key, l, t, r, b, version, res, blur, grain) { ... }` draws ordinary drawing code once
+  into an offscreen picture (an ARGB `Bitmap` on Android via a software `Canvas`; a `BufferedImage` in tests) and then
+  draws that picture each frame. It is rebuilt when the key, version or pixel size changes; an LRU keeps about 36 MB
+  (`AndroidGfx.LAYER_BUDGET`). Resolution never exceeds the virtual canvas (1920 x 1080 on a TV). `ImageOps.blur`
+  (three box passes on premultiplied colour; edges clamp for opaque backdrops and fade for sprites) and
+  `ImageOps.grain` run once when a picture is made. Layers inside layers draw directly.
+* **Sprites and frames.** The same call under a `translate`/`scale` caches a sprite at a reference size (pine trees,
+  leafy trees, clouds, the ferris wheel). `Scenery.frames` shows a few cached frames in turn (crowds, light chases).
+  Colour variants (fog) are quantised into a few steps so only a handful of pictures exist.
+* **Blend modes.** `Gfx.setBlend(ADD | SCREEN | MULTIPLY)` (saved with `save`/`restore`) maps to
+  `android.graphics.BlendMode.PLUS/SCREEN/MULTIPLY`; glowing particles, lamps and beams add light.
+* **Gradients in any direction** (`fillPolygonLinear`) for side-lit shirts and metal.
+* **Level of detail.** Small snowmen (`Draw.buddy` under 90 px) and small trees use simple shapes.
+* **Shared scenery** (`Scenery`): day sky, clouds, layered mountains and tree line, crowds, night sky, winter forest,
+  light helpers.
+* **Cost guard.** `CostGfx` counts drawing operations, points, large fills, blended draws and cached pictures made;
+  `DrawBudgetTest` plays every game with computer players and fails if a busy frame (95th percentile) exceeds 1300
+  operations or more than 60 pictures are made in 20 s (a picture remade every frame). `DrawCost`
+  (-Pclrg.drawcost) and `CharShots` (-Pclrg.charshots) are developer tools.
+
+**Tracking tip during play (1.11.0).** `TrackingCoach` (one per `GameScreen`) watches each camera player's
+`TrackingQuality`; weak (score < 0.5 with a tip) for 2 s shows the tip on that player's side until it has been good
+for 1 s.
+
 ## Sound (`core/audio`)
 
 * `Dsp` - noise colours, biquad filters, a Freeverb-style reverb, resonator banks, a table sine and a limiter.

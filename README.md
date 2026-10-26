@@ -18,9 +18,9 @@ racket or stick as your racket or club, a **toy gun** for the shooting games - r
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
 > reports that versions up to 1.6.0 run on their phone. On 1.8.0 they found tracking worse than before (fixed in
 > 1.8.1), and on 1.8.1 that the finger gun does not see the thumb going down. 1.9.0 rebuilt the thumb trigger;
-> 1.10.0 changes how the menus are steered (Player 1 waves to take control; hold still to choose) and makes golf
-> accept a clasped grip. These are tested with simulated bodies and cursors (and, for the finger gun, the real hand
-> model's landmarks of real photos) - **not yet on the owner's phone**: whether they feel right in their room is only
+> 1.10.0 changed how the menus are steered and made golf accept a clasped grip; 1.11.0 is a graphics overhaul built
+> so that frames do less drawing work, not more. All of this is tested with simulated bodies and screens rendered on
+> the build machine - **not yet on the owner's phone**: how smoothly it runs and how it feels in their room is only
 > known once played. See [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
 
 ## What's in the box
@@ -35,6 +35,39 @@ racket or stick as your racket or club, a **toy gun** for the shooting games - r
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.11.0 - next-level graphics, lighter frames
+
+The owner: take the graphics to the next level - but don't make it laggy or break the motion controls; improve the
+motion capture where possible.
+
+* **How it stays smooth.** Detailed scenery (skies, mountains, stands, rings, lanes, boards, rooms) is now drawn once
+  into a cached picture and reused every frame as a single image, so a backdrop with thousands of details costs about
+  as much as one rectangle. Moving things (crowds cheering, chasing bulbs, bobbing snowmen) use a few cached frames
+  shown in turn; trees and clouds in the 3D games are cached pictures too; far-away snowmen are drawn simply. Counted
+  on the build machine (drawing operations per frame - a stand-in for frame cost, **not a frame rate**), the games
+  now do **54% less drawing work** in total than 1.10.0: Tennis 1,673 -> 388, Sleigh Slalom 2,892 -> 1,063, Darts
+  588 -> 149. Two do a little more (Penalty Save +23%, Elf Dance-Off +9%) because the players are more detailed.
+  A new test keeps every game under a budget and checks no cached picture is remade every frame.
+* **Lighting.** Glows, sparks, lamps and beams now *add* light instead of washing colours out; depth-of-field blur on
+  distant scenery; a fine film grain; light shafts and floodlight glare.
+* **New characters.** The sports players have shaded, rounded limbs, a shaped team shirt with a collar and number,
+  trainers and socks, five hairstyles, expressive eyes and a rim light; goalkeepers wear proper gloves. The snowmen
+  have packed-snow texture, glints and a cool rim light. All joints are where they were, so they copy your moves
+  exactly as before.
+* **Every scene redone:** a dark boxing arena with a lighting rig and camera flashes; the clay ground with soft
+  clouds, hazy mountains, fence, gravel path and a polished wooden stand; an archery range with roped lanes,
+  distance boards, a straw target boss and wind flags; a real-looking dartboard with sisal fibres and a walnut
+  cabinet; tennis and table tennis stadiums with roofs, cheering crowds and glowing boards; Penalty Save under
+  stadium lights; bowling lanes with board grain and the pin lights reflected down the lane; and for Christmas a
+  snowy cabin with icicles, a moonlit village, a stage with velvet curtains, a lush tree for Decorate the Tree,
+  sprite forests in Sleigh Slalom and Reindeer Race, and new menu backdrops for both modes.
+* **Golf:** leafy trees and pines, soft clouds, haze in the distance, and a proper golfer (legs, polo shirt, cap,
+  shaded arms) instead of a stack of balls.
+* **Effects:** breaking clays and bottles throw tumbling shards and dust; confetti is foil that glints.
+* **Motion capture:** during play, if a player's tracking stays weak for two seconds (hands out of the picture, too
+  close or far, too dark), a tip appears on their side - "Keep both hands in the picture", "Step back a little" -
+  until it is fixed, so missed moves come with the reason. The gesture code itself is unchanged in this version.
 
 ## Changes in 1.10.0 - Player 1 steers the menus, steadier choosing, golf grip
 

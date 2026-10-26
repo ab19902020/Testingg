@@ -1,6 +1,6 @@
 # Test report
 
-Date: 2026-10-26 (version 1.10.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+Date: 2026-10-26 (version 1.11.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
 (no KVM) or TV was available here.** The only real-device evidence is the owner's reports that versions 1.0.1 to
 1.6.0 run on their phone, with their comments on how well tracking works (section 4). Everything else that needs a device is marked **UNVERIFIED**.
 
@@ -8,7 +8,7 @@ Date: 2026-10-26 (version 1.10.0). Environment: Linux cloud container, OpenJDK 2
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **230 passed, 0 failed, 8 skipped** (the skipped ones are developer tools: diagnostics, screenshots, a sound dump, the tracking benchmark, the hand-model probe and a trace) (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **238 passed, 0 failed, 10 skipped** (the skipped ones are developer tools: diagnostics, screenshots, a sound dump, the tracking benchmark, the hand-model probe and a trace) (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
 | Finger tracking with the real MediaPipe hand model (on still photos of hands, JVM) | **Passed** - finger shapes read correctly, also on hands shrunk to ~70 px; hands found from the body pose on a real two-person photo |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
@@ -26,6 +26,7 @@ Date: 2026-10-26 (version 1.10.0). Environment: Linux cloud container, OpenJDK 2
 | Tracking fix after the owner's report that 1.8.0 tracks worse (1.8.1) | Low-light boost rebuilt (no jump at a threshold, smoothed per player, lookup table) and checked on the JVM; real pose models on photo sequences: in normal light the default now tracks **identically to 1.7.0**, and dark rooms are still found. **Not yet tried on the owner's phone** - whether this is the whole cause is not known |
 | Finger-gun trigger rebuilt, steadier hand crop, archery anchor, steady tuck, Motion test graph (1.9.0) | Passed with the **real hand model's landmarks of a real photo turned to point at the camera** (12 angles, squashed depth, frame-to-frame wobble) and with simulated bodies; the real lite and full hand models read the thumb clearly on real photos shrunk to living-room size. **Not yet tried with a live camera** |
 | Player 1 waves to take control of the menus, hold-still selection, quicker pointer, golf grip with a hidden wrist, golf graph, gallery and arena graphics (1.10.0) | Passed in JVM tests with simulated bodies (whole app: two players, waves, raised hands, slow pointing), scripted cursor paths with jitter, and simulated golf swings at 30 and 15 pictures a second; screens rendered with Java2D and checked by eye. **Not yet tried with a live camera** |
+| Graphics overhaul with cached scenery, new characters, lighting and effects; in-game tracking tip (1.11.0) | Passed in JVM tests: every game played by computer players with its drawing work counted (54% less in total than 1.10.0, all games under the budget test), cached-picture reuse checked, blur/grain/blend checked pixel by pixel, screens rendered with Java2D and checked by eye. How smoothly it draws on a phone or TV is **not yet tried** |
 | On-device performance (fps, latency, thermal) | **UNVERIFIED** - no numbers measured; none are claimed |
 | TV output over USB-C/HDMI, Presentation mode, cable unplug | **UNVERIFIED** |
 | Audio output and latency | **UNVERIFIED** |
@@ -34,12 +35,61 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (238: 230 passed, 8 skipped)
+## 1. Automated tests (248: 238 passed, 10 skipped)
 
 Run: `./gradlew :core:test` with the real-model validation environment configured
 (`tools/pose-validation/run_real_model_tests.sh` sets it up). 13 of the tests use the real pose and hand models and are
 skipped without that environment. The 8 skipped tests are developer tools that run only when asked: two
 diagnostics, a sound dump, two screenshot tools, the tracking benchmark, the hand-model probe and a finger-gun trace.
+
+### Graphics and drawing cost (new in 1.11.0)
+
+The owner asked for much better graphics without making the game laggy or breaking the motion controls. The
+approach: draw detailed, static scenery once into cached pictures and reuse them (see ARCHITECTURE.md, Rendering).
+What was checked:
+
+* `LayerTest` (5 tests): a cached picture is drawn once and reused, redrawn for a new version; its content lands in
+  the same place as drawing directly (at half resolution too); the blur keeps transparent edges white (no dark
+  fringe) and keeps total brightness; grain changes pixels by a few levels only and leaves transparent pixels alone;
+  "add" brightens, "multiply" darkens and `restore` returns to normal drawing.
+* `DrawBudgetTest`: every game played for 20 s by computer players, each frame's drawing counted with `CostGfx`; no
+  busy frame (95th percentile) above 1300 operations, and no game makes more than 60 cached pictures (a picture remade
+  every frame would make about 600).
+* `TrackingCoachTest` (2 tests): a weak-tracking tip appears only after 2 s, stays a moment, goes once tracking is
+  good; short dips and computer players never show one.
+* Drawing work per frame, before (1.10.0) and after, counted over 40 s of computer play per game at 30 frames a second
+  (`DrawCost` tool). **A stand-in for frame cost, not a frame-rate measurement**: a phone's real cost also depends on
+  how many pixels are filled, which was not measured. Cached pictures count as one operation each:
+
+  | Game | Mean ops before | Mean ops after | Change | Busiest (p95) before | Busiest (p95) after | Pictures made |
+  |---|---|---|---|---|---|---|
+| Christmas Tennis | 1,673 | 388 | -77% | 1678 | 391 | 7 |
+| Snowball Showdown | 1,089 | 499 | -54% | 1133 | 541 | 3 |
+| Present Catch | 1,114 | 564 | -49% | 1186 | 635 | 4 |
+| Reindeer Racing | 2,197 | 707 | -68% | 2468 | 873 | 5 |
+| Festive Bowling | 711 | 435 | -39% | 796 | 520 | 2 |
+| Table Tennis (Christmas) | 445 | 434 | -2% | 449 | 438 | 4 |
+| Elf Dance-Off | 494 | 536 | +9% | 572 | 614 | 1 |
+| Sleigh Slalom | 2,892 | 1,063 | -63% | 3060 | 1132 | 18 |
+| Christmas Goalkeepers | 890 | 608 | -32% | 994 | 712 | 10 |
+| Decorate the Tree | 414 | 256 | -38% | 478 | 320 | 2 |
+| Clay Shooting | 364 | 141 | -61% | 428 | 204 | 8 |
+| Boxing | 819 | 339 | -59% | 876 | 399 | 2 |
+| Archery | 395 | 174 | -56% | 402 | 181 | 27 |
+| Shooting Gallery | 697 | 342 | -51% | 786 | 422 | 12 |
+| Darts | 588 | 149 | -75% | 596 | 165 | 1 |
+| Penalty Save (Sports) | 456 | 559 | +23% | 566 | 671 | 10 |
+| Tennis (Sports) | 952 | 281 | -70% | 955 | 284 | 10 |
+| Table Tennis (Sports) | 866 | 273 | -68% | 870 | 278 | 7 |
+| Bowling (Sports) | 571 | 376 | -34% | 656 | 461 | 2 |
+| **All games** | **17,627** | **8,124** | **-54%** | | | |
+
+* Characters keep every joint where it was (same arm, hand, head and prop positions), so the avatars copy movement
+  exactly as before; the gesture code is unchanged in this version (all gesture tests pass unchanged).
+* Screens rendered with Java2D at 1920 x 1080 and checked by eye: every game, the menus and the golf aiming view.
+
+What this does not show: frame rate, smoothness, memory pressure or heat on a phone, or how the new look reads on a
+TV across the room. These need the phone.
 
 ### Menus and golf grip (new in 1.10.0)
 
@@ -462,13 +512,13 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `dist/LivingRoomGames-debug.apk`, 23,651,544 bytes, SHA-256 `1ca3601b4bdbef2046be9528a178b41647e1f347044f8179b7169513e0010e40` |
-| Package / version | `com.clrg.christmasgames` (unchanged, so it installs over earlier versions), versionCode 13, versionName 1.10.0, label "Living Room Games" |
+| File | `dist/LivingRoomGames-debug.apk`, 23,704,792 bytes, SHA-256 `d524cb8ebe4798d8a6f73ebe5029523c62a2068171fd0dafa437727bc3d81cd3` |
+| Package / version | `com.clrg.christmasgames` (unchanged, so it installs over earlier versions), versionCode 14, versionName 1.11.0, label "Living Room Games" |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
 | Signature | `apksigner verify --min-sdk-version 24`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
 | Reproducibility | Two clean builds (`./gradlew clean :app:assembleDebugApk`) produced byte-identical APKs with the same debug key |
 | Alignment | `zipalign -p 4` |
-| Code | single `classes.dex`, 1,744 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
+| Code | single `classes.dex`, 1,804 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
 | Models | 5 `.tflite` files (4 pose + 1 hand landmark), stored uncompressed (memory-mappable); the build downloads and checks each against a SHA-256 |
 | Native libs | TFLite + GPU delegate for `arm64-v8a` and `x86_64` |
 | Permissions | `CAMERA` only. No `INTERNET` (enforced by the build) |
@@ -492,6 +542,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 | Tournament pair rotation + persistent scores | Passed | AppFlowTest |
 | Hands-free dwell menus with accidental-activation protection | Passed (unit) / UNVERIFIED with real hands | UiDwellTest |
 | Only Player 1 steers the menus, after a wave | Passed (simulated bodies, whole app) / UNVERIFIED with real people | MenuControlTest |
+| Richer graphics without heavier frames | Passed (drawing work counted per game, budget test) / smoothness on a phone UNVERIFIED | DrawBudgetTest, LayerTest, DrawCost |
 | Debug overlays (skeleton, performance) | Implemented / UNVERIFIED on device | Settings -> Developer |
 | Camera fps, inference latency, render fps, tracking-loss counters | Implemented (overlay) / no measurements yet | DevOverlay |
 | Camera keeps running while TV shows the game | Implemented / UNVERIFIED | DisplayRouter, GameRenderer |
@@ -511,6 +562,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Report | Version | Status |
 |---|---|---|
+| "Keep improving the graphics, take it to the next level graphically, as it's not that impressive at the moment, but do not make it laggy or anything, or destroy the motion capture controls. If you can improve the motion capture for these games, please do as well." - owner | 1.10.0 | 1.11.0: cached detailed scenery for every game and the menus, new shaded characters, light blending, depth blur and grain, new effects, a proper golfer; total drawing work per frame down 54% (build-machine count, not a frame rate); joints and gesture code unchanged; a tracking tip during play when a player's tracking stays weak. **Not yet confirmed on the phone.** |
 | "Only player one can control the main menu screen ... anyone who's in the red player will be player one ... it should say wave at the screen to get full control ... it's selecting a bit too quickly if I'm not able to control it ... if it's hovering above something when I don't want it, I've got to move my hand and it's too slow at moving ... the golf game wasn't picking up my swing properly ... make the graphics even better" - owner | 1.9.0 | 1.10.0: Player 1 (red area) waves to take control and is the only one with a menu pointer; the ring fills only while the hand is held still and empties quickly when it moves; the pointer follows movement sooner; golf accepts a clasped grip with one wrist hidden (a likely reason the swing never started); golf graph in the Motion test; new Shooting Gallery and Table Tennis arena graphics. **Not yet confirmed on the phone.** |
 | "Motion tracking still not working on the gun game. It doesn't recognise my thumb going down to shoot ... very reactive, but doesn't overreact ... the gun should be your hand pointing out with your two fingers pointing out and your thumb up; when your thumb goes down, it shoots ... look how other games do it" - owner | 1.8.1 | Cause found: fixed 3D limits and a strict shape check that a gun pointing at the camera cannot pass. 1.9.0 rebuilds the trigger (flat measure, learned per player, wide on/off gap, quick-movement rule - as in headset hand tracking), steadies the hand crop, fixes a bow that fired during a quick draw and a flickering sleigh tuck, and adds a live graph to the Motion test. **Not yet confirmed on the phone.** |
 | "Motion tracking is not working at all really well with anything - bowling, skiing, archery, all doesn't work great" - owner; asked further: moves missed and wrong triggers, worse than before, standing 2-3 m away | 1.8.0 | Two faults found in 1.8.0's new low-light brightening (abrupt switching that can make the picture flicker; cost per frame), fixed in 1.8.1; the other new tracking aids are now off by default (Settings -> Motion -> Extra tracking aids), so in normal light 1.8.1 tracks as 1.7.0. The Motion test now shows whether the phone is holding tracking back. **Not yet confirmed on the phone.** |
@@ -606,6 +658,13 @@ overlay**. Record PASS/FAIL and the overlay numbers. Repeat key items on a secon
 25u. [ ] 1.10.0 golf: Motion test, Graph: golf. Clasp the hands as for a real club: the line should read "grip OK",
     then "ready - swing!" after holding still low; swing back and through: a SHOT mark appears. Screenshot it,
     especially when a swing is missed. Then play a hole.
+25v. [ ] 1.11.0 smoothness: play Sleigh Slalom, Tennis and Boxing for a minute each on the TV - any stutter, and does
+    the phone get hot? Note any pause when a game's "how to play" card appears. Try Reduced effects if anything
+    stutters, and report which game.
+25w. [ ] 1.11.0 look on the TV from the sofa: are the players easy to see against the new crowds and scenery? Is
+    anything too dark or too busy?
+25x. [ ] 1.11.0 tracking tip: during a game, put one hand behind your back for a few seconds - a tip should appear on
+    your side and go when you bring it back.
 25s. [ ] 1.9.0 graphs for bowling and skiing: Graph: bowling while bowling a few times, Graph: lean + tuck while
     steering and tucking; screenshot each, especially when a move was missed or fired by itself.
 25q. [ ] 1.8.1: play bowling, Sleigh Slalom and archery as before; note whether moves are picked up and whether

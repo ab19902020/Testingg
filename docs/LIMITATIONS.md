@@ -135,6 +135,16 @@ device, though: the build environment had no Android device and no emulator, and
 * **Golf grip**: a clasped grip now counts when one wrist is hidden, but only if the body model still places the
   hidden wrist next to the other; a wrist the model loses entirely still breaks the grip.
 
+## Graphics limitations (1.11.0)
+
+* **Smoothness on a phone is unmeasured.** Frames now do less drawing work than 1.10.0 by the build machine's count,
+  but nothing was timed on a phone or TV. If a game stutters, turn on **Reduced effects** and tell us which game.
+* **Cached pictures are made the first time they are needed**, mostly while a game's "how to play" card is on
+  screen; that can cause a short pause as the card appears. Archery remakes its range at each new end (the target
+  moves back). Up to about 36 MB of memory is used for these pictures; older ones are dropped and remade if needed.
+* Distant scenery is drawn at reduced resolution and softly blurred on purpose (depth of field); on a large 4K TV it
+  is upscaled from 1080p.
+
 ## Game and UI limitations
 
 * **Left/right check.** It relies on the player sliding their hand towards the arrows; if they do something else,

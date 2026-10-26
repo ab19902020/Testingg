@@ -14,7 +14,7 @@ import kotlin.test.Test
  * measurement of frame rate.
  */
 class DrawCost {
-    data class Cost(val id: String, val meanOps: Double, val p95Ops: Int, val maxOps: Int, val meanHeavy: Double, val maxPoints: Int, val buildOps: Int, val meanBlended: Double = 0.0)
+    data class Cost(val id: String, val meanOps: Double, val p95Ops: Int, val maxOps: Int, val meanHeavy: Double, val maxPoints: Int, val buildOps: Int, val meanBlended: Double = 0.0, val builds: Int = 0, val frames: Int = 0)
 
     companion object {
         fun measure(id: String, seconds: Double = 40.0): Cost {
@@ -36,7 +36,7 @@ class DrawCost {
                 }
             }
             val sorted = ops.sorted()
-            return Cost(id, ops.average(), sorted[(sorted.size * 0.95).toInt().coerceAtMost(sorted.size - 1)], sorted.last(), heavy.average(), maxPts, g.layerBuildOps, blended.average())
+            return Cost(id, ops.average(), sorted[(sorted.size * 0.95).toInt().coerceAtMost(sorted.size - 1)], sorted.last(), heavy.average(), maxPts, g.layerBuildOps, blended.average(), g.layerBuilds, ops.size)
         }
     }
 
@@ -47,8 +47,8 @@ class DrawCost {
         val rows = GameRegistry.ids.map { measure(it) }
         val f = File(out!!)
         f.parentFile?.mkdirs()
-        f.writeText("game,mean_ops,p95_ops,max_ops,mean_heavy,max_points,layer_build_ops,mean_blended\n" + rows.joinToString("\n") {
-            "${it.id},${"%.0f".format(it.meanOps)},${it.p95Ops},${it.maxOps},${"%.1f".format(it.meanHeavy)},${it.maxPoints},${it.buildOps},${"%.1f".format(it.meanBlended)}"
+        f.writeText("game,mean_ops,p95_ops,max_ops,mean_heavy,max_points,layer_build_ops,mean_blended,layer_builds,frames\n" + rows.joinToString("\n") {
+            "${it.id},${"%.0f".format(it.meanOps)},${it.p95Ops},${it.maxOps},${"%.1f".format(it.meanHeavy)},${it.maxPoints},${it.buildOps},${"%.1f".format(it.meanBlended)},${it.builds},${it.frames}"
         } + "\n")
         println(f.readText())
     }

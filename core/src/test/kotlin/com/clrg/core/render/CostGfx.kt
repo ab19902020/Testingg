@@ -18,6 +18,9 @@ class CostGfx(override val width: Float = 1920f, override val height: Float = 10
         private set
     var layerBuildOps = 0
         private set
+    /** Cached pictures made (cache misses) so far. */
+    var layerBuilds = 0
+        private set
     private val made = HashMap<String, Int>()
     private var alpha = 1f
     private var blend = Blend.NORMAL
@@ -67,6 +70,7 @@ class CostGfx(override val width: Float = 1920f, override val height: Float = 10
             val sub = CostGfx(width, height)
             draw(sub)
             layerBuildOps += sub.ops
+            layerBuilds++
             made[key] = version
         }
         // a big picture fills a lot of screen; a small one (a tree, a cloud) is a cheap textured quad
