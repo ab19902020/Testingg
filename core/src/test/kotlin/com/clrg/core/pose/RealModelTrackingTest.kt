@@ -53,7 +53,10 @@ class RealModelTrackingTest {
         return out
     }
 
-    private val old = PipelineConfig(retryWider = false, smoothRoi = false, keepPresence = 0.5f, autoLevel = false, guardJumps = false)
+    /** The tracking of 1.7.0: the default without the low-light boost. */
+    private val old = PipelineConfig(autoLevel = false)
+    /** With the extra tracking aids switched on (Settings -> Motion). */
+    private val aids = PipelineConfig().withExtraAids(true)
 
     @Test
     fun aDarkRoomStillFindsBothPlayers() {
@@ -97,8 +100,8 @@ class RealModelTrackingTest {
             return swaps
         }
         val before = swaps(old)
-        val now = swaps(PipelineConfig())
-        println("[real-model] fast side-by-side sway: track jumped to the other person $now times (old settings: $before)")
+        val now = swaps(aids)
+        println("[real-model] fast side-by-side sway: track jumped to the other person $now times with the extra aids (1.7.0 settings: $before)")
         assertTrue(now == 0, "no track jumps onto the other player: $now")
     }
 
@@ -125,8 +128,11 @@ class RealModelTrackingTest {
             return sum / n / base.height
         }
         val before = jitter(old)
-        val now = jitter(PipelineConfig())
-        println("[real-model] noisy still picture: joint jitter %.4f of the frame height (old settings %.4f)".format(now, before))
-        assertTrue(now < before * 0.85f, "steadier than before: $now vs $before")
+        val boost = jitter(PipelineConfig())
+        val now = jitter(aids)
+        println("[real-model] noisy still picture: joint jitter %.4f of the frame height with the extra aids, %.4f by default (1.7.0 settings %.4f)".format(now, boost, before))
+        assertTrue(now < before * 0.85f, "the extra aids are steadier than before: $now vs $before")
+        // in normal light the low-light boost must stay out of the way: the default tracks as 1.7.0 did
+        assertTrue(kotlin.math.abs(boost - before) < before * 0.05f, "a normally lit picture is not changed by the boost: $boost vs $before")
     }
 }

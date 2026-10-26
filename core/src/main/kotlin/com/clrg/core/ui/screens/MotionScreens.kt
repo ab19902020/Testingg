@@ -217,12 +217,17 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
         // camera and tracking speed
         val p = app.platform.perf()
         val lines = if (app.settings.simulatedInput) listOf("Simulated input - not the camera") else listOf(
-            "Camera %.0f fps  -  tracking %.0f per second  -  delay %s".format(p.cameraFps, p.inferenceFps, if (app.lastPoseLatencyMs.isNaN()) "-" else "%.0f ms".format(app.lastPoseLatencyMs)),
+            "Camera %.0f fps  -  tracking %.0f per second, %.0f ms each  -  delay %s".format(p.cameraFps, p.inferenceFps, p.inferenceMs,
+                if (app.lastPoseLatencyMs.isNaN()) "-" else "%.0f ms".format(app.lastPoseLatencyMs)),
             "${p.model} on ${p.delegate}  -  ${p.exposure}",
-            "Finger tracking: ${p.fingers}",
+            "Fingers: ${p.fingers}  -  low-light boost: ${p.lowLight}  -  aids: ${if (p.aids) "on" else "off"}  -  heat: ${p.thermal}",
         )
-        var y = view.bottom + 34f
-        for (l in lines) { g.text(l, view.cx, y, ui.fit(g, l, 28f, view.width, false), app.theme.dim, bold = false); y += 38f }
+        var y = view.bottom + 30f
+        for (l in lines) { g.text(l, view.cx, y, ui.fit(g, l, 27f, view.width, false), app.theme.dim, bold = false); y += 35f }
+        // tracking held back by the phone: say so plainly (a screenshot of this screen tells the whole story)
+        val warn = if (app.settings.simulatedInput) null else p.warning()
+        val health = warn ?: if (p.inferenceFps > 0.5f) "Tracking keeps up" else null
+        if (health != null) g.text(health, view.cx, y, ui.fit(g, health, 27f, view.width, true), if (warn != null) Colors.GOLD else Colors.GOOD, bold = true)
         if (ui.button(g, "labHeld", Rect(view.left, 900f, view.cx - 10f, 1010f), "Use a real object", "stick, toy racket, noodle", accent = Colors.GOOD, size = 36f)) app.push(HeldObjectScreen(app))
         if (ui.button(g, "labCheck", Rect(view.cx + 10f, 900f, view.right, 1010f), "Check left/right", accent = Colors.ICE, size = 36f)) {
             app.directionCheck.request(); app.notify("Raise a hand to start the left/right check")
@@ -255,7 +260,8 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
         Draw.panel(g, r, app.theme.panel, if (flash[k] < 0.4f) Colors.GOOD else app.theme.panelBorder)
         val c = app.playerColor(k)
         g.text(app.activePlayers[k].name, r.left + 30f, r.top + 40f, 38f, c, Align.LEFT)
-        Common.qualityMeter(g, app, k, r.right - 300f, r.top + 10f, 270f)
+        // no tip here: it would cover the counters (the Motion test says under the camera view when tracking is slow)
+        Common.qualityMeter(g, app, k, r.right - 300f, r.top + 10f, 270f, showTip = false)
         if (!slot.isPlaying || !ctl.hasPose) { g.text("Not seen - step into the picture", r.cx, r.cy, 32f, Colors.WARN, bold = false); return }
         // swing meters: how close each hand's movement is to counting as a swing
         var y = r.top + 125f

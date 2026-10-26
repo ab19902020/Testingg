@@ -36,12 +36,12 @@ data class PipelineConfig(
     /** Move each person's crop along with their recent motion (fewer losses when someone moves quickly). */
     val predictMotion: Boolean = false,
     /** When the landmark model loses a tracked person, try once more with a wider crop before giving up. */
-    val retryWider: Boolean = true,
+    val retryWider: Boolean = false,
     /** Smooth the tracking crop while a person is still (steadier landmarks), follow it closely when they move. */
-    val smoothRoi: Boolean = true,
+    val smoothRoi: Boolean = false,
     /** Presence needed to keep following someone already tracked (new people still need [minPresence]). */
-    val keepPresence: Float = 0.4f,
-    /** Brighten dark or backlit crops before the models see them. */
+    val keepPresence: Float = 0.5f,
+    /** Low-light boost: brighten clearly dark crops before the models see them (see [AutoLevel]). */
     val autoLevel: Boolean = true,
     /** Also brighten the person detector's input (not only the landmark crops). */
     val autoLevelDetector: Boolean = true,
@@ -57,7 +57,7 @@ data class PipelineConfig(
      * where the person's own motion says they should be is checked again at the expected place, and when two
      * tracks end up on the same person the one that jumped is dropped (not simply the newer one).
      */
-    val guardJumps: Boolean = true,
+    val guardJumps: Boolean = false,
     /** A track result further than this from its own motion's prediction (fraction of the crop) is re-checked. */
     val jumpDev: Float = 0.06f,
     /**
@@ -65,7 +65,15 @@ data class PipelineConfig(
      * so ordinary fast movement costs no extra model runs.
      */
     val jumpTargeted: Boolean = true,
-)
+) {
+    /**
+     * The extra tracking aids added in 1.8.0 (wider retry, steadier crops, a lower bar for keeping someone, the jump
+     * guard). They measured better on photo sequences but are not proven with a live camera, so they are a setting,
+     * off by default; off is the tracking of 1.7.0.
+     */
+    fun withExtraAids(on: Boolean): PipelineConfig =
+        copy(retryWider = on, smoothRoi = on, keepPresence = if (on) 0.4f else minPresence, guardJumps = on)
+}
 
 /** Horizontal slice of the upright frame (fractions of width), full height. */
 data class RegionSpec(val x0: Float, val x1: Float)
@@ -93,6 +101,8 @@ class PipelineStats {
     var detectorRuns = 0
     var landmarkRuns = 0
     var tracks = 0
+    /** Strongest low-light brightening applied to a body crop this frame (1 = none). */
+    var boostGain = 1f
 }
 
 /**
@@ -113,6 +123,8 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         var dev = 0f
         /** Frame this track was last updated (its `measured` is already this frame's). */
         var seenFrame = -1L
+        /** Low-light boost for this person's crops, smoothed over frames. */
+        val level = AutoLevel.State()
     }
 
     private val tracks = ArrayList<Track>()
@@ -168,6 +180,7 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         stats.preprocessMs = 0f
         stats.detectorMs = 0f
         stats.landmarkMs = 0f
+        stats.boostGain = 1f
         val toBuffer = orientation.uprightToBuffer()
         val uw = orientation.uprightWidth.toFloat()
         val uh = orientation.uprightHeight.toFloat()
@@ -180,11 +193,11 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         while (it.hasNext()) {
             val tr = it.next()
             val crop = if (config.predictMotion) predicted(tr) else tr.roi
-            var lm = runLandmarks(src, toBuffer, crop, clock, config.keepPresence)
+            var lm = runLandmarks(src, toBuffer, crop, clock, config.keepPresence, tr.level)
             if (lm == null && config.retryWider) {
                 // lost them: one more look with a wider crop around where they were
                 val m = tr.measured
-                lm = runLandmarks(src, toBuffer, m.copy(side = m.side * 1.45f), clock, config.keepPresence)
+                lm = runLandmarks(src, toBuffer, m.copy(side = m.side * 1.45f), clock, config.keepPresence, tr.level)
                 if (lm != null) { rescues++; tr.rescued++ }
             } else tr.rescued = 0
             if (lm == null || tr.rescued > 8) { it.remove(); continue }
@@ -198,7 +211,7 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
             if (config.guardJumps && tr.frames > 2 && tr.dev > config.jumpDev &&
                 (!config.jumpTargeted || jumpedTowardsOther(tr, measured, pcx, pcy))) {
                 // a sudden jump: look again where they should be; keep whichever result fits their motion
-                val again = runLandmarks(src, toBuffer, tr.roi.copy(cx = pcx, cy = pcy), clock, config.keepPresence)
+                val again = runLandmarks(src, toBuffer, tr.roi.copy(cx = pcx, cy = pcy), clock, config.keepPresence, tr.level)
                 if (again != null) {
                     val m2 = again.trackingRoi()
                     val dev2 = kotlin.math.hypot(m2.cx - pcx, m2.cy - pcy) / m2.side
@@ -269,7 +282,8 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         val a = clock()
         CropSampler.sample(src, region.detectorTransform().andThen(toBuffer), BlazePose.DETECTOR_SIZE, detInput, 1f / 127.5f, -1f, zeroBorder = true)
         if (brighten) {
-            if (!AutoLevel.apply(detInput, BlazePose.DETECTOR_SIZE * BlazePose.DETECTOR_SIZE, -1f, 1f)) return null
+            // only worth a second detector run when the picture there is clearly dark
+            if (!AutoLevel.apply(detInput, BlazePose.DETECTOR_SIZE * BlazePose.DETECTOR_SIZE, -1f, 1f, minChange = 0.4f, search = true)) return null
             levelledCrops++
         }
         observer?.invoke(region, null)
@@ -313,12 +327,17 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         return RotatedRect(prev.cx + (m.cx - prev.cx) * k, prev.cy + (m.cy - prev.cy) * k, prev.side + (m.side - prev.side) * k, prev.rotation + dr * k)
     }
 
-    private fun runLandmarks(src: PixelSource, toBuffer: Affine, roi: RotatedRect, clock: () -> Long, minPresence: Float = config.minPresence): RawLandmarks? {
+    private fun runLandmarks(src: PixelSource, toBuffer: Affine, roi: RotatedRect, clock: () -> Long, minPresence: Float = config.minPresence,
+                             level: AutoLevel.State? = null): RawLandmarks? {
         observer?.invoke(null, roi)
         lastRois.add(roi)
         val a = clock()
         CropSampler.sample(src, roi.cropTransform(BlazePose.LANDMARK_SIZE).andThen(toBuffer), BlazePose.LANDMARK_SIZE, lmInput, 1f / 255f, 0f, zeroBorder = false)
-        if (config.autoLevel && AutoLevel.apply(lmInput, BlazePose.LANDMARK_SIZE * BlazePose.LANDMARK_SIZE, 0f, 1f)) levelledCrops++
+        if (config.autoLevel && AutoLevel.apply(lmInput, BlazePose.LANDMARK_SIZE * BlazePose.LANDMARK_SIZE, 0f, 1f, level)) {
+            levelledCrops++
+            // gamma lift counted as its equivalent brightening of a mid-grey
+            stats.boostGain = maxOf(stats.boostGain, AutoLevel.lastGain * Math.pow(0.18, (AutoLevel.lastGamma - 1.0)).toFloat())
+        }
         val b = clock()
         val hm = if (config.refineWithHeatmap) heatmap else null
         runner.runLandmarks(lmInput, lmRaw, lmFlag, hm)

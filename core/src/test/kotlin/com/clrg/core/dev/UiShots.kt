@@ -91,6 +91,19 @@ class UiShots {
         tap("menu")
         tap("settings")
         shot("settings")
+        tap("tab3")
+        shot("settings_motion")
+        tap("motionLab")
+        shot("motion_test", 30)
+        // with the camera figures a phone would show (sample numbers for the layout, not measurements)
+        app.settings.simulatedInput = false
+        platform.perfSnapshot = com.clrg.core.app.PerfSnapshot(cameraFps = 30f, inferenceFps = 17f, inferenceMs = 41f, delegate = "GPU",
+            model = "BlazePose lite", adaptiveLevel = "Auto/lite/30fps", exposure = "sharp-motion exposure 8.3 ms, ISO 1600",
+            thermal = "moderate", lowLight = "x1.6")
+        shot("motion_test_phone", 10)
+        platform.perfSnapshot = com.clrg.core.app.PerfSnapshot()
+        app.settings.simulatedInput = true
+        app.key(Key.BACK); frames(5)
         app.key(Key.BACK); frames(5)
         tap("golf")
         shot("golf_setup")

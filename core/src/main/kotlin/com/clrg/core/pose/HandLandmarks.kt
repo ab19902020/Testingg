@@ -91,11 +91,15 @@ class HandLandmarkTracker(private val runner: HandModelRunner) {
     private val prevTrack = Array(2) { IntArray(2) { -1 } }
     /** The body model's wrist position when each hand crop was last made, per [player][hand * 2 + x/y]. */
     private val prevWrist = Array(2) { FloatArray(4) { Float.NaN } }
-    /** Brighten dark hand crops before the model sees them (as the body pipeline does). */
+    /** Low-light boost: brighten clearly dark hand crops before the model sees them (as the body pipeline does). */
     var autoLevel = true
+    /** Move the tracked hand crop by the body wrist's movement (one of the extra tracking aids; off = as 1.7.0). */
+    var followWrist = false
+    /** Smoothed low-light boost per [player][hand]. */
+    private val level = Array(2) { Array(2) { AutoLevel.State() } }
 
     fun reset() {
-        for (p in 0..1) for (h in 0..1) { prevRoi[p][h] = null; prevTrack[p][h] = -1; prevWrist[p][h * 2] = Float.NaN }
+        for (p in 0..1) for (h in 0..1) { prevRoi[p][h] = null; prevTrack[p][h] = -1; prevWrist[p][h * 2] = Float.NaN; level[p][h] = AutoLevel.State() }
     }
 
     fun process(src: PixelSource, toBuffer: Affine, poses: List<RawPose>, clock: () -> Long = System::nanoTime) {
@@ -120,16 +124,16 @@ class HandLandmarkTracker(private val runner: HandModelRunner) {
                 val w = HandLm.POSE_WRIST[h]
                 val moved = prevRoi[p][h]?.let { r ->
                     val px = prevWrist[p][h * 2]; val py = prevWrist[p][h * 2 + 1]
-                    if (!px.isNaN() && lm.visibility[w] >= 0.3f) r.copy(cx = r.cx + (lm.x[w] - px), cy = r.cy + (lm.y[w] - py)) else r
+                    if (followWrist && !px.isNaN() && lm.visibility[w] >= 0.3f) r.copy(cx = r.cx + (lm.x[w] - px), cy = r.cy + (lm.y[w] - py)) else r
                 }
                 if (lm.visibility[w] >= 0.3f) { prevWrist[p][h * 2] = lm.x[w]; prevWrist[p][h * 2 + 1] = lm.y[w] } else prevWrist[p][h * 2] = Float.NaN
                 var roi = moved?.takeIf { prevTrack[p][h] == pose.trackId && fromPose != null && near(it, lm, h) } ?: fromPose
                 if (roi == null) { prevRoi[p][h] = null; continue }
-                var obs = run(src, toBuffer, roi, h)
+                var obs = run(src, toBuffer, roi, p, h)
                 if (obs == null && roi !== fromPose && fromPose != null) {
                     // lost the hand with the tracked crop: one more try from the body pose
                     roi = fromPose
-                    obs = run(src, toBuffer, roi, h)
+                    obs = run(src, toBuffer, roi, p, h)
                 }
                 if (obs == null) { prevRoi[p][h] = null; continue }
                 prevRoi[p][h] = trackingRoi(obs)
@@ -144,9 +148,9 @@ class HandLandmarkTracker(private val runner: HandModelRunner) {
 
     private var frame = 0L
 
-    private fun run(src: PixelSource, toBuffer: Affine, roi: RotatedRect, hand: Int): HandObservation? {
+    private fun run(src: PixelSource, toBuffer: Affine, roi: RotatedRect, player: Int, hand: Int): HandObservation? {
         CropSampler.sample(src, roi.cropTransform(HandLm.SIZE).andThen(toBuffer), HandLm.SIZE, input, 1f / 255f, 0f, zeroBorder = false)
-        if (autoLevel) AutoLevel.apply(input, HandLm.SIZE * HandLm.SIZE, 0f, 1f)
+        if (autoLevel) AutoLevel.apply(input, HandLm.SIZE * HandLm.SIZE, 0f, 1f, level[player][hand])
         runner.runHand(input, raw, presence)
         lastRuns++
         if (presence[0] < MIN_PRESENCE) return null

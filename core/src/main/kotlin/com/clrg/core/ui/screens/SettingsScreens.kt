@@ -81,12 +81,17 @@ class SettingsScreen(app: GameApp) : Screen(app) {
                     if (ui.button(g, "heldGun", Rect(rr.cx + 8f, rr.top, rr.right, rr.bottom), "Teach a toy gun", "for the shooting games", accent = Colors.GOOD, size = 32f)) app.push(HeldObjectScreen(app, com.clrg.core.game.ObjectKind.GUN))
                 }
                 if (ui.toggle(g, "useHeld", row(), "Use learned objects in games", s.useHeldObjects)) { s.useHeldObjects = !s.useHeldObjects; changed = true }
-                if (ui.toggle(g, "sharp", row(), "Sharper fast movements (shorter camera exposure)", s.sharpMotion)) { s.sharpMotion = !s.sharpMotion; changed = true }
+                run {
+                    val rr = row()
+                    if (ui.toggle(g, "sharp", Rect(rr.left, rr.top, rr.cx - 8f, rr.bottom), "Sharper fast movements", s.sharpMotion)) { s.sharpMotion = !s.sharpMotion; changed = true }
+                    if (ui.toggle(g, "lowLight", Rect(rr.cx + 8f, rr.top, rr.right, rr.bottom), "Low-light boost", s.lowLightBoost)) { s.lowLightBoost = !s.lowLightBoost; changed = true }
+                }
+                if (ui.toggle(g, "aids", row(), "Extra tracking aids (try it: off = tracking as in version 1.7)", s.trackingAids)) { s.trackingAids = !s.trackingAids; changed = true }
                 when (ui.stepper(g, "sens2", row(), "Gesture sensitivity", pct(s.gestureSensitivity))) { -1 -> { s.gestureSensitivity = (s.gestureSensitivity - 0.1f).coerceAtLeast(0.5f); changed = true }; 1 -> { s.gestureSensitivity = (s.gestureSensitivity + 0.1f).coerceAtMost(2f); changed = true } }
                 ui.paragraph(g, listOf(
-                    "Sharper fast movements makes swinging arms (and held objects) much less blurred in the camera",
-                    "picture, so swings are seen better. The picture may look a little grainier in a dim room; switch",
-                    "it off if the picture flickers or goes dark.",
+                    "Sharper fast movements: less blur on swinging arms; grainier in a dim room (off if it flickers).",
+                    "Low-light boost brightens the picture for tracking, only when it is clearly dark.",
+                    "Extra tracking aids: new helpers, not yet proven in a real room - compare on and off.",
                 ), 160f, y + 10f, 28f, app.theme.dim)
             }
             4 -> {

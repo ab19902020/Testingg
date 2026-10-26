@@ -67,7 +67,7 @@ object Common {
     }
 
     /** Live tracking-quality meter for player [k]: five bars, a word and the most useful tip (wrapped to [w]). */
-    fun qualityMeter(g: Gfx, app: GameApp, k: Int, x: Float, y: Float, w: Float) {
+    fun qualityMeter(g: Gfx, app: GameApp, k: Int, x: Float, y: Float, w: Float, showTip: Boolean = true) {
         val q = com.clrg.core.tracking.TrackingQuality.of(app.tracker.slots[k], if (app.settings.simulatedInput) 0f else app.platform.perf().inferenceFps)
         val c = app.playerColor(k)
         g.text("Tracking", x + w / 2f, y, 28f, app.theme.dim)
@@ -80,7 +80,7 @@ object Common {
             g.fillRoundRect(bx + 4f, y + 80f - bh, bx + bw - 4f, y + 80f, 5f, col)
         }
         g.text(q.label, x + w / 2f, y + 110f, 34f, if (q.score >= 0.62f) Colors.GOOD else if (q.score >= 0.42f) Colors.WARN else c)
-        q.tip?.let { tip ->
+        q.tip?.takeIf { showTip }?.let { tip ->
             // simple word wrap
             val words = tip.split(" ")
             var line = ""

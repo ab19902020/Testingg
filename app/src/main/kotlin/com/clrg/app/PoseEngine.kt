@@ -182,6 +182,10 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
     @Volatile var quality = QualityMode.AUTO
     /** Allow the camera to run at 60 fps when inference is fast enough and the phone is cool. */
     @Volatile var allowHighFps = true
+    /** Low-light boost for the body and hand models (Settings -> Motion). */
+    @Volatile var lowLightBoost = true
+    /** The extra 1.8.0 tracking aids (Settings -> Motion); off = the tracking of 1.7.0. */
+    @Volatile var trackingAids = false
     @Volatile var mirror = true
     /** The camera delivers this camera's picture upside down: turn it the right way up. */
     @Volatile var upsideDown = false
@@ -442,6 +446,8 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
             }
         }
         val ht = handTracker!!
+        ht.autoLevel = lowLightBoost
+        ht.followWrist = trackingAids
         ht.tracks = handTracks
         ht.masks = masks
         pipe.handLandmarks = ht
@@ -459,8 +465,9 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
 
     private fun configFor(variant: String, people: Int): PipelineConfig {
         val n = people.coerceIn(1, 2)
-        return if (variant == "lite") PipelineConfig(maxPoses = n + 1, desiredPoses = n, detectIntervalWhenSatisfied = 6, refineWithHeatmap = false)
+        val base = if (variant == "lite") PipelineConfig(maxPoses = n + 1, desiredPoses = n, detectIntervalWhenSatisfied = 6, refineWithHeatmap = false)
         else PipelineConfig(maxPoses = n + 1, desiredPoses = n, detectIntervalWhenSatisfied = 4, refineWithHeatmap = true)
+        return base.copy(autoLevel = lowLightBoost, autoLevelDetector = lowLightBoost).withExtraAids(trackingAids)
     }
 
     private fun disableGpu() {
@@ -572,6 +579,8 @@ class PoseEngine(private val context: Context, private val camera: CameraSource,
                 handMs = if (handMs == 0f) h.lastMs else handMs + 0.1f * (h.lastMs - handMs)
                 "%.1f ms, %d hand%s".format(handMs, h.lastRuns, if (h.lastRuns == 1) "" else "s")
             } ?: if (handFailed) "unavailable" else "off",
+            lowLight = if (!lowLightBoost) "off" else if (st.boostGain < 1.05f) "not needed" else "x%.1f".format(st.boostGain),
+            aids = trackingAids,
         )
     }
 

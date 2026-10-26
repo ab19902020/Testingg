@@ -151,7 +151,7 @@ class TrackingBench {
         ).filter { only.isEmpty() || it.name.replace(" ", "") in only }
         val off = PipelineConfig(predictMotion = false, retryWider = false, smoothRoi = false, keepPresence = 0.5f, autoLevel = false, guardJumps = false)
         val configs = linkedMapOf(
-            "old" to off, "new" to PipelineConfig(),
+            "old" to off, "new" to PipelineConfig(), "aids" to PipelineConfig().withExtraAids(true),
             "pred" to off.copy(predictMotion = true), "smooth" to off.copy(smoothRoi = true),
             "retry" to off.copy(retryWider = true, keepPresence = 0.4f), "level" to off.copy(autoLevel = true),
             "lvlLm" to off.copy(autoLevel = true, autoLevelDetector = false),
@@ -163,10 +163,10 @@ class TrackingBench {
             "bestG20ND" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, autoLevelDetector = false, smoothGain = 20f),
             "still1" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, smoothStill = 0.01f),
             "still2" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, smoothStill = 0.02f),
-            "bestJ" to PipelineConfig(),
-            "jAll" to PipelineConfig(jumpTargeted = false),
-            "j10" to PipelineConfig(jumpDev = 0.1f),
-            "j04" to PipelineConfig(jumpDev = 0.04f),
+            "bestJ" to PipelineConfig().withExtraAids(true),
+            "jAll" to PipelineConfig(jumpTargeted = false).withExtraAids(true),
+            "j10" to PipelineConfig(jumpDev = 0.1f).withExtraAids(true),
+            "j04" to PipelineConfig(jumpDev = 0.04f).withExtraAids(true),
             "bestP" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, predictMotion = true, predictFraction = 0.5f, predictGrow = 0.08f),
         )
         System.getProperty("clrg.trackgain")?.let { AutoLevel.maxGain = it.toFloat() }

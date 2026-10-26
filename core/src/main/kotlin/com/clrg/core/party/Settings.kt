@@ -75,6 +75,13 @@ data class Settings(
      * grainier picture) on phones that allow it.
      */
     var sharpMotion: Boolean = true,
+    /** Brighten the camera picture for the body and hand models when it is clearly dark. */
+    var lowLightBoost: Boolean = true,
+    /**
+     * Extra tracking aids from 1.8.0 (steadier crops, a wider second look, a guard against swapping players).
+     * Off by default: off is the tracking of 1.7.0.
+     */
+    var trackingAids: Boolean = false,
     var skeletonOverlay: Boolean = false,
     var simulatedInput: Boolean = false,
     /** Which half of the console the menus show: "SPORTS" or "CHRISTMAS". */
@@ -91,7 +98,7 @@ data class Settings(
             "displayDelayMs" to displayDelayMs, "timingMeasured" to timingMeasured, "preferTvAsSecondScreen" to preferTvAsSecondScreen,
             "showCameraInset" to showCameraInset, "devOverlay" to devOverlay, "skeletonOverlay" to skeletonOverlay,
             "heldObjects" to heldObjects.entries.joinToString("|") { "${it.key}=${it.value}" }, "useHeldObjects" to useHeldObjects,
-            "sharpMotion" to sharpMotion, "mode" to mode,
+            "sharpMotion" to sharpMotion, "mode" to mode, "lowLightBoost" to lowLightBoost, "trackingAids" to trackingAids,
             "heldObjectsByKind" to heldObjectsByKind.entries.joinToString("|") { "${it.key}=${it.value}" },
         ),
     )
@@ -134,6 +141,8 @@ data class Settings(
                 heldObjectsByKind = o.str("heldObjectsByKind").split("|").mapNotNull { e -> val i = e.indexOf('='); if (i <= 0) null else e.substring(0, i) to e.substring(i + 1) }.toMap().toMutableMap(),
                 useHeldObjects = o.bool("useHeldObjects", d.useHeldObjects),
                 sharpMotion = o.bool("sharpMotion", d.sharpMotion),
+                lowLightBoost = o.bool("lowLightBoost", d.lowLightBoost),
+                trackingAids = o.bool("trackingAids", d.trackingAids),
                 skeletonOverlay = o.bool("skeletonOverlay", d.skeletonOverlay),
                 mode = o.str("mode", d.mode).takeIf { it == "SPORTS" || it == "CHRISTMAS" } ?: d.mode,
                 // simulated input is never restored from storage: it must be switched on deliberately each session

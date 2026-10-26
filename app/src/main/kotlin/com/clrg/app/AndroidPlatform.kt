@@ -55,6 +55,8 @@ class AndroidPlatform(
         pose.quality = settings.quality
         pose.allowHighFps = settings.highFpsCamera
         camera.sharpMotion = settings.sharpMotion
+        pose.lowLightBoost = settings.lowLightBoost
+        pose.trackingAids = settings.trackingAids
         router.preferPresentation = settings.preferTvAsSecondScreen
     }
 

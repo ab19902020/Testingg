@@ -54,7 +54,23 @@ class PerfSnapshot(
     val exposure: String = "-",
     /** Finger tracking: time per picture (ms) and hands followed, or "off". */
     val fingers: String = "off",
-)
+    /** Low-light boost: "off", "not needed" or how much it brightens (e.g. "x1.8"). */
+    val lowLight: String = "-",
+    /** Extra tracking aids on (Settings -> Motion). */
+    val aids: Boolean = false,
+) {
+    /**
+     * Plain-language warning when tracking is held back by the phone (too slow or too hot, so the less accurate
+     * lite model is running, or few pictures a second), or null when it keeps up.
+     */
+    fun warning(): String? = when {
+        model.contains("lite") && adaptiveLevel.startsWith("Auto") ->
+            "Phone too slow or warm for the full body model: using the lite one (less accurate)"
+        thermal == "SEVERE" || thermal == "CRITICAL" || thermal == "EMERGENCY" -> "Phone is hot ($thermal): tracking may slow down"
+        inferenceFps in 0.5f..20f -> "Tracking only %.0f pictures a second: fast moves may be missed".format(inferenceFps)
+        else -> null
+    }
+}
 
 /** Upright (non-mirrored) camera preview image plus whether it should be mirrored when shown. */
 class PreviewFrame(val image: ImageRef, val mirror: Boolean)
@@ -119,7 +135,8 @@ open class NullPlatform(override val store: KeyValueStore) : Platform {
     override fun applySettings(settings: Settings) {}
     override fun displayStatus() = display
     override fun deviceInfo() = DeviceInfo("Test", "JVM", null, "-", 0, null, "")
-    override fun perf() = PerfSnapshot()
+    var perfSnapshot = PerfSnapshot()
+    override fun perf() = perfSnapshot
     override fun preview(): PreviewFrame? = null
     override fun pipelineDebug(): PipelineDebug? = null
     override fun setSimulatedInput(on: Boolean) {}
