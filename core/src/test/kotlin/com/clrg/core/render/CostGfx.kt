@@ -10,8 +10,11 @@ class CostGfx(override val width: Float = 1920f, override val height: Float = 10
         private set
     var points = 0
         private set
-    /** Full-screen-ish fills (gradients, radial fills, glows, blended draws): the costlier kind on a phone GPU. */
+    /** Large fills (big gradients and glows, radial fills, images and layers): the costlier kind on a phone GPU. */
     var heavy = 0
+        private set
+    /** Draws with a light blend mode (add, screen, multiply). */
+    var blended = 0
         private set
     var layerBuildOps = 0
         private set
@@ -20,11 +23,12 @@ class CostGfx(override val width: Float = 1920f, override val height: Float = 10
     private var blend = Blend.NORMAL
     private val stack = ArrayList<Pair<Float, Blend>>()
 
-    fun resetFrame() { ops = 0; points = 0; heavy = 0 }
+    fun resetFrame() { ops = 0; points = 0; heavy = 0; blended = 0 }
 
     private fun op(n: Int = 1, isHeavy: Boolean = false) {
         ops += n
-        if (isHeavy || blend != Blend.NORMAL) heavy++
+        if (isHeavy) heavy++
+        if (blend != Blend.NORMAL) blended++
     }
 
     override fun save() { stack.add(alpha to blend) }

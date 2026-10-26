@@ -20,6 +20,7 @@ import com.clrg.core.render.Draw
 import com.clrg.core.render.Gfx
 import com.clrg.core.render.Particles
 import com.clrg.core.render.SportsDraw
+import com.clrg.core.render.Scenery
 import com.clrg.core.tracking.MovementMode
 import kotlin.math.PI
 import kotlin.math.abs
@@ -259,7 +260,7 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
             for (tg in targets) if (tg.kind == Kind.DUCK && tg.alive(playTime) && abs(tg.y(playTime) - ry) < 1f) drawTarget(g, tg, tg.x(playTime) + ox, y, time)
             wave(g, y + 34f, tf, i, front = true)
         }
-        shelf(g, 270f + oy + 34f)
+        g.layer("gallery.shelf", 0f, 270f + oy + 20f, g.width, 270f + oy + 110f) { lg -> shelf(lg, 270f + oy + 34f) }
         // balloons float in front of everything, so they are never hidden while rising
         for (tg in targets) if (tg.kind == Kind.BALLOON && tg.alive(playTime)) drawTarget(g, tg, tg.x(playTime) + ox, tg.y(playTime) + oy, time)
         for (tg in targets) if (tg.kind == Kind.BOTTLE && tg.alive(playTime)) drawTarget(g, tg, tg.x(playTime) + ox, tg.y(playTime) + oy, time)
@@ -296,43 +297,62 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
         Hud.topBar(g, env, points, Hud.formatTime(left), "Shooting Gallery", inputs)
     }
 
-    /** Painted night sky with a ferris wheel, tent tops and strings of lights. */
+    /** Painted night sky with a ferris wheel, tent tops and strings of lights (mostly cached pictures). */
     private fun backdrop(g: Gfx, t: Float) {
         val w = g.width; val h = g.height
-        g.gradientRect(0f, 0f, w, h, 0xFF0E1640.toInt(), 0xFF3B1D58.toInt())
-        for (i in 0 until 60) {
-            val sx = (i * 197f + 53f) % w; val sy = 170f + (i * 113f) % 520f
-            val tw = 0.35f + 0.35f * sin(t * 2f + i * 1.7f)
-            g.fillCircle(sx, sy, 1.6f + (i % 3), Colors.withAlpha(Colors.WHITE, tw))
+        g.layer("gallery.sky", 0f, 0f, w, h, res = 0.75f, grain = 0.15f) { lg ->
+            lg.gradientRect(0f, 0f, w, h, 0xFF0E1640.toInt(), 0xFF3B1D58.toInt())
+            for (i in 0 until 140) {
+                val sx = (i * 197f + 53f) % w; val sy = 160f + (i * 113f) % 540f
+                lg.fillCircle(sx, sy, 0.8f + 1.6f * Draw.hash01(i), Colors.withAlpha(Colors.WHITE, 0.25f + 0.5f * Draw.hash01(i * 3)))
+            }
+            lg.glow(w * 0.82f, 250f, 160f, 0x33FFF59D)
+            lg.fillCircle(w * 0.82f, 250f, 52f, 0xFFFFF8E1.toInt())
+            lg.fillCircle(w * 0.82f + 16f, 238f, 46f, 0xFF2A1B52.toInt()) // a crescent
+            // ferris wheel supports
+            val fx = w * 0.16f; val fy = 430f
+            lg.line(fx - 120f, fy + 330f, fx, fy, 10f, 0x553D3470); lg.line(fx + 120f, fy + 330f, fx, fy, 10f, 0x553D3470)
+            // striped tent tops along the horizon
+            for ((cx, ht, wd) in listOf(Triple(w * 0.55f, 210f, 260f), Triple(w * 0.72f, 170f, 200f), Triple(w * 0.95f, 240f, 300f))) {
+                val base = 680f
+                for (sIdx in 0 until 8) {
+                    val x0 = cx - wd / 2f + sIdx * wd / 8f; val x1 = x0 + wd / 8f
+                    lg.fillPolygon(floatArrayOf(cx, base - ht, x0, base, x1, base), 3, if (sIdx % 2 == 0) 0x88C62828.toInt() else 0x88ECEFF1.toInt())
+                }
+                lg.fillCircle(cx, base - ht - 8f, 8f, 0xAAFFD54F.toInt())
+            }
+            lg.gradientRect(0f, 700f, w, h, 0x00000000, 0xAA12082A.toInt())
         }
-        g.glow(w * 0.82f, 250f, 160f, 0x33FFF59D)
-        g.fillCircle(w * 0.82f, 250f, 52f, 0xFFFFF8E1.toInt())
-        g.fillCircle(w * 0.82f + 16f, 238f, 46f, 0xFF2A1B52.toInt()) // a crescent
-        // ferris wheel, slowly turning, lights on its rim
+        // a few stars twinkle
+        g.save(); g.setBlend(com.clrg.core.render.Blend.ADD)
+        for (i in 0 until 10) {
+            val sx = (i * 389f + 91f) % w; val sy = 170f + (i * 151f) % 480f
+            val tw = 0.5f + 0.5f * sin(t * 2f + i * 1.7f)
+            g.glow(sx, sy, 10f + 6f * tw, Colors.withAlpha(Colors.WHITE, 0.4f * tw))
+        }
+        g.restore()
+        // ferris wheel, slowly turning (the rim and spokes are one cached picture, rotated), gondolas hang level
         val fx = w * 0.16f; val fy = 430f; val fr = 230f
-        g.line(fx - 120f, fy + 330f, fx, fy, 10f, 0x553D3470); g.line(fx + 120f, fy + 330f, fx, fy, 10f, 0x553D3470)
-        g.strokeCircle(fx, fy, fr, 8f, 0x665E4B9A)
-        g.strokeCircle(fx, fy, fr * 0.55f, 4f, 0x445E4B9A)
+        g.save(); g.translate(fx, fy); g.rotate(t * 0.15f)
+        g.layer("gallery.wheel", -fr - 10f, -fr - 10f, fr + 10f, fr + 10f) { lg ->
+            lg.strokeCircle(0f, 0f, fr, 8f, 0x665E4B9A)
+            lg.strokeCircle(0f, 0f, fr * 0.55f, 4f, 0x445E4B9A)
+            for (i in 0 until 12) { val a = i * (2f * PI.toFloat() / 12f); lg.line(0f, 0f, cos(a) * fr, sin(a) * fr, 3f, 0x445E4B9A) }
+            lg.fillCircle(0f, 0f, 14f, 0x885E4B9A.toInt())
+        }
+        g.restore()
         for (i in 0 until 12) {
             val a = t * 0.15f + i * (2f * PI.toFloat() / 12f)
-            g.line(fx, fy, fx + cos(a) * fr, fy + sin(a) * fr, 3f, 0x445E4B9A)
             val gx = fx + cos(a) * fr; val gy = fy + sin(a) * fr
             g.fillRoundRect(gx - 14f, gy + 6f, gx + 14f, gy + 30f, 6f, if (i % 3 == 0) 0x99E53935.toInt() else if (i % 3 == 1) 0x991E88E5.toInt() else 0x99FDD835.toInt())
             val on = sin(t * 3f + i) > -0.2f
             g.fillCircle(gx, gy, 6f, if (on) 0xFFFFF59D.toInt() else 0x55FFF59D)
         }
-        // striped tent tops along the horizon
-        for ((cx, ht, wd) in listOf(Triple(w * 0.55f, 210f, 260f), Triple(w * 0.72f, 170f, 200f), Triple(w * 0.95f, 240f, 300f))) {
-            val base = 680f
-            for (sIdx in 0 until 8) {
-                val x0 = cx - wd / 2f + sIdx * wd / 8f; val x1 = x0 + wd / 8f
-                val pts = floatArrayOf(cx, base - ht, x0, base, x1, base)
-                g.fillPolygon(pts, 3, if (sIdx % 2 == 0) 0x88C62828.toInt() else 0x88ECEFF1.toInt())
-            }
-            g.fillCircle(cx, base - ht - 8f, 8f, 0xAAFFD54F.toInt())
-        }
-        g.gradientRect(0f, 700f, w, h, 0x00000000, 0xAA12082A.toInt())
-        // strings of lights hanging across
+        // strings of lights hanging across, chasing (three cached frames)
+        Scenery.frames(g, "gallery.lights", 0f, 180f, w, 330f, t.toDouble(), frames = 3, fps = 4.0) { lg, f -> lightStrings(lg, w, f) }
+    }
+
+    private fun lightStrings(g: Gfx, w: Float, f: Int) {
         for (row in 0..1) {
             val y0 = 200f + row * 70f
             var px = -20f; var py = y0
@@ -341,7 +361,7 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
                 val y = y0 + 34f * sin(PI.toFloat() * ((i % 6) / 6f))
                 if (i > 0) g.line(px, py, x, y, 2f, 0x88000000.toInt())
                 val c = when ((i + row) % 4) { 0 -> 0xFFFF5252.toInt(); 1 -> 0xFFFFEB3B.toInt(); 2 -> 0xFF69F0AE.toInt(); else -> 0xFF40C4FF.toInt() }
-                val lit = ((t * 4f).toInt() + i + row) % 3 != 0
+                val lit = (f + i + row) % 3 != 0
                 if (lit) g.glow(x, y + 8f, 22f, Colors.withAlpha(c, 0.45f))
                 g.fillCircle(x, y + 8f, 7f, if (lit) c else Colors.withAlpha(c, 0.35f))
                 px = x; py = y
@@ -385,7 +405,7 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
     /** The booth itself: striped valance with scallops and chasing bulbs, barber-pole posts, the counter and prizes. */
     private fun boothFrame(g: Gfx, t: Float) {
         val w = g.width; val h = g.height
-        // posts
+        // posts with scrolling barber-pole stripes
         for (side in 0..1) {
             val l = if (side == 0) 0f else w - 56f
             g.save(); g.clipRect(l, 150f, l + 56f, h - 150f)
@@ -395,37 +415,62 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
             g.restore()
             g.fillRect(if (side == 0) l + 52f else l, 150f, if (side == 0) l + 56f else l + 4f, h - 150f, 0x55000000)
         }
-        // valance: stripes, gold trim, scalloped edge, chasing bulbs
+        g.layer("gallery.valance", 0f, 0f, w, 200f) { lg -> valance(lg, w) }
+        // chasing bulbs (four cached frames)
+        Scenery.frames(g, "gallery.bulbs", 0f, 80f, w, 145f, t.toDouble(), frames = 4, fps = 6.0) { lg, f ->
+            for (i in 0 until 32) {
+                val x = (i + 0.5f) * w / 32f
+                val lit = (f - i).mod(4) == 0
+                if (lit) lg.glow(x, 112f, 26f, 0x88FFF59D.toInt())
+                lg.fillCircle(x, 112f, 8f, if (lit) 0xFFFFFDE7.toInt() else 0xFFFFE082.toInt())
+                lg.fillCircle(x - 2.5f, 109f, 2.5f, 0x88FFFFFF.toInt())
+            }
+        }
+        g.layer("gallery.counter", 0f, h - 300f, w, h, grain = 0.2f) { lg -> counter(lg, w, h) }
+    }
+
+    private fun valance(g: Gfx, w: Float) {
         val n = 16
         for (i in 0 until n) g.fillRect(i * w / n, 0f, (i + 1) * w / n, 150f, if (i % 2 == 0) 0xFFD32F2F.toInt() else 0xFFFAFAFA.toInt())
+        // folds in the canvas
+        for (i in 0 until n) { val x = i * w / n; g.fillRect(x, 0f, x + 6f, 150f, 0x18000000); g.fillRect(x + w / n - 10f, 0f, x + w / n, 150f, 0x10000000) }
         g.gradientRect(0f, 60f, w, 150f, 0x00000000, 0x33000000)
         for (i in 0 until n) g.fillPie((i + 0.5f) * w / n, 150f, w / n / 2f, 0f, PI.toFloat(), if (i % 2 == 0) 0xFFD32F2F.toInt() else 0xFFFAFAFA.toInt())
+        for (i in 0 until n) g.arc((i + 0.5f) * w / n, 150f, w / n / 2f - 2f, 0.2f, PI.toFloat() - 0.4f, 3f, 0x22000000)
         g.fillRect(0f, 146f, w, 152f, Colors.GOLD)
-        for (i in 0 until 32) {
-            val x = (i + 0.5f) * w / 32f
-            val lit = ((t * 6f).toInt() - i).mod(4) == 0
-            if (lit) g.glow(x, 112f, 26f, 0x88FFF59D.toInt())
-            g.fillCircle(x, 112f, 8f, if (lit) 0xFFFFFDE7.toInt() else 0xFFFFE082.toInt())
-        }
+        g.fillRect(0f, 146f, w, 148f, 0x66FFFFFF)
+        // a shadow the valance casts on the back of the booth
+        g.gradientRect(0f, 152f, w, 200f, 0x55000000, 0x00000000)
+    }
+
+    private fun counter(g: Gfx, w: Float, h: Float) {
         // counter: wooden top with a gold lip, red-and-yellow front boards
         g.gradientRect(0f, h - 150f, w, h - 120f, 0xFFA1887F.toInt(), 0xFF795548.toInt())
+        for (i in 0 until 8) g.line(0f, h - 146f + i * 3.5f, w, h - 145f + i * 3.5f, 1f, if (i % 2 == 0) 0x22000000 else 0x14FFFFFF)
         g.fillRect(0f, h - 156f, w, h - 148f, Colors.GOLD)
+        g.fillRect(0f, h - 156f, w, h - 153f, 0x88FFFFFF.toInt())
         val boards = 12
         for (i in 0 until boards) {
             val l = i * w / boards
             g.gradientRect(l, h - 120f, l + w / boards, h, if (i % 2 == 0) 0xFFC62828.toInt() else 0xFFF9A825.toInt(), if (i % 2 == 0) 0xFF8E1B1B.toInt() else 0xFFC17900.toInt())
             g.fillRect(l, h - 120f, l + 3f, h, 0x44000000)
+            g.fillCircle(l + w / boards / 2f, h - 60f, 14f, 0x33FFFFFF)
+            Draw.star(g, l + w / boards / 2f, h - 60f, 10f, 0x66FFFFFF)
         }
         // prizes on the counter: a teddy at each end, clear of the bottles
         for (side in 0..1) {
             val x = if (side == 0) 140f else w - 140f
             val y = h - 150f
             val fur = if (side == 0) 0xFFBCAAA4.toInt() else 0xFFF48FB1.toInt()
+            g.fillOval(x - 44f, y - 8f, x + 44f, y + 6f, 0x44000000)
             g.fillOval(x - 40f, y - 66f, x + 40f, y, fur)
             g.fillCircle(x, y - 92f, 32f, fur)
+            g.fillCircleRadial(x, y - 92f, 32f, x - 12f, y - 104f, 44f, 0x33FFFFFF, 0x22000000)
             g.fillCircle(x - 26f, y - 118f, 13f, fur); g.fillCircle(x + 26f, y - 118f, 13f, fur)
+            g.fillCircle(x - 26f, y - 118f, 7f, Colors.darker(fur, 0.8f)); g.fillCircle(x + 26f, y - 118f, 7f, Colors.darker(fur, 0.8f))
             g.fillOval(x - 14f, y - 88f, x + 14f, y - 68f, 0xFFFFF3E0.toInt())
             g.fillCircle(x - 11f, y - 98f, 4f, Colors.BLACK); g.fillCircle(x + 11f, y - 98f, 4f, Colors.BLACK)
+            g.fillCircle(x - 10f, y - 99.5f, 1.4f, Colors.WHITE); g.fillCircle(x + 12f, y - 99.5f, 1.4f, Colors.WHITE)
             g.fillCircle(x, y - 84f, 4f, 0xFF4E342E.toInt())
             g.fillRoundRect(x - 22f, y - 62f, x + 22f, y - 52f, 5f, if (side == 0) 0xFF1E88E5.toInt() else 0xFF8E24AA.toInt())
         }

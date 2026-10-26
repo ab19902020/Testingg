@@ -647,7 +647,18 @@ object Draw {
             g.line(mx - qx, my - qy, mx + qx, my + qy, h * 0.008f, Colors.withAlpha(Colors.darker(color, 0.5f), 0.8f))
             val hr2 = h * 0.047f * mittenScale
             if (prop == Prop.GLOVES) SportsDraw.glove(g, wx, wy, h * 0.15f * mittenScale, if (side == 0) 0xFFD32F2F.toInt() else 0xFFC62828.toInt(), fo)
-            else {
+            else if (mittenScale >= 1.6f) {
+                // big hands are a goalkeeper's: padded gloves, white palms, the team colour on the back, a cuff
+                val fl = len(wx - ex, wy - ey).coerceAtLeast(1e-3f)
+                val dx = (wx - ex) / fl; val dy = (wy - ey) / fl
+                val inward = if (side == 0) 1f else -1f
+                g.line(ex + (wx - ex) * 0.72f, ey + (wy - ey) * 0.72f, wx, wy, armW * 1.5f, Colors.darker(color, 0.5f))
+                g.fillCircle(wx + dx * hr2 * 0.1f - dy * inward * hr2 * 0.8f, wy + dy * hr2 * 0.1f + dx * inward * hr2 * 0.8f, hr2 * 0.42f, 0xFFE0E6EA.toInt())
+                g.fillCircleRadial(wx + dx * hr2 * 0.35f, wy + dy * hr2 * 0.35f, hr2, wx - hr2 * 0.4f, wy - hr2 * 0.4f, hr2 * 1.7f, 0xFFFFFFFF.toInt(), 0xFFB0BEC5.toInt())
+                g.fillCircle(wx + dx * hr2 * 0.55f, wy + dy * hr2 * 0.55f, hr2 * 0.62f, Colors.withAlpha(color, 0.85f))
+                for (f in -1..1) g.line(wx + dx * hr2 * 0.6f - dy * f * hr2 * 0.32f, wy + dy * hr2 * 0.6f + dx * f * hr2 * 0.32f, wx + dx * hr2 * 1.25f - dy * f * hr2 * 0.36f, wy + dy * hr2 * 1.25f + dx * f * hr2 * 0.36f, hr2 * 0.06f, 0x66263238)
+                g.strokeCircle(wx + dx * hr2 * 0.35f, wy + dy * hr2 * 0.35f, hr2, hr2 * 0.05f, 0x55263238)
+            } else {
                 g.line(ex + (wx - ex) * 0.78f, ey + (wy - ey) * 0.78f, ex + (wx - ex) * 0.9f, ey + (wy - ey) * 0.9f, armW * 1.05f, color)
                 // hand: palm with a thumb on the inside
                 val fl = len(wx - ex, wy - ey).coerceAtLeast(1e-3f)

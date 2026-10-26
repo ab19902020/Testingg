@@ -16,6 +16,7 @@ import com.clrg.core.render.Expression
 import com.clrg.core.render.Gfx
 import com.clrg.core.render.Prop
 import com.clrg.core.render.SportsDraw
+import com.clrg.core.render.Scenery
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sin
@@ -97,77 +98,121 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
         screenW = g.width
         val w = g.width
         if (env.sporty) sportsHall(g, w, time) else christmasHall(g, w, time)
-        g.gradientRect(0f, 860f, w, g.height, if (env.sporty) 0xFFB23A3A.toInt() else 0xFF6D4C41.toInt(), if (env.sporty) 0xFF6E1F24.toInt() else 0xFF3E2723.toInt())
-        if (env.sporty) {
-            g.line(0f, 950f, w, 950f, 5f, 0xAAFFFFFF.toInt())
-            g.fillRectRadial(0f, 860f, w, g.height, w / 2f, 900f, w * 0.45f, 0x33FFFFFF, 0x00FFFFFF)
-        } else for (i in 0 until 16) g.line(i * w / 16f, 860f, i * w / 16f - 60f, g.height, 3f, 0x33000000)
+        g.layer(if (env.sporty) "tt.floor" else "ttC.floor", 0f, 860f, w, g.height, grain = 0.2f) { lg ->
+            lg.gradientRect(0f, 860f, w, lg.height, if (env.sporty) 0xFFB23A3A.toInt() else 0xFF6D4C41.toInt(), if (env.sporty) 0xFF6E1F24.toInt() else 0xFF3E2723.toInt())
+            if (env.sporty) {
+                lg.line(0f, 950f, w, 950f, 5f, 0xAAFFFFFF.toInt())
+                lg.fillRectRadial(0f, 860f, w, lg.height, w / 2f, 900f, w * 0.45f, 0x33FFFFFF, 0x00FFFFFF)
+                // reflections of the lights in the polished floor
+                for (i in 0 until 6) { val lx = w * (0.08f + i * 0.168f); lg.fillOval(lx - 30f, 880f, lx + 30f, 1000f, 0x0FFFFFFF) }
+            } else {
+                for (i in 0 until 16) lg.line(i * w / 16f, 860f, i * w / 16f - 60f, lg.height, 3f, 0x33000000)
+                for (i in 0 until 40) { val y = 870f + i * 5.2f; lg.line(0f, y, w, y + 2f, 1f, if (i % 3 == 0) 0x14000000 else 0x0AFFE0C0) }
+                // a rug under the table
+                lg.fillOval(w * 0.2f, 880f, w * 0.8f, 1060f, 0x55531C1C)
+                lg.strokeRoundRect(w * 0.22f, 890f, w * 0.78f, 1050f, 80f, 6f, 0x33FFD54F)
+            }
+        }
         tableAndLamp(g, w, inputs, time)
     }
 
     /** Tournament arena: floodlit roof truss, a crowd in the stands, glowing advertising boards and blue court surrounds. */
     private fun sportsHall(g: Gfx, w: Float, time: Double) {
-        val t = time.toFloat()
-        g.gradientRect(0f, 0f, w, 860f, 0xFF0C1424.toInt(), 0xFF1B2A44.toInt())
-        // roof truss with floodlights
-        g.fillRect(0f, 128f, w, 136f, 0xFF39465C.toInt()); g.fillRect(0f, 176f, w, 184f, 0xFF39465C.toInt())
-        var tx = 0f
-        while (tx < w) { g.line(tx, 132f, tx + 40f, 180f, 4f, 0xFF39465C.toInt()); g.line(tx + 40f, 180f, tx + 80f, 132f, 4f, 0xFF39465C.toInt()); tx += 80f }
+        g.layer("tt.back", 0f, 0f, w, 292f, res = 0.75f) { lg ->
+            lg.gradientRect(0f, 0f, w, 292f, 0xFF0C1424.toInt(), 0xFF162238.toInt())
+            lg.fillRect(0f, 128f, w, 136f, 0xFF39465C.toInt()); lg.fillRect(0f, 176f, w, 184f, 0xFF39465C.toInt())
+            var tx = 0f
+            while (tx < w) { lg.line(tx, 132f, tx + 40f, 180f, 4f, 0xFF39465C.toInt()); lg.line(tx + 40f, 180f, tx + 80f, 132f, 4f, 0xFF39465C.toInt()); tx += 80f }
+            for (i in 0 until 6) {
+                val lx = w * (0.08f + i * 0.168f)
+                if (abs(lx - w / 2f) < 150f) continue
+                lg.fillRoundRect(lx - 34f, 184f, lx + 34f, 214f, 8f, 0xFF263040.toInt())
+                lg.glow(lx, 214f, 110f, 0x55FFF8E1)
+                lg.fillOval(lx - 26f, 206f, lx + 26f, 220f, 0xFFFFFDE7.toInt())
+            }
+        }
+        // the stands (three cached frames of a cheering crowd), slightly in shadow and out of focus
+        Scenery.crowd(g, "tt", 0f, 290f, w, 590f, time, rows = 4, shade = 0.42f, blur = 1.2f)
+        // light beams from the rig through the haze
+        g.save(); g.setBlend(com.clrg.core.render.Blend.ADD)
         for (i in 0 until 6) {
             val lx = w * (0.08f + i * 0.168f)
             if (abs(lx - w / 2f) < 150f) continue
-            g.fillRoundRect(lx - 34f, 184f, lx + 34f, 214f, 8f, 0xFF263040.toInt())
-            g.glow(lx, 214f, 110f, 0x55FFF8E1)
-            g.fillOval(lx - 26f, 206f, lx + 26f, 220f, 0xFFFFFDE7.toInt())
             val beam = floatArrayOf(lx - 26f, 214f, lx + 26f, 214f, lx + 150f, 860f, lx - 150f, 860f)
-            g.fillPolygonGradient(beam, 4, 214f, 860f, 0x14FFF8E1, 0x00FFF8E1)
+            g.fillPolygonGradient(beam, 4, 214f, 860f, 0x16FFF8E1, 0x00FFF8E1)
         }
-        // the stands
-        SportsDraw.crowd(g, 0f, w, 290f, 590f, time, rows = 4)
-        g.gradientRect(0f, 290f, w, 590f, 0x660C1424, 0x220C1424)
-        g.fillRect(0f, 586f, w, 592f, 0xFF90A4AE.toInt())
-        // advertising boards
-        g.fillRect(0f, 592f, w, 650f, 0xFF0A0F1A.toInt())
-        val ads = arrayOf("LRG OPEN", "TABLE TENNIS", "LIVING ROOM GAMES", "TABLE TENNIS")
-        val adCol = intArrayOf(0xFF4FC3F7.toInt(), 0xFFFFD54F.toInt(), 0xFFFF7043.toInt(), 0xFF81C784.toInt())
-        val panels = 4
-        for (i in 0 until panels) {
-            val l = i * w / panels; val r = l + w / panels
-            val c = adCol[i % adCol.size]
-            val pulse = 0.75f + 0.25f * sin(t * 1.5f + i)
-            g.gradientRect(l + 4f, 596f, r - 4f, 646f, Colors.withAlpha(Colors.darker(c, 0.35f), 0.9f), 0xFF0A0F1A.toInt())
-            g.text(ads[i], (l + r) / 2f, 621f, 30f, Colors.withAlpha(c, pulse))
+        g.restore()
+        g.layer("tt.front", 0f, 584f, w, 860f) { lg ->
+            lg.fillRect(0f, 586f, w, 592f, 0xFF90A4AE.toInt())
+            lg.fillRect(0f, 592f, w, 650f, 0xFF0A0F1A.toInt())
+            val ads = arrayOf("LRG OPEN", "TABLE TENNIS", "LIVING ROOM GAMES", "TABLE TENNIS")
+            val adCol = intArrayOf(0xFF4FC3F7.toInt(), 0xFFFFD54F.toInt(), 0xFFFF7043.toInt(), 0xFF81C784.toInt())
+            for (i in 0 until 4) {
+                val l = i * w / 4; val r = l + w / 4
+                val c = adCol[i]
+                lg.gradientRect(l + 4f, 596f, r - 4f, 646f, Colors.withAlpha(Colors.darker(c, 0.35f), 0.9f), 0xFF0A0F1A.toInt())
+                lg.text(ads[i], (l + r) / 2f, 621f, 30f, c)
+            }
+            lg.gradientRect(0f, 650f, w, 860f, 0xFF1C3F94.toInt(), 0xFF112A66.toInt())
+            for (i in 0..10) { val x = i * w / 10f; lg.fillRect(x - 2f, 650f, x + 2f, 860f, 0x33000000) }
+            lg.fillRect(0f, 650f, w, 656f, 0x66FFFFFF)
+            for (i in 0 until 10) { val x = (i + 0.5f) * w / 10f; lg.text("LRG", x, 760f, 44f, 0x22FFFFFF, bold = true) }
         }
-        // court surrounds
-        g.gradientRect(0f, 650f, w, 860f, 0xFF1C3F94.toInt(), 0xFF112A66.toInt())
-        for (i in 0..10) { val x = i * w / 10f; g.fillRect(x - 2f, 650f, x + 2f, 860f, 0x33000000) }
-        g.fillRect(0f, 650f, w, 656f, 0x66FFFFFF)
-        for (i in 0 until 10) { val x = (i + 0.5f) * w / 10f; g.text("LRG", x, 760f, 44f, 0x22FFFFFF, bold = true) }
     }
 
     /** Cosy Christmas hall: warm wall, windows with snow, garlands. */
     private fun christmasHall(g: Gfx, w: Float, time: Double) {
-        g.gradientRect(0f, 0f, w, 860f, 0xFF4A2433.toInt(), 0xFF26121F.toInt())
-        // wainscot panels along the wall
-        g.gradientRect(0f, 640f, w, 860f, 0xFF3A1A12.toInt(), 0xFF2A120C.toInt())
-        g.line(0f, 640f, w, 640f, 6f, 0xFF7A4A2A.toInt())
-        for (i in 0 until 10) { val x = i * w / 10f + w / 20f; g.strokeRoundRect(x - w / 26f, 670f, x + w / 26f, 830f, 8f, 3f, 0x33FFD9A0) }
+        g.layer("ttC.wall", 0f, 0f, w, 860f, grain = 0.2f) { lg ->
+            lg.gradientRect(0f, 0f, w, 860f, 0xFF4A2433.toInt(), 0xFF26121F.toInt())
+            // damask wallpaper
+            for (row in 0 until 14) for (col in 0 until 26) {
+                val x = col * w / 25f + (row % 2) * w / 50f; val y = 40f + row * 44f
+                lg.fillOval(x - 6f, y - 10f, x + 6f, y + 10f, 0x14FFD9A0)
+                lg.fillCircle(x, y - 14f, 2.5f, 0x10FFD9A0)
+            }
+            // wainscot panels along the wall
+            lg.gradientRect(0f, 640f, w, 860f, 0xFF3A1A12.toInt(), 0xFF2A120C.toInt())
+            lg.line(0f, 640f, w, 640f, 6f, 0xFF7A4A2A.toInt())
+            lg.line(0f, 644f, w, 644f, 2f, 0x33FFE0C0)
+            for (i in 0 until 10) { val x = i * w / 10f + w / 20f; lg.strokeRoundRect(x - w / 26f, 670f, x + w / 26f, 830f, 8f, 3f, 0x33FFD9A0); lg.strokeRoundRect(x - w / 26f + 3f, 673f, x + w / 26f + 3f, 833f, 8f, 2f, 0x22000000) }
+            for (i in 0 until 4) {
+                val wx = w * (0.14f + i * 0.24f)
+                lg.fillRectRadial(wx - 120f, 170f, wx + 120f, 430f, wx, 430f, 300f, 0xFF1E3A66.toInt(), 0xFF0A1428.toInt())
+                // a snowy garden outside: distant pines and drifts
+                Draw.pineRow(lg, wx - 140f, wx + 140f, 400f, 0xFF16303A.toInt(), 70f, i * 3)
+                lg.fillRect(wx - 120f, 390f, wx + 120f, 430f, 0xFFD8E6F4.toInt())
+            }
+        }
         for (i in 0 until 4) {
             val wx = w * (0.14f + i * 0.24f)
-            g.fillRectRadial(wx - 120f, 170f, wx + 120f, 430f, wx, 430f, 300f, 0xFF1E3A66.toInt(), 0xFF0A1428.toInt())
             Draw.snowfall(g, Rect(wx - 120f, 170f, wx + 120f, 430f), time + i, 12)
-            g.fillRect(wx - 120f, 400f, wx + 120f, 430f, 0xFFE8F1FA.toInt())
-            g.strokeRoundRect(wx - 120f, 170f, wx + 120f, 430f, 20f, 10f, 0xFF6D4C41.toInt())
-            g.line(wx, 170f, wx, 430f, 6f, 0xFF6D4C41.toInt())
-            g.line(wx - 120f, 300f, wx + 120f, 300f, 6f, 0xFF6D4C41.toInt())
-            Draw.wreathSmall(g, wx, 160f, 30f, time + i)
         }
+        g.layer("ttC.frames", 0f, 120f, w, 450f) { lg ->
+            for (i in 0 until 4) {
+                val wx = w * (0.14f + i * 0.24f)
+                lg.fillRect(wx - 120f, 400f, wx + 120f, 430f, 0xFFE8F1FA.toInt())
+                lg.strokeRoundRect(wx - 120f, 170f, wx + 120f, 430f, 20f, 12f, 0xFF4E342E.toInt())
+                lg.strokeRoundRect(wx - 120f, 170f, wx + 120f, 430f, 20f, 8f, 0xFF7A5038.toInt())
+                lg.line(wx, 170f, wx, 430f, 6f, 0xFF6D4C41.toInt())
+                lg.line(wx - 120f, 300f, wx + 120f, 300f, 6f, 0xFF6D4C41.toInt())
+                lg.fillRoundRect(wx - 136f, 428f, wx + 136f, 446f, 6f, 0xFF7A5038.toInt())
+            }
+        }
+        for (i in 0 until 4) Draw.wreathSmall(g, w * (0.14f + i * 0.24f), 160f, 30f, time + i)
         Draw.stringLights(g, 0f, w, 120f, time, sag = 40f)
     }
 
     private fun tableAndLamp(g: Gfx, w: Float, inputs: Array<PlayerInput>, time: Double) {
         // the lamp over the table
         val lampX = w / 2f
+        g.layer(if (env.sporty) "tt.table" else "ttC.table", 0f, 0f, w, 912f) { lg -> tableStatic(lg, w, lampX) }
+        // receiver highlight + FH/BH arrow
+        val rcv = receiver
+        for (k in 0..1) drawPlayer(g, k, inputs[k], time, k == rcv && state == State.RALLY)
+        ballAndHud(g, inputs, time, rcv)
+    }
+
+    private fun tableStatic(g: Gfx, w: Float, lampX: Float) {
         Draw.spotBeam(g, lampX, 220f, lampX, tableY, (toScreenX(1f) - toScreenX(-1f)) * 1.1f, 0x22FFE7B0)
         if (env.sporty) {
             // a broadcast light bar hanging from the truss
@@ -200,9 +245,10 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
         g.fillPolygon(net, 4, 0x66FFFFFF)
         for (i in 1..4) { val f = i / 5f; g.line(w / 2f + 20f - 40f * f, tableY - 70f + 70f * f, w / 2f + 20f - 40f * f, tableY - 70f + 70f * f - nh, 2f, 0x88FFFFFF.toInt()) }
         g.line(w / 2f + 20f, tableY - 70f - nh, w / 2f - 20f, tableY - nh, 6f, Colors.GOLD)
-        // receiver highlight + FH/BH arrow
-        val rcv = receiver
-        for (k in 0..1) drawPlayer(g, k, inputs[k], time, k == rcv && state == State.RALLY)
+    }
+
+    private fun ballAndHud(g: Gfx, inputs: Array<PlayerInput>, time: Double, rcv: Int) {
+        val w = g.width
         // ball
         if (ballVisible) {
             val sx = toScreenX(bx); val sy = toScreenY(bh)

@@ -16,6 +16,7 @@ import com.clrg.core.render.Colors
 import com.clrg.core.render.Draw
 import com.clrg.core.render.Expression
 import com.clrg.core.render.Gfx
+import com.clrg.core.render.Scenery
 import com.clrg.core.render.Particles
 import com.clrg.core.tracking.MovementMode
 import kotlin.math.hypot
@@ -204,34 +205,23 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
     private fun renderLane(g: Gfx, k: Int, inp: PlayerInput, time: Double) {
         val lane = Rect(if (k == 0) 0f else screenW / 2f, 0f, if (k == 0) screenW / 2f else screenW, 1080f)
         g.save(); g.clipRect(lane.left, lane.top, lane.right, lane.bottom)
-        if (env.sporty) g.gradientRect(lane.left, 0f, lane.right, 560f, 0xFF0B2350.toInt(), 0xFF2B5C9E.toInt())
+        val gr = goalRect(k)
+        val key = if (env.sporty) "goalie$k" else "goalieC$k"
+        // the stadium: sky, a cheering crowd in the stand (cached frames), then the pitch and the goal net (cached)
+        if (env.sporty) g.layer("$key.sky", lane.left, 0f, lane.right, 580f, res = 0.5f) { lg -> eveningSky(lg, lane) }
         else {
-            Draw.nightSky(g, lane, time + k)
+            Scenery.nightSky(g, key, Rect(lane.left, 0f, lane.right, 700f), time + k)
             Draw.aurora(g, Rect(lane.left, 0f, lane.right, 460f), time + k * 3, 0.8f)
         }
-        // stadium stand silhouette with twinkling crowd lights
-        g.gradientRect(lane.left, 560f, lane.right, 700f, 0xFF1A2335.toInt(), 0xFF0E1420.toInt())
-        for (i in 0 until 26) {
-            val cx = lane.left + (i + 0.5f) * lane.width / 26f
-            val on = sin(time * 1.3 + i * 2.1 + k).toFloat() > 0.2f
-            g.fillCircle(cx, 600f + (i % 3) * 30f, 5f, if (on) 0xCCFFE082.toInt() else 0x44FFFFFF)
+        Scenery.crowd(g, key, lane.left, 556f, lane.right, 700f, time + k * 0.37, rows = 3, shade = 0.42f, blur = 1.2f)
+        if (env.sporty) {
+            val rng = com.clrg.core.math.Rng((time * 4).toLong() + k * 77)
+            g.save(); g.setBlend(com.clrg.core.render.Blend.ADD)
+            repeat(3) { if (rng.chance(0.35f)) { val fx = lane.left + rng.nextFloat() * lane.width; val fy = 575f + rng.nextFloat() * 110f; g.glow(fx, fy, 30f, 0x99FFFFFF.toInt()) } }
+            g.restore()
         }
-        Draw.floodlight(g, lane.left + 70f, 700f, 330f, lane.cx - 60f, 1000f, 240f)
-        Draw.floodlight(g, lane.right - 70f, 700f, 330f, lane.cx + 60f, 1000f, 240f)
+        g.layer("$key.pitch", lane.left, 280f, lane.right, 1080f, grain = 0.15f) { lg -> pitch(lg, lane, gr) }
         if (!env.sporty) Draw.stringLights(g, lane.left, lane.right, 130f, time)
-        g.gradientRect(lane.left, 700f, lane.right, 1080f, 0xFF2E8B55.toInt(), 0xFF145030.toInt())
-        for (i in 0 until 8) g.fillRect(lane.left, 700f + i * 50f, lane.right, 725f + i * 50f, 0x14FFFFFF)
-        Draw.lightPool(g, lane.cx, 900f, lane.width * 0.5f, 110f, 0x30FFF6D8)
-        // snow along the edge of the pitch (Christmas) or the white touchline
-        if (env.sporty) g.fillRect(lane.left, 700f, lane.right, 708f, 0xCCFFFFFF.toInt())
-        else g.fillRoundRectGradient(lane.left, 694f, lane.right, 716f, 10f, Colors.SNOW, 0xFFB0C4DE.toInt())
-        val gr = goalRect(k)
-        // net
-        g.fillRectRadial(gr.left, gr.top, gr.right, gr.bottom, gr.cx, gr.cy, gr.width * 0.7f, 0x1AFFFFFF, 0x40000814)
-        var nx = gr.left
-        while (nx <= gr.right) { g.line(nx, gr.top, nx, gr.bottom, 2f, 0x33FFFFFF); nx += 36f }
-        var ny = gr.top
-        while (ny <= gr.bottom) { g.line(gr.left, ny, gr.right, ny, 2f, 0x33FFFFFF); ny += 36f }
         if (goalFlash[k] < 0.4f) g.fillRect(gr.left, gr.top, gr.right, gr.bottom, Colors.withAlpha(Colors.BAD, 0.35f * (1f - goalFlash[k] / 0.4f)))
         // keeper: buddy in the goal, mittens follow the player's hands in reach space
         val hands = FloatArray(4)
@@ -247,8 +237,13 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
             t = time, handTargets = hands, mittenScale = 2.0f)
         for (h in 0..1) g.strokeCircle(hands[h * 2], hands[h * 2 + 1], saveRadius(k) / 1.15f * gr.width / 2f, 3f, Colors.withAlpha(env.color(k), 0.45f))
         // posts and crossbar (candy cane at Christmas, plain white otherwise)
-        for (px in floatArrayOf(gr.left, gr.right)) { g.fillRect(px - 12f, gr.top - 12f, px + 12f, gr.bottom, Colors.WHITE); if (!env.sporty) for (i in 0 until 10) g.fillRect(px - 12f, gr.top + i * 56f, px + 12f, gr.top + i * 56f + 24f, Colors.CANDY) }
+        for (px in floatArrayOf(gr.left, gr.right)) {
+            g.fillRect(px - 12f, gr.top - 12f, px + 12f, gr.bottom, Colors.WHITE)
+            g.fillRect(px + 4f, gr.top - 12f, px + 12f, gr.bottom, 0x22000000)
+            if (!env.sporty) for (i in 0 until 10) g.fillRect(px - 12f, gr.top + i * 56f, px + 12f, gr.top + i * 56f + 24f, Colors.CANDY)
+        }
         g.fillRect(gr.left - 12f, gr.top - 24f, gr.right + 12f, gr.top, Colors.WHITE)
+        g.fillRect(gr.left - 12f, gr.top - 8f, gr.right + 12f, gr.top, 0x22000000)
         if (!env.sporty) for (i in 0 until 14) g.fillRect(gr.left + i * gr.width / 14f, gr.top - 24f, gr.left + i * gr.width / 14f + 24f, gr.top, Colors.CANDY)
         // kicker elf in the foreground
         val kickerX = lane.cx + lane.width * 0.28f
@@ -281,6 +276,63 @@ class GoalkeeperGame(env: GameEnv) : MiniGame(env) {
         if (streak[k] >= 3) g.text("Streak ${streak[k]}!", lane.cx, 860f, 46f, Colors.GOLD, outline = Colors.BLACK, outlineWidth = 6f)
         Hud.laneLabel(g, Rect(lane.left, 140f, lane.right, 280f), env, k)
         g.restore()
+    }
+
+    /** Evening sky over the stadium: deep blue to a warm glow at the rim, the stand's roof and two light towers. */
+    private fun eveningSky(g: Gfx, lane: Rect) {
+        g.gradientRect(lane.left, 0f, lane.right, 580f, 0xFF071634.toInt(), 0xFF3A5C92.toInt())
+        g.fillRectRadial(lane.left, 300f, lane.right, 580f, lane.cx, 600f, lane.width * 0.7f, 0x44FFB074, 0x00FFB074)
+        for (i in 0 until 50) {
+            val x = lane.left + Draw.hash01(i * 7 + 2) * lane.width; val y = Draw.hash01(i * 11 + 5) * 300f
+            g.fillCircle(x, y, 0.8f + Draw.hash01(i) * 1.2f, 0x88FFFFFF.toInt())
+        }
+        // the upper tier and roof of the stand opposite
+        g.gradientRect(lane.left, 470f, lane.right, 580f, 0xFF1B2436.toInt(), 0xFF101624.toInt())
+        g.fillRect(lane.left, 466f, lane.right, 474f, 0xFF3A465C.toInt())
+        for (i in 0 until 10) {
+            val lx = lane.left + (i + 0.5f) * lane.width / 10f
+            g.fillOval(lx - 10f, 474f, lx + 10f, 480f, 0xFFFFF3D6.toInt())
+        }
+        for (i in 0 until 60) {
+            val x = lane.left + Draw.hash01(i * 13 + 1) * lane.width; val y = 490f + Draw.hash01(i * 17 + 3) * 80f
+            g.fillCircle(x, y, 2f, if (i % 3 == 0) 0x66FFE082 else 0x33FFFFFF)
+        }
+    }
+
+    /** The pitch: mown stripes, the six-yard box and penalty spot, light from the towers, the goal's net with depth. */
+    private fun pitch(g: Gfx, lane: Rect, gr: Rect) {
+        Draw.floodlight(g, lane.left + 70f, 700f, 330f, lane.cx - 60f, 1000f, 240f)
+        Draw.floodlight(g, lane.right - 70f, 700f, 330f, lane.cx + 60f, 1000f, 240f)
+        g.gradientRect(lane.left, 700f, lane.right, 1080f, 0xFF2E8B55.toInt(), 0xFF145030.toInt())
+        for (i in 0 until 9) g.fillRect(lane.left, 700f + i * i * 6f + i * 24f, lane.right, 700f + i * i * 6f + i * 24f + (12f + i * 6f), 0x12FFFFFF)
+        // grass texture: short blades in the foreground
+        for (i in 0 until 500) {
+            val x = lane.left + Draw.hash01(i * 7 + 1) * lane.width
+            val y = 760f + Draw.hash01(i * 13 + 2).let { it * it } * 320f
+            val h = 3f + (y - 760f) * 0.03f
+            g.line(x, y, x + (Draw.hash01(i) - 0.5f) * 3f, y - h, 1.2f, if (i % 2 == 0) 0x1AFFFFFF else 0x1A002000)
+        }
+        Draw.lightPool(g, lane.cx, 900f, lane.width * 0.5f, 110f, 0x30FFF6D8)
+        if (env.sporty) {
+            g.fillRect(lane.left, 700f, lane.right, 708f, 0xCCFFFFFF.toInt())
+            // six-yard box in perspective and the penalty spot
+            val box = floatArrayOf(gr.left - 40f, 708f, gr.right + 40f, 708f, gr.right + 120f, 800f, gr.left - 120f, 800f)
+            g.polyline(box, 4, 5f, 0xAAFFFFFF.toInt(), closed = false)
+            g.fillOval(lane.cx - 14f, 905f, lane.cx + 14f, 915f, 0xCCFFFFFF.toInt())
+        } else g.fillRoundRectGradient(lane.left, 694f, lane.right, 716f, 10f, Colors.SNOW, 0xFFB0C4DE.toInt())
+        // the goal's net: a back panel, side netting in perspective, the mesh
+        val depth = 70f
+        g.fillRectRadial(gr.left + depth * 0.5f, gr.top + depth * 0.4f, gr.right - depth * 0.5f, gr.bottom, gr.cx, gr.cy, gr.width * 0.7f, 0x22FFFFFF, 0x50000814)
+        val sideL = floatArrayOf(gr.left, gr.top, gr.left + depth * 0.5f, gr.top + depth * 0.4f, gr.left + depth * 0.5f, gr.bottom, gr.left, gr.bottom)
+        val sideR = floatArrayOf(gr.right, gr.top, gr.right - depth * 0.5f, gr.top + depth * 0.4f, gr.right - depth * 0.5f, gr.bottom, gr.right, gr.bottom)
+        g.fillPolygon(sideL, 4, 0x30000814); g.fillPolygon(sideR, 4, 0x30000814)
+        var nx = gr.left + depth * 0.5f
+        while (nx <= gr.right - depth * 0.5f) { g.line(nx, gr.top + depth * 0.4f, nx, gr.bottom, 1.8f, 0x40FFFFFF); nx += 30f }
+        var ny = gr.top + depth * 0.4f
+        while (ny <= gr.bottom) { g.line(gr.left + depth * 0.5f, ny, gr.right - depth * 0.5f, ny, 1.8f, 0x40FFFFFF); ny += 30f }
+        for (j in 0..6) { val u = j / 6f; g.line(gr.left, gr.top + (gr.bottom - gr.top) * u, gr.left + depth * 0.5f, gr.top + depth * 0.4f + (gr.bottom - gr.top - depth * 0.4f) * u, 1.5f, 0x40FFFFFF); g.line(gr.right, gr.top + (gr.bottom - gr.top) * u, gr.right - depth * 0.5f, gr.top + depth * 0.4f + (gr.bottom - gr.top - depth * 0.4f) * u, 1.5f, 0x40FFFFFF) }
+        // the posts' shadows on the grass
+        g.fillRect(gr.left - 12f, gr.bottom, gr.right + 12f, gr.bottom + 10f, 0x33000000)
     }
 
     private fun drawBall(g: Gfx, x: Float, y: Float, r: Float, time: Double) {

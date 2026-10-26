@@ -303,46 +303,9 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
         fun sy(y: Float) = hz + k / z(y)
         fun sx(x: Float, y: Float) = cx + x * fx / z(y)
         fun scale(y: Float) = fx / z(y)
-        // lane and gutters
         val near = 0f; val far = PIT_Y + 0.6f
-        // the neighbouring lanes either side, darker, with their pins standing
-        for (side in intArrayOf(-1, 1)) {
-            val off = side * (LANE_HALF * 2f + 0.55f)
-            val np = floatArrayOf(sx(off - LANE_HALF, near), sy(near), sx(off + LANE_HALF, near), sy(near), sx(off + LANE_HALF, far), sy(far), sx(off - LANE_HALF, far), sy(far))
-            g.fillPolygonGradient(np, 4, sy(far), sy(near), 0xFF5E4A35.toInt(), 0xFF8C7253.toInt())
-            val cap = floatArrayOf(sx(off - side * (LANE_HALF + 0.12f), near), sy(near), sx(side * (LANE_HALF + 0.12f), near), sy(near), sx(side * (LANE_HALF + 0.12f), far), sy(far), sx(off - side * (LANE_HALF + 0.12f), far), sy(far))
-            g.fillPolygonGradient(cap, 4, sy(far), sy(near), 0xFF242C38.toInt(), 0xFF3A4656.toInt())
-            for (row in 0 until 4) for (j in 0..row) {
-                val py = HEAD_PIN_Y + row * 0.26f
-                val px = off + (j - row / 2f) * 0.3f
-                drawPin(g, sx(px, py), sy(py), scale(py) * 0.95f, false, 0f)
-            }
-        }
-        val gut = floatArrayOf(sx(-LANE_HALF - 0.12f, near), sy(near), sx(LANE_HALF + 0.12f, near), sy(near), sx(LANE_HALF + 0.12f, far), sy(far), sx(-LANE_HALF - 0.12f, far), sy(far))
-        g.fillPolygonGradient(gut, 4, sy(far), sy(near), 0xFF1E272C.toInt(), 0xFF4A5A63.toInt())
-        val lanePts = floatArrayOf(sx(-LANE_HALF, near), sy(near), sx(LANE_HALF, near), sy(near), sx(LANE_HALF, far), sy(far), sx(-LANE_HALF, far), sy(far))
-        g.fillPolygonGradient(lanePts, 4, sy(far), sy(near), 0xFFB98E5C.toInt(), 0xFFE8CB9C.toInt())
-        // alternating board tones and the glossy oil reflection down the middle
-        for (i in 0 until 8) {
-            if (i % 2 == 1) continue
-            val x0 = -LANE_HALF + i * LANE_HALF * 2 / 8; val x1 = x0 + LANE_HALF * 2 / 8
-            pinPts[0] = sx(x0, near); pinPts[1] = sy(near); pinPts[2] = sx(x1, near); pinPts[3] = sy(near); pinPts[4] = sx(x1, far); pinPts[5] = sy(far); pinPts[6] = sx(x0, far); pinPts[7] = sy(far)
-            g.fillPolygon(pinPts, 4, 0x10000000)
-        }
-        for (i in 1 until 8) {
-            val x = -LANE_HALF + i * LANE_HALF * 2 / 8
-            g.line(sx(x, near), sy(near), sx(x, far), sy(far), 1.5f, 0x22000000)
-        }
-        pinPts[0] = sx(-0.12f, near); pinPts[1] = sy(near); pinPts[2] = sx(0.12f, near); pinPts[3] = sy(near); pinPts[4] = sx(0.05f, far); pinPts[5] = sy(far); pinPts[6] = sx(-0.05f, far); pinPts[7] = sy(far)
-        g.fillPolygonGradient(pinPts, 4, sy(far), sy(near), 0x40FFFFFF, 0x08FFFFFF)
-        // the pin deck is lit
-        Draw.lightPool(g, cx, sy(HEAD_PIN_Y + 0.4f), scale(HEAD_PIN_Y) * 0.9f, scale(HEAD_PIN_Y) * 0.2f, 0x55FFF3D6)
-        // aiming arrows
-        for (i in -2..2) Draw.tri(g, sx(i * 0.12f - 0.03f, 4.5f), sy(4.5f), sx(i * 0.12f + 0.03f, 4.5f), sy(4.5f), sx(i * 0.12f, 4.2f), sy(4.2f), 0xAA8D3B3B.toInt())
-        g.fillRect(sx(-LANE_HALF, 0.02f), sy(0.02f) - 3f, sx(LANE_HALF, 0.02f), sy(0.02f) + 3f, if (env.sporty) 0xFF263238.toInt() else Colors.CANDY)
-        // back wall of the pin deck and the light falling on the pins
-        g.gradientRect(r.left, sy(far) - 160f, r.right, sy(far), 0xFF2A1830.toInt(), 0xFF120A16.toInt())
-        g.glow(cx, sy(far) - 40f, scale(far) * 1.6f, 0x40FFE7B0)
+        // the lane, its neighbours, gutters and the pin deck (one cached picture per lane)
+        g.layer("bowl${lane.k}.${env.sporty}", r.left, r.top, r.right, r.bottom, grain = 0.18f) { lg -> laneStatic(lg, r, cx, fx, k, hz) }
         // pins (far to near) then ball
         val items = ArrayList<Pair<Float, () -> Unit>>()
         for (p in lane.pins) {
@@ -375,6 +338,80 @@ class BowlingGame(env: GameEnv) : MiniGame(env) {
     }
 
     private val pinPts = FloatArray(8)
+
+    /** Everything on a lane that never moves, drawn once in detail. */
+    private fun laneStatic(g: Gfx, r: Rect, cx: Float, fx: Float, k: Float, hz: Float) {
+        fun z(y: Float) = y + 6f
+        fun sy(y: Float) = hz + k / z(y)
+        fun sx(x: Float, y: Float) = cx + x * fx / z(y)
+        fun scale(y: Float) = fx / z(y)
+        val near = 0f; val far = PIT_Y + 0.6f
+        // the hall behind: ceiling lights and the masking panel over the pins
+        g.gradientRect(r.left, r.top, r.right, sy(far), if (env.sporty) 0xFF141B33.toInt() else 0xFF2E1636.toInt(), if (env.sporty) 0xFF0B1022.toInt() else 0xFF1A0C22.toInt())
+        // the neighbouring lanes either side, darker, with their pins standing
+        for (side in intArrayOf(-1, 1)) {
+            val off = side * (LANE_HALF * 2f + 0.55f)
+            val np = floatArrayOf(sx(off - LANE_HALF, near), sy(near), sx(off + LANE_HALF, near), sy(near), sx(off + LANE_HALF, far), sy(far), sx(off - LANE_HALF, far), sy(far))
+            g.fillPolygonGradient(np, 4, sy(far), sy(near), 0xFF5E4A35.toInt(), 0xFF8C7253.toInt())
+            val cap = floatArrayOf(sx(off - side * (LANE_HALF + 0.12f), near), sy(near), sx(side * (LANE_HALF + 0.12f), near), sy(near), sx(side * (LANE_HALF + 0.12f), far), sy(far), sx(off - side * (LANE_HALF + 0.12f), far), sy(far))
+            g.fillPolygonGradient(cap, 4, sy(far), sy(near), 0xFF242C38.toInt(), 0xFF3A4656.toInt())
+            // the ball return on the capping
+            val bx0 = side * (LANE_HALF + 0.3f)
+            g.line(sx(bx0, near), sy(near), sx(bx0, far * 0.6f), sy(far * 0.6f), scale(2f) * 0.08f, 0xFF161C24.toInt())
+            for (row in 0 until 4) for (j in 0..row) {
+                val py = HEAD_PIN_Y + row * 0.26f
+                val px = off + (j - row / 2f) * 0.3f
+                drawPin(g, sx(px, py), sy(py), scale(py) * 0.95f, false, 0f)
+            }
+            g.fillPolygon(np, 4, 0x33000000)
+        }
+        // gutters: rounded metal channels
+        val gut = floatArrayOf(sx(-LANE_HALF - 0.12f, near), sy(near), sx(LANE_HALF + 0.12f, near), sy(near), sx(LANE_HALF + 0.12f, far), sy(far), sx(-LANE_HALF - 0.12f, far), sy(far))
+        g.fillPolygonGradient(gut, 4, sy(far), sy(near), 0xFF1E272C.toInt(), 0xFF56666F.toInt())
+        for (side in floatArrayOf(-1f, 1f)) g.line(sx(side * (LANE_HALF + 0.06f), near), sy(near), sx(side * (LANE_HALF + 0.06f), far), sy(far), scale(1f) * 0.02f, 0x44FFFFFF)
+        // the lane: maple boards with grain, darker pine in the middle section, a glossy finish
+        val lanePts = floatArrayOf(sx(-LANE_HALF, near), sy(near), sx(LANE_HALF, near), sy(near), sx(LANE_HALF, far), sy(far), sx(-LANE_HALF, far), sy(far))
+        g.fillPolygonGradient(lanePts, 4, sy(far), sy(near), 0xFFB98E5C.toInt(), 0xFFE8CB9C.toInt())
+        val boards = 20
+        for (i in 0 until boards) {
+            val x0 = -LANE_HALF + i * LANE_HALF * 2 / boards; val x1 = x0 + LANE_HALF * 2 / boards
+            val tone = Draw.hash01(i * 7 + 3)
+            pinPts[0] = sx(x0, near); pinPts[1] = sy(near); pinPts[2] = sx(x1, near); pinPts[3] = sy(near); pinPts[4] = sx(x1, far); pinPts[5] = sy(far); pinPts[6] = sx(x0, far); pinPts[7] = sy(far)
+            g.fillPolygon(pinPts, 4, if (tone > 0.5f) Colors.withAlpha(0xFF6D4C1E.toInt(), 0.06f + 0.06f * tone) else Colors.withAlpha(Colors.WHITE, 0.04f * tone))
+            g.line(sx(x0, near), sy(near), sx(x0, far), sy(far), 1.2f, 0x26000000)
+            // grain streaks and board ends along the board
+            for (j in 0 until 6) {
+                val y0 = 0.3f + Draw.hash01(i * 31 + j) * (far - 1f)
+                val xm = x0 + (x1 - x0) * (0.3f + 0.4f * Draw.hash01(i * 13 + j))
+                g.line(sx(xm, y0), sy(y0), sx(xm, y0 + 0.6f), sy(y0 + 0.6f), 1f, 0x18402A10)
+            }
+        }
+        // reflections of the pin-deck lights running down the polished lane
+        g.setBlend(com.clrg.core.render.Blend.ADD)
+        for (j in -2..2) {
+            val x = j * 0.13f
+            pinPts[0] = sx(x - 0.03f, near + 1f); pinPts[1] = sy(near + 1f); pinPts[2] = sx(x + 0.03f, near + 1f); pinPts[3] = sy(near + 1f)
+            pinPts[4] = sx(x + 0.012f, far); pinPts[5] = sy(far); pinPts[6] = sx(x - 0.012f, far); pinPts[7] = sy(far)
+            g.fillPolygonGradient(pinPts, 4, sy(far), sy(near + 1f), 0x30FFF3D6, 0x00FFF3D6)
+        }
+        g.setBlend(com.clrg.core.render.Blend.NORMAL)
+        pinPts[0] = sx(-0.12f, near); pinPts[1] = sy(near); pinPts[2] = sx(0.12f, near); pinPts[3] = sy(near); pinPts[4] = sx(0.05f, far); pinPts[5] = sy(far); pinPts[6] = sx(-0.05f, far); pinPts[7] = sy(far)
+        g.fillPolygonGradient(pinPts, 4, sy(far), sy(near), 0x40FFFFFF, 0x08FFFFFF)
+        // the pin deck is lit
+        Draw.lightPool(g, cx, sy(HEAD_PIN_Y + 0.4f), scale(HEAD_PIN_Y) * 0.9f, scale(HEAD_PIN_Y) * 0.2f, 0x55FFF3D6)
+        // approach dots, aiming arrows, the foul line
+        for (i in -3..3) g.fillOval(sx(i * 0.1f, 0.9f) - 3f, sy(0.9f) - 1.5f, sx(i * 0.1f, 0.9f) + 3f, sy(0.9f) + 1.5f, 0x885D3A1A.toInt())
+        for (i in -2..2) Draw.tri(g, sx(i * 0.12f - 0.03f, 4.5f), sy(4.5f), sx(i * 0.12f + 0.03f, 4.5f), sy(4.5f), sx(i * 0.12f, 4.2f), sy(4.2f), 0xAA8D3B3B.toInt())
+        g.fillRect(sx(-LANE_HALF, 0.02f), sy(0.02f) - 3f, sx(LANE_HALF, 0.02f), sy(0.02f) + 3f, if (env.sporty) 0xFF263238.toInt() else Colors.CANDY)
+        // the dark pit behind the pins, a coloured light strip along its top edge
+        val mt = sy(far) - 160f; val mb = sy(far)
+        g.gradientRect(r.left, mt, r.right, mb, 0xFF2A1830.toInt(), 0xFF120A16.toInt())
+        val panelC = if (env.sporty) 0xFF00B8D4.toInt() else 0xFFE53950.toInt()
+        g.setBlend(com.clrg.core.render.Blend.ADD)
+        g.fillRectRadial(r.left, mt, r.right, mb, cx, mt + 40f, scale(far) * 2.2f, Colors.withAlpha(panelC, 0.22f), panelC and 0x00FFFFFF)
+        g.setBlend(com.clrg.core.render.Blend.NORMAL)
+        g.glow(cx, sy(far) - 40f, scale(far) * 1.6f, 0x40FFE7B0)
+    }
 
     private fun drawCard(g: Gfx, lane: Lane, r: Rect) {
         val w = r.width / (FRAMES + 1)
