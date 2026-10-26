@@ -33,6 +33,16 @@ data class PipelineConfig(
      * (measured with tools/pose-validation/scale_test.py).
      */
     val searchRegions: List<RegionSpec> = listOf(RegionSpec(0f, 0.56f), RegionSpec(0.44f, 1f), RegionSpec(0f, 1f)),
+    /** Move each person's crop along with their recent motion (fewer losses when someone moves quickly). */
+    val predictMotion: Boolean = true,
+    /** When the landmark model loses a tracked person, try once more with a wider crop before giving up. */
+    val retryWider: Boolean = true,
+    /** Smooth the tracking crop while a person is still (steadier landmarks), follow it closely when they move. */
+    val smoothRoi: Boolean = true,
+    /** Presence needed to keep following someone already tracked (new people still need [minPresence]). */
+    val keepPresence: Float = 0.4f,
+    /** Brighten dark or backlit crops before the models see them. */
+    val autoLevel: Boolean = true,
 )
 
 /** Horizontal slice of the upright frame (fractions of width), full height. */
@@ -69,7 +79,13 @@ class PipelineStats {
  * already tracked, cycling over overlapping search regions. Thread-confined: call [process] from one thread.
  */
 class MultiPosePipeline(private val runner: PoseModelRunner, var config: PipelineConfig = PipelineConfig()) {
-    private class Track(val id: Int, var roi: RotatedRect, var frames: Int = 0, var lastPresence: Float = 1f)
+    private class Track(val id: Int, var roi: RotatedRect, var frames: Int = 0, var lastPresence: Float = 1f) {
+        /** Smoothed motion of the crop centre, pixels per processed frame. */
+        var vx = 0f
+        var vy = 0f
+        /** Frames in a row the wider retry had to rescue this person. */
+        var rescued = 0
+    }
 
     private val tracks = ArrayList<Track>()
     private var nextId = 1
@@ -86,6 +102,11 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
     private val heatmap = FloatArray(BlazePose.HEATMAP_SIZE * BlazePose.HEATMAP_SIZE * BlazePose.NUM_LANDMARKS_ALL)
 
     val stats = PipelineStats()
+    /** Lifetime counters (diagnostics and tests): crops brightened, people rescued by the wider retry. */
+    var levelledCrops = 0L
+        private set
+    var rescues = 0L
+        private set
 
     /** Finds held objects (sticks, toy rackets) next to the players' hands when set. */
     var heldObjects: HeldObjectTracker? = null
@@ -124,16 +145,27 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         lastRegions.clear()
         lastRois.clear()
 
-        // 1) Track existing people using ROIs from their previous landmarks.
+        // 1) Track existing people using ROIs from their previous landmarks (moved along with their motion).
         val it = tracks.iterator()
         while (it.hasNext()) {
             val tr = it.next()
-            val lm = runLandmarks(src, toBuffer, tr.roi, clock)
-            if (lm == null) { it.remove(); continue }
+            val crop = if (config.predictMotion) predicted(tr) else tr.roi
+            var lm = runLandmarks(src, toBuffer, crop, clock, config.keepPresence)
+            if (lm == null && config.retryWider) {
+                // lost them: one more look with a wider crop around where they were
+                lm = runLandmarks(src, toBuffer, tr.roi.copy(side = tr.roi.side * 1.45f), clock, config.keepPresence)
+                if (lm != null) { rescues++; tr.rescued++ }
+            } else tr.rescued = 0
+            if (lm == null || tr.rescued > 8) { it.remove(); continue }
             tr.frames++
             tr.lastPresence = lmFlag[0]
-            val roi = lm.trackingRoi()
-            if (!roiPlausible(roi, uw, uh)) { it.remove(); continue }
+            val measured = lm.trackingRoi()
+            if (!roiPlausible(measured, uw, uh)) { it.remove(); continue }
+            val prev = tr.roi
+            val roi = if (config.smoothRoi) smoothed(prev, measured) else measured
+            // motion of the crop centre, smoothed over a few frames
+            tr.vx += 0.6f * ((measured.cx - prev.cx) - tr.vx)
+            tr.vy += 0.6f * ((measured.cy - prev.cy) - tr.vy)
             tr.roi = roi
             results.add(RawPose(tr.id, lm, lmFlag[0], roi, Appearance.compute(src, toBuffer, lm), tr.frames))
         }
@@ -179,6 +211,7 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         lastRegions.add(region)
         val a = clock()
         CropSampler.sample(src, region.detectorTransform().andThen(toBuffer), BlazePose.DETECTOR_SIZE, detInput, 1f / 127.5f, -1f, zeroBorder = true)
+        if (config.autoLevel && AutoLevel.apply(detInput, BlazePose.DETECTOR_SIZE * BlazePose.DETECTOR_SIZE, -1f, 1f)) levelledCrops++
         val b = clock()
         runner.runDetector(detInput, detRegressors, detScores)
         val c = clock()
@@ -188,11 +221,39 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         return DetectionDecoder.decode(detRegressors, detScores, region, config.minDetectionScore, config.maxPoses)
     }
 
-    private fun runLandmarks(src: PixelSource, toBuffer: Affine, roi: RotatedRect, clock: () -> Long): RawLandmarks? {
+    /**
+     * Where to look for a tracked person this frame: last frame's crop moved on by their recent motion, a little
+     * wider while they move fast (so a sudden lunge stays inside the crop).
+     */
+    private fun predicted(tr: Track): RotatedRect {
+        val r = tr.roi
+        val speed = kotlin.math.hypot(tr.vx, tr.vy)
+        if (speed < 0.004f * r.side) return r
+        val grow = 1f + (1.2f * speed / r.side).coerceAtMost(0.22f)
+        return RotatedRect(r.cx + tr.vx, r.cy + tr.vy, r.side * grow, r.rotation)
+    }
+
+    /**
+     * The landmark model's own crop wobbles a little from frame to frame even when a person stands still, and that
+     * wobble feeds back into the landmarks. Ease the crop towards the new measurement: slowly when the change is
+     * small (standing still), immediately when it is large (moving).
+     */
+    private fun smoothed(prev: RotatedRect, m: RotatedRect): RotatedRect {
+        val move = kotlin.math.hypot(m.cx - prev.cx, m.cy - prev.cy) / prev.side
+        val grow = kotlin.math.abs(m.side - prev.side) / prev.side
+        val k = (0.3f + 6f * maxOf(move, grow)).coerceAtMost(1f)
+        var dr = m.rotation - prev.rotation
+        while (dr > Math.PI) dr -= (2 * Math.PI).toFloat()
+        while (dr < -Math.PI) dr += (2 * Math.PI).toFloat()
+        return RotatedRect(prev.cx + (m.cx - prev.cx) * k, prev.cy + (m.cy - prev.cy) * k, prev.side + (m.side - prev.side) * k, prev.rotation + dr * k)
+    }
+
+    private fun runLandmarks(src: PixelSource, toBuffer: Affine, roi: RotatedRect, clock: () -> Long, minPresence: Float = config.minPresence): RawLandmarks? {
         observer?.invoke(null, roi)
         lastRois.add(roi)
         val a = clock()
         CropSampler.sample(src, roi.cropTransform(BlazePose.LANDMARK_SIZE).andThen(toBuffer), BlazePose.LANDMARK_SIZE, lmInput, 1f / 255f, 0f, zeroBorder = false)
+        if (config.autoLevel && AutoLevel.apply(lmInput, BlazePose.LANDMARK_SIZE * BlazePose.LANDMARK_SIZE, 0f, 1f)) levelledCrops++
         val b = clock()
         val hm = if (config.refineWithHeatmap) heatmap else null
         runner.runLandmarks(lmInput, lmRaw, lmFlag, hm)
@@ -200,7 +261,7 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         stats.preprocessMs += (b - a) / 1e6f
         stats.landmarkMs += (c - b) / 1e6f
         stats.landmarkRuns++
-        if (lmFlag[0] < config.minPresence) return null
+        if (lmFlag[0] < minPresence) return null
         return LandmarkDecoder.decode(lmRaw, hm, roi)
     }
 
