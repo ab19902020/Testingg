@@ -108,6 +108,7 @@ class UiShots {
         shot("motion_scope_lean", 1)
         repeat(4) { tap("labScope") }
         // with the camera figures a phone would show (sample numbers for the layout, not measurements)
+        app.currentCamera()?.id?.let { app.settings.directionChecked.add(it) } // no left/right check in these shots
         app.settings.simulatedInput = false
         platform.perfSnapshot = com.clrg.core.app.PerfSnapshot(cameraFps = 30f, inferenceFps = 17f, inferenceMs = 41f, delegate = "GPU",
             model = "BlazePose lite", adaptiveLevel = "Auto/lite/30fps", exposure = "sharp-motion exposure 8.3 ms, ISO 1600",
@@ -123,6 +124,8 @@ class UiShots {
         tap("golf_go")
         shot("golf_fly1", 50)
         shot("golf_fly2", 80)
+        seconds(4f); app.sim.trigger(0, SimAction.RAISE); seconds(2.5f)
+        shot("golf_aim", 30)
         app.popToRoot(); frames(5)
         for (id in listOf("players", "help", "solo", "tournament")) {
             tap(id); shot("screen_$id"); app.key(Key.BACK); frames(5)

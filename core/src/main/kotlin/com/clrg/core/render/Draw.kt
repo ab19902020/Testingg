@@ -221,15 +221,15 @@ object Draw {
      * instead of a dozen shapes. Very small (distant) trees are a simple triangle. Pass a small set of colours
      * (e.g. fog in a few steps), since each colour is its own picture.
      */
-    fun pineSprite(g: Gfx, x: Float, baseY: Float, h: Float, color: Int) {
+    fun pineSprite(g: Gfx, x: Float, baseY: Float, h: Float, color: Int, snow: Boolean = true) {
         if (h < 34f) {
             tri(g, x - h * 0.34f, baseY, x + h * 0.34f, baseY, x, baseY - h * 0.95f, color)
-            tri(g, x - h * 0.12f, baseY - h * 0.62f, x + h * 0.12f, baseY - h * 0.62f, x, baseY - h * 0.95f, 0xCCF4F8FF.toInt())
+            if (snow) tri(g, x - h * 0.12f, baseY - h * 0.62f, x + h * 0.12f, baseY - h * 0.62f, x, baseY - h * 0.95f, 0xCCF4F8FF.toInt())
             return
         }
         val ref = 300f
         g.save(); g.translate(x, baseY); g.scale(h / ref)
-        g.layer("pine.${Integer.toHexString(color)}", -ref * 0.5f, -ref * 1.02f, ref * 0.5f, ref * 0.06f) { lg -> pineTree(lg, 0f, 0f, ref, color) }
+        g.layer("pine.${Integer.toHexString(color)}.$snow", -ref * 0.5f, -ref * 1.02f, ref * 0.5f, ref * 0.06f) { lg -> pineTree(lg, 0f, 0f, ref, color, snow) }
         g.restore()
     }
 

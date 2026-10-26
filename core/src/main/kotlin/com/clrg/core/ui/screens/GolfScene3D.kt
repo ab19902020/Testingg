@@ -223,6 +223,8 @@ class GolfScene3D {
         if (summer) g.gradientRect(r.left, max(r.top, hy), r.right, r.bottom, 0xFF86B46A.toInt(), 0xFF5F9447.toInt())
         else g.gradientRect(r.left, max(r.top, hy), r.right, r.bottom, 0xFFDDE9F6.toInt(), 0xFFF7FBFF.toInt())
         ground(g, h, time, x)
+        // haze over the distance: the far course fades softly into the sky
+        if (hy > r.top) g.gradientRect(r.left, hy - 2f, r.right, min(r.bottom, hy + 110f), Colors.withAlpha(fogColor, 0.75f), Colors.withAlpha(fogColor, 0f))
         objects(g, h, time, x)
         g.restore()
     }
@@ -267,7 +269,7 @@ class GolfScene3D {
                 val sx = cam.cx + cam.focal * kotlin.math.tan(da) + (time.toFloat() * 3f) % 60f
                 val sy = hz - (90f + 70f * ((i * 37) % 5) / 4f) * (cam.focal / 900f).coerceIn(0.7f, 1.5f)
                 if (sy < r.top - 40f) continue
-                com.clrg.core.render.SportsDraw.cloud(g, sx, sy, (90f + 40f * (i % 3)) * (cam.focal / 900f).coerceIn(0.7f, 1.5f), 0xF2FFFFFF.toInt())
+                com.clrg.core.render.Scenery.cloudAt(g, sx, sy, (90f + 40f * (i % 3)) * (cam.focal / 900f).coerceIn(0.7f, 1.5f), i)
             }
             return
         }
@@ -531,16 +533,18 @@ class GolfScene3D {
             return
         }
         g.fillRect(bx - w * 0.07f, by - hpx * 0.18f, bx + w * 0.07f, by, fogged(0xFF5D4037.toInt(), dist))
+        // fog in steps of 60 m, so each step is one cached tree picture
+        val dq = kotlin.math.floor(dist / 60f) * 60f + 30f
         if (summer && o.tint % 3 != 0) {
-            // a leafy round tree: trunk, then clumps of canopy lit from above
-            g.fillRect(bx - w * 0.08f, by - hpx * 0.45f, bx + w * 0.08f, by, fogged(0xFF6D4C41.toInt(), dist))
-            val leafDark = fogged(if (o.tint % 2 == 0) 0xFF2F6B3A.toInt() else 0xFF3A7A3F.toInt(), dist)
-            val leafLight = fogged(if (o.tint % 2 == 0) 0xFF5A9E4E.toInt() else 0xFF6AAE52.toInt(), dist)
-            val cy0 = by - hpx * 0.62f
-            g.fillCircle(bx - w * 0.38f, cy0 + hpx * 0.06f, w * 0.55f, leafDark)
-            g.fillCircle(bx + w * 0.4f, cy0 + hpx * 0.05f, w * 0.52f, leafDark)
-            g.fillCircleRadial(bx, cy0 - hpx * 0.08f, w * 0.72f, bx - w * 0.25f, cy0 - hpx * 0.25f, w * 1.1f, leafLight, leafDark)
-            g.fillCircle(bx - w * 0.2f, cy0 - hpx * 0.22f, w * 0.36f, Colors.lerp(leafLight, 0xFFFFFFFF.toInt(), 0.08f))
+            // a leafy round tree (cached picture): clumps of canopy lit from above
+            val leafDark = fogged(if (o.tint % 2 == 0) 0xFF2F6B3A.toInt() else 0xFF3A7A3F.toInt(), dq)
+            val leafLight = fogged(if (o.tint % 2 == 0) 0xFF5A9E4E.toInt() else 0xFF6AAE52.toInt(), dq)
+            com.clrg.core.render.Scenery.leafTree(g, bx, by, hpx * 1.05f, leafDark, leafLight, fogged(0xFF6D4C41.toInt(), dq))
+            return
+        }
+        if (hpx > 40f) {
+            // a pine (cached picture)
+            com.clrg.core.render.Draw.pineSprite(g, bx, by, hpx * 1.05f, fogged(if (o.tint % 2 == 0) 0xFF1E5A33.toInt() else 0xFF235F3A.toInt(), dq), snow = !summer)
             return
         }
         for (tier in 0..2) {
@@ -655,6 +659,12 @@ class GolfScene3D {
         val cy0 = hy + clubLen * (cos(ca) * e1y - sin(ca) * e2y)
         val cz0 = (hz + clubLen * (cos(ca) * e1z - sin(ca) * e2z)).coerceAtLeast(0.02f)
         val handsNearer = cam.depth(hx, hy, hz) < cam.depth(gx, gy, 0.9f)
+        if (summer) {
+            if (!handsNearer) clubAndArms(g, sx, sy, sz, face, hx, hy, hz, cx0, cy0, cz0, x.club)
+            athleteGolfer(g, gx, gy, face, lean, col)
+            if (handsNearer) clubAndArms(g, sx, sy, sz, face, hx, hy, hz, cx0, cy0, cz0, x.club)
+            return
+        }
         if (!handsNearer) clubAndArms(g, sx, sy, sz, face, hx, hy, hz, cx0, cy0, cz0, x.club)
         for ((i, p) in parts.withIndex()) {
             if (!pt(face.x * p[0], face.y * p[0], p[1])) continue
@@ -688,6 +698,73 @@ class GolfScene3D {
         if (handsNearer) clubAndArms(g, sx, sy, sz, face, hx, hy, hz, cx0, cy0, cz0, x.club)
     }
 
+    private val gp = FloatArray(20)
+    private val hull = FloatArray(16)
+
+    /** Convex outline of [n] points (x, y pairs in [src]) into [dst]; returns the number of outline points. */
+    private fun convexHull(src: FloatArray, n: Int, dst: FloatArray): Int {
+        val idx = (0 until n).sortedWith(compareBy({ src[it * 2] }, { src[it * 2 + 1] }))
+        val out = IntArray(2 * n); var k = 0
+        fun cross(o: Int, a: Int, b: Int) = (src[a * 2] - src[o * 2]) * (src[b * 2 + 1] - src[o * 2 + 1]) - (src[a * 2 + 1] - src[o * 2 + 1]) * (src[b * 2] - src[o * 2])
+        for (i in idx) { while (k >= 2 && cross(out[k - 2], out[k - 1], i) <= 0f) k--; out[k++] = i }
+        val lower = k + 1
+        for (i in idx.reversed().drop(1)) { while (k >= lower && cross(out[k - 2], out[k - 1], i) <= 0f) k--; out[k++] = i }
+        val m = (k - 1).coerceAtLeast(0)
+        for (i in 0 until m) { dst[i * 2] = src[out[i] * 2]; dst[i * 2 + 1] = src[out[i] * 2 + 1] }
+        return m
+    }
+
+    /** The summer golfer's body, drawn like the athletes elsewhere: shaded legs and shoes, a polo shirt, a cap. */
+    private fun athleteGolfer(g: Gfx, gx: Float, gy: Float, face: Pt, lean: Float, col: Int) {
+        val across = Pt(-face.y, face.x)
+        fun p(a: Float, f: Float, z: Float): Boolean = cam.project(gx + across.x * a + face.x * f, gy + across.y * a + face.y * f, z)
+        val m = cam.focal / cam.pd
+        val skin = 0xFFF0C8A6.toInt(); val skinD = 0xFFC99A78.toInt(); val skinL = 0xFFFADDC4.toInt()
+        val trousers = 0xFF4A5866.toInt(); val trousersD = 0xFF2E3B48.toInt()
+        // legs: knees slightly flexed towards the ball, golf shoes
+        for (s in intArrayOf(-1, 1)) {
+            if (!p(s * 0.17f, 0.02f, 0.02f)) continue
+            val fx = cam.px; val fy = cam.py
+            if (!p(s * 0.15f, lean * 0.9f, 0.48f)) continue
+            val kx = cam.px; val ky = cam.py
+            if (!p(s * 0.12f, lean * 0.4f, 0.9f)) continue
+            val hx0 = cam.px; val hy0 = cam.py
+            val lw = 0.13f * m
+            com.clrg.core.render.Draw.limb(g, hx0, hy0, kx, ky, fx, fy - lw * 0.3f, lw * 1.15f, lw, trousers, trousersD, 0xFF6E7D8C.toInt())
+            g.fillRoundRect(fx - lw * 0.75f, fy - lw * 0.45f, fx + lw * 0.75f, fy + lw * 0.25f, lw * 0.3f, 0xFFF5F5F5.toInt())
+            g.fillRect(fx - lw * 0.75f, fy + lw * 0.05f, fx + lw * 0.75f, fy + lw * 0.25f, 0xFF37474F.toInt())
+        }
+        // torso: a tapered polo from the hips to the shoulders, leaning over the ball - the outline of a box with
+        // some depth, so it has a proper shape from any camera angle
+        var n = 0
+        for (c in TORSO) {
+            if (!p(c[0], lean * c[1] + c[3], c[2])) { n = -1; break }
+            hull[n * 2] = cam.px; hull[n * 2 + 1] = cam.py; n++
+        }
+        if (n == 8) {
+            val k = convexHull(hull, 8, gp)
+            var top = Float.MAX_VALUE; var bot = -Float.MAX_VALUE; var left = Float.MAX_VALUE; var right = -Float.MAX_VALUE
+            for (i in 0 until k) { top = min(top, gp[i * 2 + 1]); bot = max(bot, gp[i * 2 + 1]); left = min(left, gp[i * 2]); right = max(right, gp[i * 2]) }
+            g.fillPolygonLinear(gp, k, left, top, right, bot, Colors.lighter(col, 0.25f), Colors.darker(col, 0.62f))
+            g.fillPolygonGradient(gp, k, top + (bot - top) * 0.5f, bot, 0x00000000, Colors.withAlpha(Colors.darker(col, 0.4f), 0.35f))
+            g.polyline(gp, k, max(1f, 0.012f * m), Colors.withAlpha(Colors.darker(col, 0.35f), 0.8f), closed = true)
+            // belt
+            if (p(-0.17f, lean * 0.5f, 0.88f)) { val ax = cam.px; val ay = cam.py; if (p(0.17f, lean * 0.5f, 0.88f)) g.line(ax, ay, cam.px, cam.py, max(1.5f, 0.035f * m), 0xFF263238.toInt()) }
+        }
+        // collar and head with a cap in the player's colour
+        if (p(0f, lean * 1.5f, 1.25f)) g.fillOval(cam.px - 0.09f * m, cam.py - 0.04f * m, cam.px + 0.09f * m, cam.py + 0.04f * m, Colors.WHITE)
+        if (!p(0f, lean * 1.6f, 1.38f)) return
+        val hxs = cam.px; val hys = cam.py; val r = 0.15f * m
+        g.fillCircle(hxs - r * 0.95f, hys + r * 0.1f, r * 0.22f, skinD); g.fillCircle(hxs + r * 0.95f, hys + r * 0.1f, r * 0.22f, skinD)
+        g.fillCircleRadial(hxs, hys, r, hxs - r * 0.35f, hys - r * 0.4f, r * 1.5f, skinL, skin)
+        g.fillOval(hxs - r * 0.95f, hys - r * 0.2f, hxs + r * 0.95f, hys + r * 0.45f, 0x553E2723) // hair at the back of the head
+        g.save(); g.clipRect(hxs - r * 1.2f, hys - r * 1.3f, hxs + r * 1.2f, hys - r * 0.1f)
+        g.fillCircleRadial(hxs, hys - r * 0.05f, r * 1.03f, hxs - r * 0.4f, hys - r * 0.7f, r * 1.5f, Colors.lighter(col, 0.3f), Colors.darker(col, 0.7f))
+        g.restore()
+        g.fillOval(hxs - r * 0.2f, hys - r * 0.2f, hxs + r * 1.3f, hys + r * 0.12f, Colors.darker(col, 0.65f))
+        g.fillCircle(hxs, hys - r * 0.95f, r * 0.12f, Colors.lighter(col, 0.4f))
+    }
+
     private fun clubAndArms(g: Gfx, sx: Float, sy: Float, sz: Float, face: Pt, hx: Float, hy: Float, hz: Float, cx0: Float, cy0: Float, cz0: Float, club: Club) {
         // arms from both shoulders to the joined hands
         val across = Pt(-face.y, face.x)
@@ -695,13 +772,17 @@ class GolfScene3D {
             if (!cam.project(sx + across.x * 0.2f * s, sy + across.y * 0.2f * s, sz)) continue
             val ax = cam.px; val ay = cam.py
             if (!cam.project(hx, hy, hz)) continue
-            g.line(ax, ay, cam.px, cam.py, max(2f, 0.05f * cam.focal / cam.pd), if (summer) 0xFFE8BC98.toInt() else 0xFF6D4C41.toInt())
+            if (summer) {
+                val w = max(2f, 0.075f * cam.focal / cam.pd)
+                com.clrg.core.render.Draw.tube(g, ax, ay, cam.px, cam.py, w, 0xFFF0C8A6.toInt(), 0xFFC99A78.toInt(), 0xFFFADDC4.toInt())
+            } else g.line(ax, ay, cam.px, cam.py, max(2f, 0.05f * cam.focal / cam.pd), 0xFF6D4C41.toInt())
         }
         if (!cam.project(hx, hy, hz)) return
         val hxs = cam.px; val hys = cam.py
         val mitt = max(3f, 0.07f * cam.focal / cam.pd)
         if (!cam.project(cx0, cy0, cz0)) return
-        g.line(hxs, hys, cam.px, cam.py, max(1.5f, 0.02f * cam.focal / cam.pd), 0xFFCFD8DC.toInt())
+        g.line(hxs, hys, cam.px, cam.py, max(1.5f, 0.022f * cam.focal / cam.pd), 0xFF90A4AE.toInt())
+        g.line(hxs - 0.5f, hys - 0.5f, cam.px - 0.5f, cam.py - 0.5f, max(1f, 0.008f * cam.focal / cam.pd), 0xCCFFFFFF.toInt())
         val head = max(2.5f, (if (club == Club.PUTTER) 0.05f else 0.07f) * cam.focal / cam.pd)
         g.fillCircle(cam.px, cam.py, head, if (club == Club.DRIVER || club == Club.WOOD) 0xFF37474F.toInt() else 0xFF90A4AE.toInt())
         g.fillCircle(hxs, hys, mitt, if (summer) 0xFFF5F5F5.toInt() else Colors.CANDY)
@@ -709,6 +790,11 @@ class GolfScene3D {
 
     companion object {
         private const val MAXV = 96
+        /** Torso box corners: across, lean factor, height, forward offset (hips narrower than shoulders). */
+        private val TORSO = arrayOf(
+            floatArrayOf(-0.16f, 0.5f, 0.86f, -0.1f), floatArrayOf(0.16f, 0.5f, 0.86f, -0.1f), floatArrayOf(-0.16f, 0.5f, 0.86f, 0.11f), floatArrayOf(0.16f, 0.5f, 0.86f, 0.11f),
+            floatArrayOf(-0.23f, 1.4f, 1.2f, -0.11f), floatArrayOf(0.23f, 1.4f, 1.2f, -0.11f), floatArrayOf(-0.23f, 1.4f, 1.2f, 0.12f), floatArrayOf(0.23f, 1.4f, 1.2f, 0.12f),
+        )
         private const val K_TREE = 0
         private const val K_FLAG = 1
         private const val K_MARKER = 2

@@ -56,6 +56,44 @@ object Scenery {
         g.restore()
     }
 
+    /** One soft cloud sprite at ([x], [y]) of [size] (for skies drawn by a moving camera). */
+    fun cloudAt(g: Gfx, x: Float, y: Float, size: Float, kind: Int) {
+        val k = ((kind % 3) + 3) % 3
+        val ref = 95f + 35f * k
+        g.save(); g.translate(x, y); g.scale(size / ref)
+        g.layer("cloud.$k", -ref * 1.4f, -ref * 1.0f, ref * 1.4f, ref * 0.7f, res = 0.6f, blur = 2.5f) { lg -> cloud(lg, ref, k) }
+        g.restore()
+    }
+
+    /**
+     * A round leafy tree as a cached picture (one per colour pair), scaled to [h] tall: clumps of canopy lit from
+     * above, a trunk, a soft shadow. Pass colours in a few fog steps so only a handful of pictures exist.
+     */
+    fun leafTree(g: Gfx, x: Float, baseY: Float, h: Float, dark: Int, light: Int, trunk: Int) {
+        val ref = 300f
+        g.save(); g.translate(x, baseY); g.scale(h / ref)
+        g.layer("leaf.${Integer.toHexString(dark)}.${Integer.toHexString(light)}", -ref * 0.62f, -ref * 1.04f, ref * 0.62f, ref * 0.08f) { lg ->
+            val w = ref * 0.42f
+            lg.fillOval(-w * 1.1f, -ref * 0.03f, w * 1.1f, ref * 0.06f, 0x33000000)
+            lg.fillRoundRectGradient(-w * 0.1f, -ref * 0.48f, w * 0.1f, 0f, w * 0.05f, Colors.lighter(trunk, 0.15f), Colors.darker(trunk, 0.7f))
+            lg.line(-w * 0.05f, -ref * 0.42f, -w * 0.3f, -ref * 0.62f, w * 0.06f, trunk)
+            lg.line(w * 0.05f, -ref * 0.45f, w * 0.3f, -ref * 0.66f, w * 0.06f, trunk)
+            val cy0 = -ref * 0.64f
+            // back clumps in shade, front clumps lit, a few highlight leaves
+            val clumps = arrayOf(floatArrayOf(-0.5f, 0.1f, 0.5f), floatArrayOf(0.5f, 0.08f, 0.48f), floatArrayOf(0f, 0.14f, 0.55f),
+                floatArrayOf(-0.28f, -0.14f, 0.5f), floatArrayOf(0.3f, -0.16f, 0.48f), floatArrayOf(0f, -0.3f, 0.5f))
+            for ((i, c) in clumps.withIndex()) {
+                val cx = c[0] * w; val cy = cy0 + c[1] * ref; val rr = c[2] * w
+                lg.fillCircleRadial(cx, cy, rr, cx - rr * 0.35f, cy - rr * 0.5f, rr * 1.5f, if (i >= 3) light else Colors.lerp(dark, light, 0.4f), dark)
+            }
+            for (i in 0 until 40) {
+                val a = Draw.hash01(i * 7 + 1) * 6.283f; val d = Draw.hash01(i * 13 + 2) * w * 0.85f
+                lg.fillCircle(cos(a) * d, cy0 - ref * 0.06f + sin(a) * d * 0.75f, w * 0.06f, if (i % 3 == 0) Colors.lerp(light, Colors.WHITE, 0.15f) else Colors.withAlpha(dark, 0.6f))
+            }
+        }
+        g.restore()
+    }
+
     private fun cloud(g: Gfx, size: Float, kind: Int) {
         val lit = 0xFFFFFFFF.toInt(); val shade = 0xFFB9CCE0.toInt()
         // flat, shaded underside

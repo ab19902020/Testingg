@@ -29,6 +29,7 @@ import com.clrg.core.ui.Ui
 
 /** Hosts one match: instructions, countdown, play, tracking pauses, user pause, finish. */
 class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) : Screen(app) {
+    private val coach = com.clrg.core.game.TrackingCoach()
     override val music: MusicTrack? = null
     override val ambience: Ambience? get() = Soundscape.ambience(gameId)
     override val room: Room? get() = Soundscape.room(gameId)
@@ -100,6 +101,22 @@ class GameScreen(app: GameApp, val gameId: String, val match: TournamentMatch?) 
             Phase.DONE -> { finish(); return }
             else -> Unit
         }
+        // a tip for a player whose tracking has been weak for a while (why moves may be missed, and the fix)
+        if (session.phase == Phase.PLAYING && !app.settings.simulatedInput) {
+            val fps = app.platform.perf().inferenceFps
+            for (k in 0..1) {
+                coach.update(k, if (session.cpu[k]) null else com.clrg.core.tracking.TrackingQuality.of(app.tracker.slots[k], fps), dt)
+                coach.tip(k)?.let { tip ->
+                    val x = if (k == 0) g.width * 0.25f else g.width * 0.75f
+                    val tw = g.measureText(tip, 32f) + 90f
+                    val y = g.height - 230f
+                    g.fillRoundRect(x - tw / 2f, y - 34f, x + tw / 2f, y + 34f, 34f, 0xDD0B1A36.toInt())
+                    g.strokeRoundRect(x - tw / 2f, y - 34f, x + tw / 2f, y + 34f, 34f, 3f, Colors.withAlpha(app.playerColor(k), 0.9f))
+                    Icons.draw(g, Icon.CAMERA, x - tw / 2f + 36f, y, 30f, Colors.WARN)
+                    g.text(tip, x + 18f, y, 32f, Colors.WHITE, bold = false)
+                }
+            }
+        } else coach.reset()
         if (session.phase == Phase.PLAYING || session.phase == Phase.COUNTDOWN || session.phase == Phase.RESUMING) {
             if (ui.button(g, "pause", Rect(g.width / 2f - 300f, g.height - 96f, g.width / 2f - 160f, g.height - 20f), "", size = 36f, accent = Colors.ICE, icon = Icon.PAUSE)) session.userPause()
             if (app.settings.showCameraInset) PreviewView.draw(g, app, Rect(g.width / 2f - 125f, g.height - 150f, g.width / 2f + 125f, g.height - 12f), labels = false)
