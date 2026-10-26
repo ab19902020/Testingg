@@ -15,12 +15,11 @@ controlled with your body: lift a hand and hold it over a button. Real objects c
 racket or stick as your racket or club, a **toy gun** for the shooting games - right from a game's start screen.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
-> reports that versions up to 1.6.0 run on their phone and that 1.6.0 tracks better, "not perfect". 1.7.0 added the
-> sports games, finger tracking, punches and the bow; 1.8.0 adds new sound, menus, graphics, golf and tracking
-> aids. These are tested with simulated bodies, generated pictures and the real pose and hand models on still
-> photos (turned into moving sequences for the tracking checks). **None of 1.7.0 or 1.8.0 has been tried on the
-> owner's phone yet**: how well tracking works in a real living room (distance, light, motion blur, speed of the
-> phone), how the sound comes out of a TV and how smoothly the new graphics draw are not known until then. See
+> reports that versions up to 1.6.0 run on their phone and that 1.6.0 tracks better, "not perfect". On 1.8.0 the
+> owner reports that tracking got **worse than before** in every game they tried (bowling, skiing, archery): moves
+> missed and things triggering wrongly, at 2-3 m. 1.8.1 is the fix for that (below). It is tested with the real
+> pose models on still photos and with simulated bodies, but **has not been tried on the owner's phone yet**:
+> whether it brings tracking back to at least 1.7.0's level is only known once it has been played. See
 > [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
 
 ## What's in the box
@@ -35,6 +34,26 @@ racket or stick as your racket or club, a **toy gun** for the shooting games - r
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.8.1 - tracking fix
+
+The owner found tracking worse in 1.8.0 than before (moves missed, wrong triggers). Two faults in the new 1.8.0
+low-light brightening fit that, and are fixed:
+
+* **It switched on abruptly.** A picture just on the dark side of its threshold was made ~1.7 times brighter than
+  one just on the bright side, so a room near the threshold flickered between the two from frame to frame and the
+  body points jumped - which can fire moves by itself and spoil real ones. Now a dark picture is brought up to a
+  fixed target, starting from nothing at the edge of "dark", smoothed over frames for each player, and a picture
+  with normal brightness is not touched at all. Largest change for a 0.5% change in light: 0.011 (1.8.0: 0.21).
+* **It was slow.** It ran a slow maths function on every pixel of every body crop: about 3.7 ms per crop on a fast
+  desktop, so likely several times that per player on a phone - possibly enough to make the game switch to the
+  less accurate lite body model and drop the 60 fps camera (not measured on a phone). Now a lookup table: about 0.5 ms per crop on the same
+  desktop.
+* **Tracking is back to 1.7.0 by default.** The other 1.8.0 tracking aids (steadier crops, wider retry, keep-tracking
+  bar, jump guard, hand crops following the wrist) are now **Settings -> Motion -> Extra tracking aids**, off by
+  default. The low-light boost has its own switch (on).
+* **Motion test** now shows the body model in use (full or lite), time per picture, the low-light boost, phone heat,
+  and a plain warning when the phone is holding tracking back. A screenshot of it shows what is going on.
 
 ## Changes in 1.8.0 - new sound, new menus, better graphics, golf and tracking
 
@@ -76,6 +95,8 @@ racket or stick as your racket or club, a **toy gun** for the shooting games - r
   | Fast sway: both found | 97% | **87%** (worse: frames where the test pushes a player half out of the picture) |
 
   It is not "flawless" and cannot be shown to be from here: the real test is a session in your living room.
+  *(1.8.1: on the owner's phone 1.8.0 tracked worse; see Changes in 1.8.1. These aids are now a setting, off by
+  default.)*
 
 ## Changes in 1.7.0 - a console, not just Christmas
 

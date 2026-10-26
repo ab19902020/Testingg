@@ -60,12 +60,19 @@ the steady landmarks, shifted towards the fingers), falling back to the body pos
 attached to the person (`RawPose.hands` -> `PersonPose.hands` -> `BodyFrame.fing`). On Android the model runs on the
 CPU (XNNPACK, 2 threads) in its own interpreter, created on first use.
 
-**Tracking aids (1.8.0).** Each is a switch in `PipelineConfig`, so old and new settings can be compared:
+**Tracking aids (1.8.0, reworked in 1.8.1).** Each is a switch in `PipelineConfig`, so old and new settings can be
+compared. Only the low-light boost is on by default; the rest are switched together by `withExtraAids` (Settings ->
+Motion -> Extra tracking aids, off by default; off is the tracking of 1.7.0).
 
-* `autoLevel` / `autoLevelDetector` - `AutoLevel` reads a luminance histogram of each landmark or hand crop (every
-  5th pixel, padding ignored) and, when it is dark or backlit, applies a gain (up to 4x) and a gamma that lift the
-  middle tones. The detector first searches the raw picture; only if it finds nobody new does it search a
-  brightened copy (no model run when the picture is not dark).
+* `autoLevel` / `autoLevelDetector` (low-light boost, on) - `AutoLevel` reads a luminance histogram of each landmark
+  or hand crop (every 5th pixel, padding ignored, percentiles interpolated within bins). A crop whose brightest 2%
+  are below 0.5 gets a gain bringing them up to 0.5 (at most 4x); if its middle is then still below 0.15, a gamma
+  lifts the middle up to 0.15 (at most gamma 0.5). Crops above both targets are untouched, so the correction starts
+  from nothing and a brighter crop never comes out darker than a dimmer one. Each tracked person (and hand) keeps
+  an `AutoLevel.State` that eases the correction over frames (25% per frame), so the model never sees flicker. The
+  curve is applied through a 1024-entry lookup table. The detector first searches the raw picture; only if it finds
+  nobody new and the picture is clearly dark (gain or lift of at least 0.4) does it search a brightened copy.
+  (1.8.0 switched on abruptly at a threshold - up to ~1.7x brighter either side of it - and ran `pow` per pixel.)
 * `retryWider` - a tracked person whose crop fails is tried once more with a crop 1.45x wider before being dropped.
 * `smoothRoi` - the next frame's crop follows the landmarks with a gain that rises with movement, so a still player's
   crop (and so their landmarks) is steadier while fast movement is followed at once.
