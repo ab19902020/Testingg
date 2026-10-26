@@ -29,7 +29,10 @@ class GolfMatchTest {
     @Test
     fun everyCourseIsPlayableAndSkillShows() {
         for (c in Courses.all) {
-            assertEquals(3, c.holes.size)
+            if (c === Courses.grandTour) {
+                assertEquals(9, c.holes.size, "the tour plays every hole")
+                assertEquals((1..9).toList(), c.holes.map { it.number }, "numbered 1 to 9")
+            } else assertEquals(3, c.holes.size)
             for (h in c.holes) {
                 assertEquals(Surface.TEE, h.surface(h.tee), "${c.name} ${h.number}: tee")
                 assertEquals(Surface.GREEN, h.surface(h.pin), "${c.name} ${h.number}: pin on the green")
@@ -42,7 +45,7 @@ class GolfMatchTest {
                 good += m.total(0); weak += m.total(1)
             }
             println("GOLF ${c.name} par ${c.par}: skilled avg %.1f, beginner avg %.1f".format(good / 4.0, weak / 4.0))
-            assertTrue(good / 4.0 <= c.par + 3.5, "${c.name}: a skilled golfer scores near par (${good / 4.0} vs par ${c.par})")
+            assertTrue(good / 4.0 <= c.par + 3.5 * c.holes.size / 3, "${c.name}: a skilled golfer scores near par (${good / 4.0} vs par ${c.par})")
             assertTrue(good < weak, "${c.name}: skill pays off ($good vs $weak over 4 rounds)")
         }
     }
