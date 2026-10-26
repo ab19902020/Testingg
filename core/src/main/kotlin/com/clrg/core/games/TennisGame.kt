@@ -16,6 +16,7 @@ import com.clrg.core.render.SportsDraw
 import com.clrg.core.render.Expression
 import com.clrg.core.render.Gfx
 import com.clrg.core.render.Prop
+import com.clrg.core.render.Scenery
 import kotlin.math.max
 import kotlin.math.sin
 
@@ -50,49 +51,36 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
     override fun render(g: Gfx, inputs: Array<PlayerInput>, time: Double) {
         screenW = g.width
         val w = g.width
+        val l = toScreenX(-1f); val r = toScreenX(1f)
         if (env.sporty) {
-            // summer centre court: blue sky, packed stands, sponsor boards
-            SportsDraw.daySky(g, 0f, 0f, w, 470f, time)
-            SportsDraw.crowd(g, 0f, w, 380f, 690f, time, rows = 5)
-            g.gradientRect(0f, 690f, w, 752f, 0xFF1B5E20.toInt(), 0xFF0D3B12.toInt())
-            for (i in 0 until 6) {
-                val bx = w * (0.02f + i * 0.165f)
-                g.fillRoundRect(bx, 700f, bx + w * 0.14f, 742f, 6f, if (i % 2 == 0) 0xFF0D47A1.toInt() else 0xFF2E7D32.toInt())
-                g.text(if (i % 2 == 0) "LIVING ROOM OPEN" else "ACE!", bx + w * 0.07f, 721f, 24f, Colors.WHITE)
-            }
+            // summer centre court: blue sky, a roofed stand packed with people, glowing sponsor boards
+            Scenery.daySky(g, "tennis", 0f, 0f, w, 470f)
+            Scenery.clouds(g, 0f, 0f, w, 330f, time, count = 5)
+            g.layer("tennis.roof", 0f, 300f, w, 400f) { lg -> stadiumRoof(lg, w) }
+            Scenery.crowd(g, "tennis", 0f, 380f, w, 690f, time, rows = 5, shade = 0.38f, blur = 1.5f)
         } else {
-            Draw.nightSky(g, Rect(0f, 0f, w, g.height), time)
+            Scenery.nightSky(g, "tennisC", Rect(0f, 0f, w, g.height), time)
             Draw.aurora(g, Rect(0f, 0f, w, 600f), time, 0.8f)
-            Draw.moon(g, w * 0.5f, 210f, 44f)
-            Draw.pineRow(g, -30f, w, 610f, 0xFF0F2E25.toInt(), 110f, 5)
-            Draw.pineRow(g, 0f, w, 640f, 0xFF143A2E.toInt(), 150f, 3)
-            Draw.snowHills(g, Rect(0f, 0f, w, g.height), 700f)
-            Draw.floodlight(g, w * 0.04f, 760f, 260f, toScreenX(-0.45f), groundY + 40f)
-            Draw.floodlight(g, w * 0.96f, 760f, 260f, toScreenX(0.45f), groundY + 40f)
-            // crowd of snowmen behind the court
-            for (i in 0 until 9) {
-                val cx = w * (0.08f + i * 0.105f)
-                val bob = sin((time * 3 + i).toFloat()) * 4f
-                Draw.buddy(g, cx, 742f + bob, 110f, com.clrg.core.render.PlayerColors.get(i + 2), null, Expression.HAPPY, t = time + i)
+            g.layer("tennisC.back", 0f, 140f, w, g.height) { lg ->
+                Draw.moon(lg, w * 0.5f, 210f, 44f)
+                Draw.pineRow(lg, -30f, w, 610f, 0xFF0F2E25.toInt(), 110f, 5)
+                Draw.pineRow(lg, 0f, w, 640f, 0xFF143A2E.toInt(), 150f, 3)
+                Draw.snowHills(lg, Rect(0f, 0f, w, lg.height), 700f)
+                Draw.floodlight(lg, w * 0.04f, 760f, 260f, toScreenX(-0.45f), groundY + 40f)
+                Draw.floodlight(lg, w * 0.96f, 760f, 260f, toScreenX(0.45f), groundY + 40f)
+            }
+            // a crowd of snowmen behind the court, bobbing (three cached poses)
+            Scenery.frames(g, "tennisC.crowd", 0f, 600f, w, 770f, time, fps = 4.0) { lg, f ->
+                for (i in 0 until 9) {
+                    val cx = w * (0.08f + i * 0.105f)
+                    val bob = sin(f * 2.1f + i) * 4f
+                    Draw.buddy(lg, cx, 742f + bob, 110f, com.clrg.core.render.PlayerColors.get(i + 2), null, Expression.HAPPY, t = 1.0 + i + f)
+                }
             }
             Draw.stringLights(g, 0f, w, 10f, time)
         }
-        // court
-        val l = toScreenX(-1f); val r = toScreenX(1f)
-        val apron = floatArrayOf(l - 150f, groundY + front + 40f, r + 150f, groundY + front + 40f, r + 10f, groundY - back - 28f, l - 10f, groundY - back - 28f)
-        if (env.sporty) {
-            g.fillRect(0f, 752f, w, g.height, 0xFF2E7D4F.toInt())
-            g.fillPolygonGradient(apron, 4, groundY - back - 28f, groundY + front + 40f, 0xFF3C9A5F.toInt(), 0xFF2B7A48.toInt())
-        } else g.fillPolygonGradient(apron, 4, groundY - back - 28f, groundY + front + 40f, 0xFF2E6F8E.toInt(), 0xFF1B4F6B.toInt())
-        val pts = floatArrayOf(l - 85f, groundY + front, r + 85f, groundY + front, r - 36f, groundY - back, l + 36f, groundY - back)
-        if (env.sporty) g.fillPolygonGradient(pts, 4, groundY - back, groundY + front, 0xFF2F6DB5.toInt(), 0xFF1F4F8A.toInt())
-        else g.fillPolygonGradient(pts, 4, groundY - back, groundY + front, 0xFFD24B43.toInt(), 0xFF962A2A.toInt())
-        Draw.lightPool(g, w / 2f, groundY - 5f, (r - l) * 0.55f, 85f, 0x33FFF6D8)
-        g.polyline(pts, 4, 6f, Colors.WHITE, closed = true)
-        g.line(l - 36f, groundY - back * 0.57f, r + 36f, groundY - back * 0.57f, 3f, 0x66FFFFFF)
-        g.line(l - 63f, groundY + front * 0.57f, r + 63f, groundY + front * 0.57f, 3f, 0x66FFFFFF)
-        g.line(w / 2f, groundY - back, w / 2f, groundY + front, 4f, 0x99FFFFFF.toInt())
-        for (x in floatArrayOf(-0.55f, 0.55f)) g.line(toScreenX(x) - 12f, groundY - back, toScreenX(x) + 12f, groundY + front, 4f, 0x88FFFFFF.toInt())
+        // the court (cached): surround, playing surface, lines, the light falling on it
+        g.layer(if (env.sporty) "tennis.court" else "tennisC.court", 0f, 680f, w, g.height, grain = 0.15f) { lg -> court(lg, w, l, r) }
         // highlight the side that must hit next
         val rcv = receiver
         if (state == State.RALLY && rcv >= 0) {
@@ -106,22 +94,26 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
         // net in perspective: spans the court from back to front, with mesh and tinsel along the top
         val nh = cfg.netH * unit() * 1.4f
         val bxN = w / 2f; val backY = groundY - back; val frontY = groundY + front
-        val net = floatArrayOf(bxN + 12f, backY, bxN - 12f, frontY, bxN - 12f, frontY - nh, bxN + 12f, backY - nh)
-        g.fillPolygon(net, 4, 0x55FFFFFF)
-        for (i in 1 until 6) {
-            val f = i / 6f
-            g.line(bxN + 12f - 24f * f, backY + (frontY - backY) * f, bxN + 12f - 24f * f, backY + (frontY - backY) * f - nh, 2f, 0x77FFFFFF)
-        }
-        for (i in 1 until 4) {
-            val f = i / 4f
-            g.line(bxN + 12f, backY - nh * f, bxN - 12f, frontY - nh * f, 2f, 0x77FFFFFF)
-        }
-        g.line(bxN + 12f, backY - nh - 16f, bxN + 12f, backY + 4f, 8f, 0xFFECEFF1.toInt())
-        g.line(bxN - 12f, frontY - nh - 16f, bxN - 12f, frontY + 4f, 8f, 0xFFECEFF1.toInt())
-        if (env.sporty) g.line(bxN + 12f, backY - nh, bxN - 12f, frontY - nh, 10f, Colors.WHITE)
-        else {
-            g.line(bxN + 12f, backY - nh, bxN - 12f, frontY - nh, 12f, Colors.GOLD)
-            for (i in 0..8) { val f = i / 8f; g.fillCircle(bxN + 12f - 24f * f, backY + (frontY - backY) * f - nh, 6f, if (i % 2 == 0) Colors.CANDY else Colors.PINE) }
+        g.layer(if (env.sporty) "tennis.net" else "tennisC.net", bxN - 40f, backY - nh - 30f, bxN + 40f, frontY + 12f) { lg ->
+            val net = floatArrayOf(bxN + 12f, backY, bxN - 12f, frontY, bxN - 12f, frontY - nh, bxN + 12f, backY - nh)
+            lg.fillPolygon(net, 4, 0x55FFFFFF)
+            for (i in 1 until 12) {
+                val f = i / 12f
+                lg.line(bxN + 12f - 24f * f, backY + (frontY - backY) * f, bxN + 12f - 24f * f, backY + (frontY - backY) * f - nh, 1.5f, 0x66FFFFFF)
+            }
+            for (i in 1 until 6) {
+                val f = i / 6f
+                lg.line(bxN + 12f, backY - nh * f, bxN - 12f, frontY - nh * f, 1.5f, 0x66FFFFFF)
+            }
+            lg.line(bxN + 14f, backY - nh - 16f, bxN + 14f, backY + 4f, 10f, 0xFF90A4AE.toInt())
+            lg.line(bxN - 10f, frontY - nh - 16f, bxN - 10f, frontY + 4f, 10f, 0xFF90A4AE.toInt())
+            lg.line(bxN + 12f, backY - nh - 16f, bxN + 12f, backY + 4f, 7f, 0xFFECEFF1.toInt())
+            lg.line(bxN - 12f, frontY - nh - 16f, bxN - 12f, frontY + 4f, 7f, 0xFFECEFF1.toInt())
+            if (env.sporty) { lg.line(bxN + 12f, backY - nh, bxN - 12f, frontY - nh, 10f, Colors.WHITE); lg.line(bxN + 12f, backY - nh + 3f, bxN - 12f, frontY - nh + 3f, 2f, 0x33000000) }
+            else {
+                lg.line(bxN + 12f, backY - nh, bxN - 12f, frontY - nh, 12f, Colors.GOLD)
+                for (i in 0..8) { val f = i / 8f; lg.fillCircle(bxN + 12f - 24f * f, backY + (frontY - backY) * f - nh, 6f, if (i % 2 == 0) Colors.CANDY else Colors.PINE) }
+            }
         }
         // ball, shadow, timing ring
         if (ballVisible) {
@@ -147,6 +139,49 @@ class TennisGame(env: GameEnv) : RallyGame(env) {
             g.text("SWING TO SERVE", sxp, groundY - 420f, 46f * pulse, env.color(server), outline = Colors.BLACK, outlineWidth = 6f)
             if (stateTime > cfg.autoServeSec - 3f) g.text("Auto-serve in ${(cfg.autoServeSec - stateTime).toInt() + 1}", sxp, groundY - 365f, 32f, Colors.TEXT_DIM)
         }
+    }
+
+    /** The stadium roof over the far stand: steel underside, a row of lights, its shadow on the top rows. */
+    private fun stadiumRoof(g: Gfx, w: Float) {
+        g.gradientRect(0f, 300f, w, 360f, 0xFF5B6B80.toInt(), 0xFF2C3645.toInt())
+        g.fillRect(0f, 356f, w, 366f, 0xFF1E2530.toInt())
+        var x = 0f
+        while (x < w) { g.line(x, 304f, x + 40f, 356f, 3f, 0x55212A36); g.line(x + 40f, 356f, x + 80f, 304f, 3f, 0x55212A36); x += 80f }
+        for (i in 0 until 12) {
+            val lx = (i + 0.5f) * w / 12f
+            g.fillRoundRect(lx - 22f, 358f, lx + 22f, 372f, 5f, 0xFF263040.toInt())
+            g.fillOval(lx - 16f, 366f, lx + 16f, 376f, 0xFFFFFDE7.toInt())
+        }
+        g.gradientRect(0f, 366f, w, 400f, 0x66000000, 0x00000000)
+    }
+
+    /** Court surround, the playing surface with its lines, sponsor boards (sports) and the floodlights' pool of light. */
+    private fun court(g: Gfx, w: Float, l: Float, r: Float) {
+        val apron = floatArrayOf(l - 150f, groundY + front + 40f, r + 150f, groundY + front + 40f, r + 10f, groundY - back - 28f, l - 10f, groundY - back - 28f)
+        if (env.sporty) {
+            // sponsor boards with a glowing face along the back of the court
+            g.gradientRect(0f, 690f, w, 752f, 0xFF173A24.toInt(), 0xFF0B2414.toInt())
+            for (i in 0 until 6) {
+                val bx = w * (0.02f + i * 0.165f)
+                val c = if (i % 2 == 0) 0xFF1565C0.toInt() else 0xFF2E7D32.toInt()
+                g.fillRoundRectGradient(bx, 700f, bx + w * 0.14f, 742f, 6f, Colors.lighter(c, 0.25f), Colors.darker(c, 0.7f))
+                g.line(bx + 8f, 703f, bx + w * 0.14f - 8f, 703f, 2f, 0x55FFFFFF)
+                g.text(if (i % 2 == 0) "LIVING ROOM OPEN" else "ACE!", bx + w * 0.07f, 721f, 24f, Colors.WHITE)
+            }
+            g.gradientRect(0f, 752f, w, g.height, 0xFF3A9160.toInt(), 0xFF256B42.toInt())
+            for (i in 0 until 14) if (i % 2 == 0) g.fillRect(i * w / 14f, 752f, (i + 1) * w / 14f, g.height, 0x0CFFFFFF)
+            g.fillPolygonGradient(apron, 4, groundY - back - 28f, groundY + front + 40f, 0xFF3C9A5F.toInt(), 0xFF2B7A48.toInt())
+        } else g.fillPolygonGradient(apron, 4, groundY - back - 28f, groundY + front + 40f, 0xFF2E6F8E.toInt(), 0xFF1B4F6B.toInt())
+        val pts = floatArrayOf(l - 85f, groundY + front, r + 85f, groundY + front, r - 36f, groundY - back, l + 36f, groundY - back)
+        if (env.sporty) g.fillPolygonGradient(pts, 4, groundY - back, groundY + front, 0xFF2F6DB5.toInt(), 0xFF1F4F8A.toInt())
+        else g.fillPolygonGradient(pts, 4, groundY - back, groundY + front, 0xFFD24B43.toInt(), 0xFF962A2A.toInt())
+        Draw.lightPool(g, w / 2f, groundY - 5f, (r - l) * 0.55f, 85f, 0x33FFF6D8)
+        g.polyline(pts, 4, 6f, Colors.WHITE, closed = true)
+        g.line(l - 36f, groundY - back * 0.57f, r + 36f, groundY - back * 0.57f, 3f, 0x66FFFFFF)
+        g.line(l - 63f, groundY + front * 0.57f, r + 63f, groundY + front * 0.57f, 3f, 0x66FFFFFF)
+        g.line(w / 2f, groundY - back, w / 2f, groundY + front, 4f, 0x99FFFFFF.toInt())
+        for (x in floatArrayOf(-0.55f, 0.55f)) g.line(toScreenX(x) - 12f, groundY - back, toScreenX(x) + 12f, groundY + front, 4f, 0x88FFFFFF.toInt())
+        g.gradientRect(0f, g.height - 160f, w, g.height, 0x00000000, 0x33000000)
     }
 
     private fun drawPlayer(g: Gfx, k: Int, input: PlayerInput, time: Double) {

@@ -109,6 +109,8 @@ object ImageOps {
     fun blur(px: IntArray, w: Int, h: Int, radius: Int) {
         if (radius < 1 || w < 2 || h < 2) return
         val n = w * h
+        // an opaque picture (a backdrop) repeats its edge; one with transparent edges (a sprite) fades out at them
+        val clamp = intArrayOf(px[0], px[w - 1], px[n - w], px[n - 1]).all { (it ushr 24) == 255 }
         val a = IntArray(n); val r = IntArray(n); val g = IntArray(n); val b = IntArray(n)
         for (i in 0 until n) {
             val c = px[i]; val al = (c ushr 24) and 0xFF
@@ -118,8 +120,8 @@ object ImageOps {
         val rad = radius.coerceAtMost(maxOf(w, h) / 2)
         repeat(3) {
             for (ch in arrayOf(a, r, g, b)) {
-                for (y in 0 until h) boxLine(ch, y * w, 1, w, rad, tmp)
-                for (x in 0 until w) boxLine(ch, x, w, h, rad, tmp)
+                for (y in 0 until h) boxLine(ch, y * w, 1, w, rad, tmp, clamp)
+                for (x in 0 until w) boxLine(ch, x, w, h, rad, tmp, clamp)
             }
         }
         for (i in 0 until n) {
@@ -129,15 +131,15 @@ object ImageOps {
         }
     }
 
-    /** One line of a box blur with edge clamping: [len] values from [start], [stride] apart. */
-    private fun boxLine(ch: IntArray, start: Int, stride: Int, len: Int, rad: Int, tmp: IntArray) {
+    /** One line of a box blur: [len] values from [start], [stride] apart; outside is the edge value or nothing. */
+    private fun boxLine(ch: IntArray, start: Int, stride: Int, len: Int, rad: Int, tmp: IntArray, clamp: Boolean) {
+        fun at(i: Int): Int = if (i in 0 until len) ch[start + i * stride] else if (clamp) ch[start + i.coerceIn(0, len - 1) * stride] else 0
         var sum = 0
-        for (k in -rad..rad) sum += ch[start + k.coerceIn(0, len - 1) * stride]
+        for (k in -rad..rad) sum += at(k)
         val win = rad * 2 + 1
         for (i in 0 until len) {
             tmp[i] = sum / win
-            val out = (i - rad).coerceIn(0, len - 1); val inn = (i + rad + 1).coerceIn(0, len - 1)
-            sum += ch[start + inn * stride] - ch[start + out * stride]
+            sum += at(i + rad + 1) - at(i - rad)
         }
         for (i in 0 until len) ch[start + i * stride] = tmp[i]
     }

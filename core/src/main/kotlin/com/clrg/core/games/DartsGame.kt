@@ -15,6 +15,7 @@ import com.clrg.core.math.Rect
 import com.clrg.core.math.Rng
 import com.clrg.core.math.lerp
 import com.clrg.core.render.Colors
+import com.clrg.core.render.Draw
 import com.clrg.core.render.Gfx
 import kotlin.math.PI
 import kotlin.math.atan2
@@ -201,57 +202,11 @@ class DartsGame(env: GameEnv) : MiniGame(env) {
     private fun renderLane(g: Gfx, k: Int, inp: PlayerInput, time: Double) {
         val r = Rect(if (k == 0) 0f else g.width / 2f, 0f, if (k == 0) g.width / 2f else g.width, g.height)
         g.save(); g.clipRect(r.left, r.top, r.right, r.bottom)
-        // pub wall: dark green paint above wood panelling, lit from a lamp above the board
+        // the cabinet and board (one cached picture, the same in both lanes)
         val cx = r.cx; val cy = 540f + boardY
-        val R = BOARD_MM * PX_PER_MM
-        g.gradientRect(r.left, 0f, r.right, g.height * 0.72f, 0xFF1F3A2E.toInt(), 0xFF152A21.toInt())
-        g.gradientRect(r.left, g.height * 0.72f, r.right, g.height, 0xFF4A3022.toInt(), 0xFF2A1A11.toInt())
-        for (i in 0 until 9) {
-            val px = r.left + i * r.width / 8f
-            g.fillRect(px - 3f, g.height * 0.72f, px + 3f, g.height, 0x33000000)
-            g.fillRect(px + 3f, g.height * 0.72f, px + 5f, g.height, 0x14FFFFFF)
-        }
-        g.fillRect(r.left, g.height * 0.72f - 10f, r.right, g.height * 0.72f + 6f, 0xFF6D4C41.toInt())
-        // light pooling on the wall from above
-        g.glow(cx, cy - R * 0.3f, R * 2.1f, 0x44FFE0B2)
-        g.glow(cx, cy - R * 0.5f, R * 1.2f, 0x33FFF3E0)
-        // the cabinet behind the board, with its shadow
-        g.fillRoundRect(cx - R - 96f + 14f, cy - R - 96f + 22f, cx + R + 96f + 14f, cy + R + 96f + 22f, 26f, 0x66000000)
-        g.fillRoundRectGradient(cx - R - 96f, cy - R - 96f, cx + R + 96f, cy + R + 96f, 26f, 0xFF6B4630.toInt(), 0xFF3B2519.toInt())
-        g.strokeRoundRect(cx - R - 96f, cy - R - 96f, cx + R + 96f, cy + R + 96f, 26f, 6f, 0xFF8D6E63.toInt())
-        g.fillRoundRect(cx - R - 80f, cy - R - 80f, cx + R + 80f, cy + R + 80f, 18f, 0xFF2A1A11.toInt())
-        // board: black surround, segments, rings
-        g.fillCircle(cx + 8f, cy + 14f, R + 72f, 0x66000000)
-        g.fillCircleRadial(cx, cy, R + 70f, cx - R * 0.3f, cy - R * 0.4f, R * 1.6f, 0xFF2B2B2B.toInt(), 0xFF111111.toInt())
-        for (i in 0 until 20) {
-            val start = (-90f - 9f + i * 18f) * (PI.toFloat() / 180f)
-            val sweep = 18f * (PI.toFloat() / 180f)
-            val dark = i % 2 == 0
-            val single = if (dark) 0xFF212121.toInt() else 0xFFF3E5C8.toInt()
-            val ring = if (dark) 0xFFD32F2F.toInt() else 0xFF2E7D32.toInt()
-            g.fillPie(cx, cy, R, start, sweep, ring)
-            g.fillPie(cx, cy, 162f * PX_PER_MM, start, sweep, single)
-            g.fillPie(cx, cy, 107f * PX_PER_MM, start, sweep, ring)
-            g.fillPie(cx, cy, 99f * PX_PER_MM, start, sweep, single)
-            val na = start + sweep / 2f
-            g.text("${NUMBERS[i]}", cx + cos(na) * (R + 38f), cy + sin(na) * (R + 38f), 34f, Colors.WHITE)
-        }
-        g.fillCircle(cx, cy, 15.9f * PX_PER_MM, 0xFF2E7D32.toInt())
-        g.fillCircle(cx, cy, 6.35f * PX_PER_MM, 0xFFD32F2F.toInt())
-        // sisal texture: faint fibres radiating out
-        for (i in 0 until 90) {
-            val a = i * 0.0698f + 0.02f
-            g.line(cx + cos(a) * 18f * PX_PER_MM, cy + sin(a) * 18f * PX_PER_MM, cx + cos(a) * R, cy + sin(a) * R, 1f, 0x0FFFFFFF)
-        }
-        // the wire spider: segment lines and ring wires catching the light
-        val wire = 0xAAD7DDE2.toInt()
-        for (i in 0 until 20) {
-            val a = (-90f - 9f + i * 18f) * (PI.toFloat() / 180f)
-            g.line(cx + cos(a) * 15.9f * PX_PER_MM, cy + sin(a) * 15.9f * PX_PER_MM, cx + cos(a) * R, cy + sin(a) * R, 1.6f, wire)
-        }
-        for (rr in floatArrayOf(6.35f, 15.9f, 99f, 107f, 162f, BOARD_MM)) g.strokeCircle(cx, cy, rr * PX_PER_MM, 1.6f, wire)
-        // the light from above: a sheen over the top of the board
-        g.fillCircleRadial(cx, cy, R + 70f, cx, cy - R * 0.9f, R * 1.4f, 0x22FFFFFF, 0x00FFFFFF)
+        g.save(); g.translate(r.left, 0f)
+        g.layer("darts.board", 0f, 0f, r.width, g.height, grain = 0.22f) { lg -> board(lg, r.width / 2f, cy, r.width, lg.height) }
+        g.restore()
         // darts: this round's in the board; one flying in
         val rnd = round(k)
         for (d in darts) {
@@ -294,13 +249,94 @@ class DartsGame(env: GameEnv) : MiniGame(env) {
         g.restore()
     }
 
+    /** Pub wall, a wooden cabinet with grain and a bevel, the board with sisal texture, its wire spider and numbers. */
+    private fun board(g: Gfx, cx: Float, cy: Float, w: Float, h: Float) {
+        val R = BOARD_MM * PX_PER_MM
+        g.gradientRect(0f, 0f, w, h * 0.72f, 0xFF1F3A2E.toInt(), 0xFF152A21.toInt())
+        g.gradientRect(0f, h * 0.72f, w, h, 0xFF4A3022.toInt(), 0xFF2A1A11.toInt())
+        g.glow(cx, cy - R * 0.3f, R * 2.1f, 0x44FFE0B2)
+        // the cabinet: shadow, walnut frame with grain, a bevelled inner edge, dark felt behind the board
+        val cl = cx - R - 96f; val ct = cy - R - 96f; val cr = cx + R + 96f; val cb = cy + R + 96f
+        g.fillRoundRect(cl + 14f, ct + 22f, cr + 14f, cb + 22f, 26f, 0x66000000)
+        g.fillRoundRectGradient(cl, ct, cr, cb, 26f, 0xFF7A5038.toInt(), 0xFF3B2519.toInt())
+        for (i in 0 until 60) {
+            val y = ct + 8f + i * (cb - ct - 16f) / 60f
+            val pp = FloatArray(20)
+            for (j in 0 until 10) { pp[j * 2] = cl + 6f + j * (cr - cl - 12f) / 9f; pp[j * 2 + 1] = y + 3f * sin(j * 0.9f + i * 1.7f) + 2f * sin(j * 2.3f + i) }
+            g.polyline(pp, 10, 1.3f, if (i % 4 == 0) 0x2A000000 else 0x12FFE0C0)
+        }
+        g.strokeRoundRect(cl, ct, cr, cb, 26f, 6f, 0xFF8D6E63.toInt())
+        g.strokeRoundRect(cl + 3f, ct + 3f, cr - 3f, cb - 3f, 24f, 2f, 0x44FFE0C0)
+        g.fillRoundRect(cl + 16f, ct + 16f, cr - 16f, cb - 16f, 18f, 0xFF2A1A11.toInt())
+        g.fillRoundRectGradient(cl + 20f, ct + 20f, cr - 20f, cb - 20f, 16f, 0xFF20301F.toInt(), 0xFF101810.toInt())
+        // the board: black surround, segments, rings
+        g.fillCircle(cx + 8f, cy + 14f, R + 72f, 0x66000000)
+        g.fillCircleRadial(cx, cy, R + 70f, cx - R * 0.3f, cy - R * 0.4f, R * 1.6f, 0xFF2B2B2B.toInt(), 0xFF111111.toInt())
+        for (i in 0 until 20) {
+            val start = (-90f - 9f + i * 18f) * (PI.toFloat() / 180f)
+            val sweep = 18f * (PI.toFloat() / 180f)
+            val dark = i % 2 == 0
+            val single = if (dark) 0xFF1E1E1E.toInt() else 0xFFF0E1C0.toInt()
+            val ring = if (dark) 0xFFC62828.toInt() else 0xFF2E7D32.toInt()
+            g.fillPie(cx, cy, R, start, sweep, ring)
+            g.fillPie(cx, cy, 162f * PX_PER_MM, start, sweep, single)
+            g.fillPie(cx, cy, 107f * PX_PER_MM, start, sweep, ring)
+            g.fillPie(cx, cy, 99f * PX_PER_MM, start, sweep, single)
+        }
+        g.fillCircle(cx, cy, 15.9f * PX_PER_MM, 0xFF2E7D32.toInt())
+        g.fillCircle(cx, cy, 6.35f * PX_PER_MM, 0xFFC62828.toInt())
+        // sisal: thousands of short fibres, slightly lighter and darker, and wear around the favourite numbers
+        for (i in 0 until 2600) {
+            val a = Draw.hash01(i * 7 + 1) * 2f * PI.toFloat()
+            val rr = 16f * PX_PER_MM + Draw.hash01(i * 13 + 3) * (R - 16f * PX_PER_MM)
+            val x = cx + cos(a) * rr; val y = cy + sin(a) * rr
+            val l = 3f + 4f * Draw.hash01(i)
+            g.line(x, y, x + cos(a) * l, y + sin(a) * l, 1f, if (i % 2 == 0) 0x16FFFFFF else 0x18000000)
+        }
+        for (i in 0 until 120) {
+            val a = (-90f + (Draw.hash01(i * 3) - 0.5f) * 30f) * (PI.toFloat() / 180f)
+            val rr = 99f * PX_PER_MM + Draw.hash01(i * 5 + 2) * 70f * PX_PER_MM
+            g.fillCircle(cx + cos(a) * rr, cy + sin(a) * rr, 1.6f, 0x33000000)
+        }
+        // the wire spider: segment lines and ring wires catching the light
+        for (i in 0 until 20) {
+            val a = (-90f - 9f + i * 18f) * (PI.toFloat() / 180f)
+            g.line(cx + cos(a) * 15.9f * PX_PER_MM + 1f, cy + sin(a) * 15.9f * PX_PER_MM + 1.5f, cx + cos(a) * R + 1f, cy + sin(a) * R + 1.5f, 1.8f, 0x55000000)
+            g.line(cx + cos(a) * 15.9f * PX_PER_MM, cy + sin(a) * 15.9f * PX_PER_MM, cx + cos(a) * R, cy + sin(a) * R, 1.6f, 0xCCD7DDE2.toInt())
+        }
+        for (rr in floatArrayOf(6.35f, 15.9f, 99f, 107f, 162f, BOARD_MM)) {
+            g.strokeCircle(cx + 1f, cy + 1.5f, rr * PX_PER_MM, 1.8f, 0x55000000)
+            g.strokeCircle(cx, cy, rr * PX_PER_MM, 1.6f, 0xCCD7DDE2.toInt())
+        }
+        // the number ring: a wire band with silver numbers
+        g.strokeCircle(cx, cy, R + 60f, 2.5f, 0x88B0BEC5.toInt())
+        for (i in 0 until 20) {
+            val na = (-90f + i * 18f) * (PI.toFloat() / 180f)
+            g.text("${NUMBERS[i]}", cx + cos(na) * (R + 36f), cy + sin(na) * (R + 36f), 36f, 0xFFECEFF1.toInt(), outline = 0xFF111111.toInt(), outlineWidth = 4f)
+        }
+        // the light from above: a sheen over the top of the board, darker below
+        g.fillCircleRadial(cx, cy, R + 70f, cx, cy - R * 0.9f, R * 1.4f, 0x2AFFFFFF, 0x00FFFFFF)
+        g.fillCircleRadial(cx, cy, R + 70f, cx, cy + R * 1.2f, R * 1.3f, 0x30000000, 0x00000000)
+        // brass lamp over the cabinet
+        g.fillRoundRectGradient(cx - 120f, ct - 26f, cx + 120f, ct + 8f, 14f, 0xFFE6C77A.toInt(), 0xFF8C6A2A.toInt())
+        g.line(cx - 110f, ct - 20f, cx + 110f, ct - 20f, 2f, 0x66FFFFFF)
+        g.setBlend(com.clrg.core.render.Blend.ADD)
+        g.glow(cx, ct + 10f, 160f, 0x44FFE6B0)
+        g.setBlend(com.clrg.core.render.Blend.NORMAL)
+    }
+
     private fun drawDart(g: Gfx, x: Float, y: Float, s: Float, color: Int) {
         // shadow on the board
         g.line(x + 6f * s, y + 6f * s, x + 22f * s, y + 54f * s, 6f * s, 0x44000000)
-        g.line(x, y, x + 10f * s, y + 26f * s, 5f * s, 0xFFB0BEC5.toInt())
-        g.line(x + 10f * s, y + 26f * s, x + 16f * s, y + 44f * s, 7f * s, 0xFF455A64.toInt())
-        com.clrg.core.render.Draw.tri(g, x + 12f * s, y + 40f * s, x + 26f * s, y + 58f * s, x + 4f * s, y + 56f * s, color)
-        g.fillCircle(x, y, 3f * s, 0xFF263238.toInt())
+        // steel point, a knurled tungsten barrel, the shaft and a flight in the player's colour
+        g.line(x, y, x + 5f * s, y + 13f * s, 2.5f * s, 0xFFCFD8DC.toInt())
+        g.line(x + 5f * s, y + 13f * s, x + 10f * s, y + 28f * s, 6f * s, 0xFF78909C.toInt())
+        for (j in 0 until 4) { val u = j / 4f; g.line(x + (5f + 5f * u) * s - 3f * s, y + (13f + 15f * u) * s + 1f * s, x + (5f + 5f * u) * s + 3f * s, y + (13f + 15f * u) * s - 1f * s, 1f * s, 0x66263238) }
+        g.line(x + 4.5f * s, y + 14f * s, x + 9f * s, y + 27f * s, 1.5f * s, 0x99FFFFFF.toInt())
+        g.line(x + 10f * s, y + 28f * s, x + 16f * s, y + 44f * s, 4f * s, 0xFF263238.toInt())
+        Draw.tri(g, x + 12f * s, y + 38f * s, x + 28f * s, y + 60f * s, x + 4f * s, y + 58f * s, color)
+        Draw.tri(g, x + 12f * s, y + 38f * s, x + 16f * s, y + 59f * s, x + 4f * s, y + 58f * s, Colors.darker(color, 0.7f))
+        g.fillCircle(x, y, 2.5f * s, 0xFF263238.toInt())
     }
 
     override fun demo(g: Gfx, r: Rect, t: Double) {

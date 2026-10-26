@@ -18,7 +18,9 @@ import com.clrg.core.math.clamp01
 import com.clrg.core.math.lerp
 import com.clrg.core.render.Cam3
 import com.clrg.core.render.Colors
+import com.clrg.core.render.Draw
 import com.clrg.core.render.Gfx
+import com.clrg.core.render.Scenery
 import com.clrg.core.render.Particles
 import com.clrg.core.render.SportsDraw
 import com.clrg.core.tracking.MovementMode
@@ -362,35 +364,12 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         screenW = g.width
         val ox = g.width / 2f; val oy = 540f
         val horizon = cam.horizonY() + oy
-        SportsDraw.daySky(g, 0f, 0f, g.width, horizon, time)
-        SportsDraw.hills(g, 0f, g.width, horizon, 3)
-        // field: mown stripes running away from the stand
-        g.gradientRect(0f, horizon, g.width, g.height, SportsDraw.GRASS_FAR, SportsDraw.GRASS_NEAR)
-        val pts = FloatArray(8)
-        var i = 0
-        var y0 = 4f
-        while (y0 < 160f) {
-            val y1 = y0 * 1.35f
-            if (i % 2 == 0 && cam.project(-200f, y0, 0f)) {
-                pts[0] = cam.px + ox; pts[1] = cam.py + oy
-                cam.project(200f, y0, 0f); pts[2] = cam.px + ox; pts[3] = cam.py + oy
-                cam.project(200f, y1, 0f); pts[4] = cam.px + ox; pts[5] = cam.py + oy
-                cam.project(-200f, y1, 0f); pts[6] = cam.px + ox; pts[7] = cam.py + oy
-                g.fillPolygon(pts, 4, 0x14FFFFFF)
-            }
-            y0 = y1; i++
-        }
-        // trap houses
-        // trap houses (left, right, far) and the high tower, back to front
-        // the high tower: timber legs, a cabin with a roof
-        for (lx in floatArrayOf(-11.6f, -10.6f)) SportsDraw.box(g, cam, ox, oy, lx, 23.8f, 0f, lx + 0.25f, 24.05f, 6.2f, 0xFF6D4C41.toInt(), 0xFF5D4037.toInt(), 0xFF4E342E.toInt())
-        SportsDraw.hut(g, cam, ox, oy, -11.9f, 23.4f, -10.1f, 25.0f, 7.5f, 0.9f, 0xFF8D6E63.toInt(), 0xFFB23A2E.toInt(), z0 = 6.0f)
-        SportsDraw.hut(g, cam, ox, oy, -20f, 31f, -16f, 34f, 1.4f, 0.7f, 0xFF8D6E63.toInt(), 0xFF2E5E3A.toInt())
-        SportsDraw.hut(g, cam, ox, oy, 16f, 31f, 20f, 34f, 1.4f, 0.7f, 0xFF8D6E63.toInt(), 0xFF2E5E3A.toInt())
-        SportsDraw.box(g, cam, ox, oy, -2f, 16.5f, 0f, 2f, 18.5f, 1.0f, 0xFF9E9E9E.toInt(), 0xFF757575.toInt(), 0xFF616161.toInt())
-        // hay bales along the edge of the field
-        for (bx in floatArrayOf(-26f, -23f, 23f, 26f)) SportsDraw.box(g, cam, ox, oy, bx, 20f, 0f, bx + 2.2f, 21.2f, 1.1f, 0xFFF0D58C.toInt(), 0xFFD9B95F.toInt(), 0xFFB89A45.toInt())
-        if (cam.project(-11f, 24.2f, 7.5f)) { val fx = cam.px + ox; val fy = cam.py + oy; g.line(fx, fy, fx, fy - 70f, 4f, 0xFF5D4037.toInt()); g.fillRect(fx, fy - 70f, fx + 44f, fy - 44f, 0xFFE53935.toInt()) } // tower flag
+        val w = g.width
+        Scenery.daySky(g, "clays", 0f, 0f, w, horizon)
+        Scenery.clouds(g, 0f, 0f, w, horizon, time)
+        Scenery.landscape(g, "clays", 0f, w, horizon, 3)
+        // the field, trap houses and tower (cached: they never move)
+        g.layer("clays.field", 0f, horizon - 420f, w, g.height, grain = 0.18f) { lg -> field(lg, ox, oy, horizon) }
         // intro target
         if (playTime < INTRO_SEC && !(loaded[0] && loaded[1])) {
             val pulse = 1f + 0.05f * sin(time.toFloat() * 6f)
@@ -405,20 +384,10 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         // clays (far first)
         val drawList = clays.filter { flying(it, playTime) }.sortedByDescending { c -> c.pos((playTime - c.launch).toFloat(), tmp); tmp[1] }
         for (c in drawList) drawClay(g, c, ox, oy, time)
-        // foreground: the shooting stand - posts, a polished rail and each player's shell tray
-        var px = 60f
-        while (px < g.width) {
-            g.fillRect(px - 11f, g.height - 150f, px + 11f, g.height, 0xFF5D4037.toInt())
-            g.fillRect(px - 11f, g.height - 150f, px - 4f, g.height, 0xFF795548.toInt())
-            px += 300f
-        }
-        g.fillRoundRectGradient(-10f, g.height - 92f, g.width + 10f, g.height - 52f, 8f, 0xFFA1785A.toInt(), 0xFF6D4C41.toInt())
-        for (i in 0 until 6) g.line(0f, g.height - 86f + i * 6f, g.width, g.height - 84f + i * 6f, 1.5f, 0x22000000)
-        g.fillRect(0f, g.height - 52f, g.width, g.height, 0xFF4E342E.toInt())
+        // foreground: the shooting stand - posts, a polished rail and each player's shell tray (cached), shells live
+        g.layer("clays.stand", 0f, g.height - 170f, g.width, g.height, grain = 0.3f) { lg -> stand(lg) }
         for (k in 0..1) {
             val tx = if (k == 0) g.width * 0.12f else g.width * 0.88f
-            g.fillRoundRect(tx - 70f, g.height - 112f, tx + 70f, g.height - 86f, 8f, 0xFFB08D57.toInt())
-            g.fillRoundRect(tx - 64f, g.height - 108f, tx + 64f, g.height - 92f, 6f, 0xFF3E2723.toInt())
             for (j in 0 until SHELLS) {
                 val sx = tx - 24f + j * 48f
                 val has = j < shells[k]
@@ -437,6 +406,94 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         for (r in 1..2) {
             val since = playTime - (roundStarts[r] - 1.2)
             if (since in 0.0..1.6) Hud.banner(g, if (r == 1) "Doubles - two at once!" else "Flurry - shoot everything!", 330f, Colors.GOLD, 64f)
+        }
+    }
+
+    /** The shooting ground: mown field with texture and shadows, gravel path, trap houses, the high tower, hay bales. */
+    private fun field(g: Gfx, ox: Float, oy: Float, horizon: Float) {
+        val w = g.width
+        g.gradientRect(0f, horizon, w, g.height, SportsDraw.GRASS_FAR, SportsDraw.GRASS_NEAR)
+        // mown stripes running away from the stand
+        val q = FloatArray(8)
+        fun quad(xa: Float, ya: Float, xb: Float, yb: Float, color: Int) {
+            if (!cam.project(xa, ya, 0f)) return
+            q[0] = cam.px + ox; q[1] = cam.py + oy
+            cam.project(xb, ya, 0f); q[2] = cam.px + ox; q[3] = cam.py + oy
+            cam.project(xb, yb, 0f); q[4] = cam.px + ox; q[5] = cam.py + oy
+            cam.project(xa, yb, 0f); q[6] = cam.px + ox; q[7] = cam.py + oy
+            g.fillPolygon(q, 4, color)
+        }
+        var i = 0; var y0 = 4f
+        while (y0 < 160f) { val y1 = y0 * 1.35f; if (i % 2 == 0) quad(-200f, y0, 200f, y1, 0x14FFFFFF); y0 = y1; i++ }
+        // diagonal mowing across the stripes, and darker patches
+        for (j in 0 until 40) {
+            val gx = -60f + 120f * Draw.hash01(j * 7 + 3); val gy = 6f + 120f * Draw.hash01(j * 11 + 5).let { it * it }
+            quad(gx, gy, gx + 3f + 6f * Draw.hash01(j), gy * 1.08f + 0.5f, 0x10203A12)
+        }
+        // gravel path from the stand out to the trap house
+        quad(-1.6f, 3.5f, 1.6f, 16.5f, 0xFFC9B48E.toInt())
+        quad(-1.6f, 3.5f, -1.3f, 16.5f, 0x33000000)
+        // soft shadows cast to the right of the buildings (the sun is to the upper right... behind the camera's left)
+        for ((sx, sy, sw) in listOf(Triple(-11f, 24.6f, 3.5f), Triple(-18f, 32.5f, 4.6f), Triple(18f, 32.5f, 4.6f), Triple(0f, 17.5f, 4.6f))) {
+            if (cam.project(sx + 1.2f, sy + 1.2f, 0f)) {
+                val px = cam.px + ox; val py = cam.py + oy; val rw = cam.focal * sw / cam.pd
+                g.fillOval(px - rw * 0.7f, py - rw * 0.1f, px + rw * 0.9f, py + rw * 0.14f, 0x33102008)
+            }
+        }
+        // the high tower: timber legs, a cabin with a roof, its flag
+        for (lx in floatArrayOf(-11.6f, -10.6f)) SportsDraw.box(g, cam, ox, oy, lx, 23.8f, 0f, lx + 0.25f, 24.05f, 6.2f, 0xFF6D4C41.toInt(), 0xFF5D4037.toInt(), 0xFF4E342E.toInt())
+        // cross braces between the legs
+        if (cam.project(-11.5f, 23.9f, 0.6f)) { val ax = cam.px + ox; val ay = cam.py + oy; if (cam.project(-10.5f, 23.9f, 5.6f)) g.line(ax, ay, cam.px + ox, cam.py + oy, 3f, 0xFF4E342E.toInt()) }
+        if (cam.project(-10.5f, 23.9f, 0.6f)) { val ax = cam.px + ox; val ay = cam.py + oy; if (cam.project(-11.5f, 23.9f, 5.6f)) g.line(ax, ay, cam.px + ox, cam.py + oy, 3f, 0xFF4E342E.toInt()) }
+        SportsDraw.hut(g, cam, ox, oy, -11.9f, 23.4f, -10.1f, 25.0f, 7.5f, 0.9f, 0xFF8D6E63.toInt(), 0xFFB23A2E.toInt(), z0 = 6.0f)
+        SportsDraw.hut(g, cam, ox, oy, -20f, 31f, -16f, 34f, 1.4f, 0.7f, 0xFF8D6E63.toInt(), 0xFF2E5E3A.toInt())
+        SportsDraw.hut(g, cam, ox, oy, 16f, 31f, 20f, 34f, 1.4f, 0.7f, 0xFF8D6E63.toInt(), 0xFF2E5E3A.toInt())
+        SportsDraw.box(g, cam, ox, oy, -2f, 16.5f, 0f, 2f, 18.5f, 1.0f, 0xFF9E9E9E.toInt(), 0xFF757575.toInt(), 0xFF616161.toInt())
+        // the trap house's grass roof and a warning stripe
+        if (cam.project(-2f, 16.5f, 1.0f)) { val ax = cam.px + ox; val ay = cam.py + oy; if (cam.project(2f, 16.5f, 1.0f)) { g.line(ax, ay, cam.px + ox, cam.py + oy, 6f, 0xFF5E8F3A.toInt()) } }
+        if (cam.project(-2f, 16.49f, 0.35f)) { val ax = cam.px + ox; val ay = cam.py + oy; if (cam.project(2f, 16.49f, 0.35f)) g.line(ax, ay, cam.px + ox, cam.py + oy, 5f, 0xFFF9A825.toInt()) }
+        // hay bales along the edge of the field, with straw ends
+        for (bx in floatArrayOf(-26f, -23f, 23f, 26f)) SportsDraw.box(g, cam, ox, oy, bx, 20f, 0f, bx + 2.2f, 21.2f, 1.1f, 0xFFF0D58C.toInt(), 0xFFD9B95F.toInt(), 0xFFB89A45.toInt())
+        if (cam.project(-11f, 24.2f, 7.5f)) { val fx = cam.px + ox; val fy = cam.py + oy; g.line(fx, fy, fx, fy - 70f, 4f, 0xFF5D4037.toInt()); g.fillRect(fx, fy - 70f, fx + 44f, fy - 44f, 0xFFE53935.toInt()); g.fillRect(fx, fy - 70f, fx + 44f, fy - 64f, 0x33FFFFFF) }
+        // a white fence along the far side
+        var fxw = -40f
+        while (fxw <= 40f) {
+            if (cam.project(fxw, 44f, 0f)) { val bx = cam.px + ox; val by = cam.py + oy; if (cam.project(fxw, 44f, 1.1f)) g.line(bx, by, cam.px + ox, cam.py + oy, 2f, 0xCCF5F5F5.toInt()) }
+            fxw += 2.5f
+        }
+        if (cam.project(-40f, 44f, 0.8f)) { val ax = cam.px + ox; val ay = cam.py + oy; if (cam.project(40f, 44f, 0.8f)) g.line(ax, ay, cam.px + ox, cam.py + oy, 2f, 0xCCF5F5F5.toInt()) }
+        // light falling off towards the stand
+        g.gradientRect(0f, g.height - 300f, w, g.height, 0x00000000, 0x33102008)
+    }
+
+    /** The wooden shooting stand in the foreground: posts, a polished rail with grain, shell trays. */
+    private fun stand(g: Gfx) {
+        val h = g.height; val w = g.width
+        var px = 60f
+        while (px < w) {
+            g.fillRect(px - 13f, h - 160f, px + 13f, h, 0xFF4E342E.toInt())
+            g.fillRect(px - 11f, h - 160f, px + 11f, h, 0xFF6D4C41.toInt())
+            g.fillRect(px - 11f, h - 160f, px - 4f, h, 0xFF8D6E63.toInt())
+            g.fillRect(px - 15f, h - 166f, px + 15f, h - 156f, 0xFF5D4037.toInt())
+            px += 300f
+        }
+        g.fillRect(-10f, h - 96f, w + 10f, h - 48f, 0x55000000)
+        g.fillRoundRectGradient(-10f, h - 94f, w + 10f, h - 52f, 8f, 0xFFB48A63.toInt(), 0xFF6D4C41.toInt())
+        // wood grain
+        for (i in 0 until 14) {
+            val y = h - 90f + i * 2.8f
+            val pp = FloatArray(26)
+            for (j in 0 until 13) { pp[j * 2] = j * w / 12f; pp[j * 2 + 1] = y + 1.6f * sin(j * 1.3f + i * 2.1f) }
+            g.polyline(pp, 13, 1.2f, if (i % 3 == 0) 0x33000000 else 0x18FFFFFF)
+        }
+        g.line(-10f, h - 92f, w + 10f, h - 92f, 2.5f, 0x66FFE9C8)
+        g.gradientRect(0f, h - 52f, w, h, 0xFF4E342E.toInt(), 0xFF2E1E17.toInt())
+        for (k in 0..1) {
+            val tx = if (k == 0) w * 0.12f else w * 0.88f
+            g.fillRoundRect(tx - 72f, h - 114f, tx + 72f, h - 84f, 9f, 0xFF3E2723.toInt())
+            g.fillRoundRect(tx - 70f, h - 112f, tx + 70f, h - 86f, 8f, 0xFFB08D57.toInt())
+            g.fillRoundRect(tx - 64f, h - 108f, tx + 64f, h - 92f, 6f, 0xFF2B1B12.toInt())
+            g.line(tx - 68f, h - 111f, tx + 68f, h - 111f, 2f, 0x55FFFFFF)
         }
     }
 
@@ -472,12 +529,28 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         val ang = atan2(a.y + oy - by, a.x + ox - bx)
         val kick = if (muzzle[k] < 0.15f) (1f - muzzle[k] / 0.15f) * 40f else 0f
         g.save(); g.translate(bx, by); g.rotate(ang)
-        g.fillRoundRect(-kick + 40f, -24f, -kick + 330f, 24f, 14f, 0xFF37474F.toInt())
-        g.fillRoundRect(-kick + 40f, -24f, -kick + 330f, -6f, 10f, 0xFF607D8B.toInt())
-        g.fillRoundRect(-kick - 80f, -38f, -kick + 120f, 38f, 18f, 0xFF6D4C41.toInt())
-        g.fillRect(-kick + 300f, -30f, -kick + 318f, 30f, env.color(k))
-        if (muzzle[k] < 0.08f) g.glow(-kick + 360f, 0f, 90f, 0xCCFFE082.toInt())
+        val o = -kick
+        // twin barrels: blued steel, lit along the top, a rib with a bead at the muzzle
+        val barrel = floatArrayOf(o + 40f, -26f, o + 340f, -22f, o + 340f, 22f, o + 40f, 26f)
+        g.fillPolygonLinear(barrel, 4, 0f, -26f, 0f, 26f, 0xFF78909C.toInt(), 0xFF1C262B.toInt())
+        g.line(o + 44f, -1f, o + 338f, -1f, 2f, 0x66000000)
+        g.line(o + 44f, -16f, o + 336f, -14f, 3f, 0x66FFFFFF)
+        g.fillRect(o + 60f, -30f, o + 340f, -25f, 0xFF263238.toInt())
+        g.fillCircle(o + 336f, -30f, 4f, 0xFFFFE082.toInt())
+        g.fillRoundRect(o + 330f, -24f, o + 346f, 24f, 4f, 0xFF101619.toInt())
+        // walnut stock and fore-end with grain
+        val stock = floatArrayOf(o - 90f, -40f, o + 130f, -30f, o + 130f, 34f, o - 90f, 46f)
+        g.fillPolygonLinear(stock, 4, 0f, -40f, 0f, 46f, 0xFFA0673D.toInt(), 0xFF4E2A14.toInt())
+        for (j in 0 until 5) g.line(o - 80f, -26f + j * 13f, o + 124f, -22f + j * 11f, 1.5f, 0x22000000)
+        g.line(o - 86f, -36f, o + 126f, -27f, 3f, 0x44FFE0B2)
+        g.fillRect(o + 296f, -30f, o + 316f, 30f, env.color(k))
+        g.fillRect(o + 296f, -30f, o + 300f, 30f, 0x55FFFFFF)
         g.restore()
+        if (muzzle[k] < 0.08f) {
+            val mx = bx + kotlin.math.cos(ang) * (o + 380f); val my = by + kotlin.math.sin(ang) * (o + 380f)
+            val f = 1f - muzzle[k] / 0.08f
+            Scenery.light(g, mx, my, 150f * f, 0xCCFFC46B.toInt(), 0.3f)
+        }
     }
 
     private fun drawCrosshair(g: Gfx, k: Int, inp: PlayerInput, ox: Float, oy: Float, time: Double) {

@@ -517,6 +517,8 @@ object Draw {
         g: Gfx, x: Float, y: Float, h: Float, color: Int, pose: AvatarPose?, expr: Expression = Expression.HAPPY,
         prop: Prop = Prop.NONE, propHand: Int = 1, t: Double = 0.0, shielded: Boolean = false, squash: Float = 0f,
         handTargets: FloatArray? = null, mittenScale: Float = 1f, look: Int = 0,
+        /** Drawn flipped left to right by the caller: the shirt number is flipped back so it still reads. */
+        mirrored: Boolean = false,
     ) {
         val skin = SKIN[((look % SKIN.size) + SKIN.size) % SKIN.size]
         val hair = HAIR[((look / 2 % HAIR.size) + HAIR.size) % HAIR.size]
@@ -598,7 +600,10 @@ object Draw {
         g.fillOval(x - h * 0.062f, sy0 - h * 0.012f, x + h * 0.062f, sy0 + h * 0.036f, skinDark)
         g.arc(x, sy0 - h * 0.012f, h * 0.062f, 0.25f, PI_F - 0.5f, h * 0.014f, Colors.WHITE)
         g.fillRect(x - ww * 0.99f, sy0 + h * 0.125f, x + ww * 0.99f, sy0 + h * 0.15f, 0xDDFFFFFF.toInt())
-        g.text("${(look % 9) + 1}", x + h * 0.07f, sy0 + h * 0.215f, h * 0.075f, 0xEEFFFFFF.toInt(), outline = Colors.withAlpha(shirtDark, 0.8f), outlineWidth = h * 0.006f)
+        val numX = x + h * 0.07f; val numY = sy0 + h * 0.215f
+        if (mirrored) { g.save(); g.translate(numX, numY); g.scale(-1f, 1f); g.translate(-numX, -numY) }
+        g.text("${(look % 9) + 1}", numX, numY, h * 0.075f, 0xEEFFFFFF.toInt(), outline = Colors.withAlpha(shirtDark, 0.8f), outlineWidth = h * 0.006f)
+        if (mirrored) g.restore()
         g.line(x - ww * 0.85f, sy1 - h * 0.012f, x + ww * 0.85f, sy1 - h * 0.012f, h * 0.008f, Colors.withAlpha(shirtDark, 0.7f))
         // ---- arms (same joint solving as the buddy's)
         val sxL = x - h * 0.15f

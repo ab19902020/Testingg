@@ -21,6 +21,7 @@ import com.clrg.core.render.Cam3
 import com.clrg.core.render.Colors
 import com.clrg.core.render.Gfx
 import com.clrg.core.render.Particles
+import com.clrg.core.render.Scenery
 import com.clrg.core.render.SportsDraw
 import com.clrg.core.tracking.MovementMode
 import kotlin.math.hypot
@@ -234,39 +235,17 @@ class ArcheryGame(env: GameEnv) : MiniGame(env) {
         val d = DISTANCE[e]
         val c = laneCam(d)
         val horizon = c.horizonY() + oy
-        SportsDraw.daySky(g, r.left, 0f, r.right, horizon, time + k * 5, sunX = r.left + r.width * 0.8f)
-        SportsDraw.hills(g, r.left, r.right, horizon, 5 + k)
-        g.gradientRect(r.left, horizon, r.right, r.bottom, SportsDraw.GRASS_FAR, SportsDraw.GRASS_NEAR)
-        // lane edges and distance markers
-        val pts = FloatArray(8)
-        for (side in floatArrayOf(-1f, 1f)) {
-            if (c.project(side * 3f, 4f, 0f)) { pts[0] = c.px + ox; pts[1] = c.py + oy }
-            if (c.project(side * 3f, d + 8f, 0f)) { pts[2] = c.px + ox; pts[3] = c.py + oy }
-            g.line(pts[0], pts[1], pts[2], pts[3], 3f, 0x66FFFFFF)
-        }
-        // target stand and boss
-        if (c.project(0f, d + 0.3f, 0f)) {
-            val by = c.py + oy
-            if (c.project(0f, d + 0.3f, 2.3f)) {
-                val top = c.py + oy
-                val half = (c.focal * 1.25f / c.pd)
-                g.fillRect(ox - half * 0.9f, top, ox - half * 0.8f, by, 0xFF6D4C41.toInt())
-                g.fillRect(ox + half * 0.8f, top, ox + half * 0.9f, by, 0xFF6D4C41.toInt())
-                g.fillRoundRect(ox - half, top, ox + half, top + (by - top) * 0.92f, half * 0.1f, 0xFFD7B56D.toInt())
-            }
-        }
-        // target face: ten rings, gold in the middle
+        // the range (cached per end - the target moves back each end): sky, hills, the lane and the target stand
+        Scenery.daySky(g, "archery$k.$e", r.left, 0f, r.right, horizon, sunX = r.left + r.width * 0.8f)
+        Scenery.clouds(g, r.left, 0f, r.right, horizon, time + k * 40, count = 4)
+        Scenery.landscape(g, "archery$k.$e", r.left, r.right, horizon, 5 + k)
+        g.layer("archery$k.field", r.left, horizon - 260f, r.right, r.bottom, version = e, grain = 0.2f) { lg -> range(lg, r, d, ox, oy, horizon) }
+        // flags on the target stand show the wind live
+        windFlags(g, k, d, ox, oy, time)
+        // arrows already in this end's target (the face itself is in the cached range)
         if (c.project(0f, d, 1.3f)) {
             val cx = c.px + ox; val cy = c.py + oy
             val pr = c.focal * FACE_R / c.pd
-            val ringCol = intArrayOf(Colors.WHITE, Colors.WHITE, 0xFF212121.toInt(), 0xFF212121.toInt(), 0xFF1E88E5.toInt(), 0xFF1E88E5.toInt(), 0xFFE53935.toInt(), 0xFFE53935.toInt(), 0xFFFFD600.toInt(), 0xFFFFD600.toInt())
-            for (i in 0 until 10) {
-                val rr = pr * (10 - i) / 10f
-                g.fillCircle(cx, cy, rr, ringCol[i])
-                g.strokeCircle(cx, cy, rr, 1.5f, if (i in 2..3) 0x88FFFFFF.toInt() else 0x55000000)
-            }
-            g.line(cx - 6f, cy, cx + 6f, cy, 2f, 0xFF212121.toInt()); g.line(cx, cy - 6f, cx, cy + 6f, 2f, 0xFF212121.toInt())
-            // arrows already in this end's target
             for (a in arrows) {
                 if (a.player != k || a.end != e) continue
                 val u = ((playTime - a.shotAt) / a.flight).toFloat()
@@ -340,10 +319,114 @@ class ArcheryGame(env: GameEnv) : MiniGame(env) {
         g.restore()
     }
 
+    /** The archery range for distance [d]: mown grass, roped lane, distance boards, the target stand and its face. */
+    private fun range(g: Gfx, r: Rect, d: Float, ox: Float, oy: Float, horizon: Float) {
+        val c = laneCam(d)
+        g.gradientRect(r.left, horizon, r.right, r.bottom, SportsDraw.GRASS_FAR, SportsDraw.GRASS_NEAR)
+        val q = FloatArray(8)
+        fun quad(xa: Float, ya: Float, xb: Float, yb: Float, color: Int) {
+            if (!c.project(xa, ya, 0f)) return
+            q[0] = c.px + ox; q[1] = c.py + oy
+            c.project(xb, ya, 0f); q[2] = c.px + ox; q[3] = c.py + oy
+            c.project(xb, yb, 0f); q[4] = c.px + ox; q[5] = c.py + oy
+            c.project(xa, yb, 0f); q[6] = c.px + ox; q[7] = c.py + oy
+            g.fillPolygon(q, 4, color)
+        }
+        // mown stripes across the range, a worn shooting line, the lane slightly lighter
+        var y0 = 3f; var i = 0
+        while (y0 < d + 40f) { val y1 = y0 + 2.5f + y0 * 0.08f; if (i % 2 == 0) quad(-40f, y0, 40f, y1, 0x12FFFFFF); y0 = y1; i++ }
+        quad(-3f, 3f, 3f, d + 6f, 0x10FFFFFF)
+        quad(-3.2f, 3.6f, 3.2f, 4.0f, 0xEEF5F5F5.toInt())
+        // ropes and posts along the lane
+        for (side in floatArrayOf(-1f, 1f)) {
+            var py = 4f
+            var prevX = Float.NaN; var prevY = 0f
+            while (py <= d + 6f) {
+                if (c.project(side * 3.2f, py, 0f)) {
+                    val bx = c.px + ox; val by = c.py + oy
+                    if (c.project(side * 3.2f, py, 0.8f)) {
+                        val tx = c.px + ox; val ty = c.py + oy
+                        g.line(bx, by, tx, ty, (c.focal * 0.06f / c.pd).coerceIn(1.5f, 9f), 0xFFF5F5F5.toInt())
+                        if (!prevX.isNaN()) g.line(prevX, prevY, tx, ty, (c.focal * 0.025f / c.pd).coerceIn(1f, 4f), 0xCCE53935.toInt())
+                        prevX = tx; prevY = ty
+                    }
+                }
+                py += 5f
+            }
+        }
+        // distance boards every 10 m
+        var m = 10f
+        while (m < d) {
+            if (c.project(-4.2f, m, 0f)) {
+                val bx = c.px + ox; val by = c.py + oy
+                val s = (c.focal * 0.5f / c.pd).coerceIn(6f, 60f)
+                g.line(bx, by, bx, by - s * 1.6f, s * 0.12f, 0xFF5D4037.toInt())
+                g.fillRoundRect(bx - s * 0.8f, by - s * 2.6f, bx + s * 0.8f, by - s * 1.5f, s * 0.15f, 0xFFF5F5F5.toInt())
+                g.text("${m.toInt()}", bx, by - s * 2.05f, s * 0.75f, 0xFF263238.toInt())
+            }
+            m += 10f
+        }
+        // the target stand: an A-frame, a straw boss with texture, and its shadow on the grass
+        if (c.project(0f, d + 0.3f, 0f)) {
+            val by = c.py + oy
+            if (c.project(0f, d + 0.3f, 2.3f)) {
+                val top = c.py + oy
+                val half = (c.focal * 1.25f / c.pd)
+                g.fillOval(ox - half * 1.5f, by - half * 0.12f, ox + half * 1.9f, by + half * 0.2f, 0x33102008)
+                g.line(ox - half * 0.95f, by, ox - half * 0.7f, top, half * 0.09f, 0xFF5D4037.toInt())
+                g.line(ox + half * 0.95f, by, ox + half * 0.7f, top, half * 0.09f, 0xFF5D4037.toInt())
+                g.line(ox - half * 0.88f, by - (by - top) * 0.3f, ox + half * 0.88f, by - (by - top) * 0.3f, half * 0.06f, 0xFF4E342E.toInt())
+                g.fillRoundRect(ox - half, top, ox + half, top + (by - top) * 0.92f, half * 0.12f, 0xFFD2AE62.toInt())
+                for (j in 0 until 18) {
+                    val yy = top + (by - top) * 0.92f * (j + 0.5f) / 18f
+                    g.line(ox - half * 0.96f, yy, ox + half * 0.96f, yy + half * 0.02f, (half * 0.012f).coerceAtLeast(0.6f), if (j % 2 == 0) 0x33805A1E else 0x22FFF3C4)
+                }
+                g.fillRect(ox + half * 0.6f, top, ox + half, top + (by - top) * 0.92f, 0x22000000)
+            }
+        }
+        // target face: ten rings, gold in the middle, a soft sheen
+        if (c.project(0f, d, 1.3f)) {
+            val cx = c.px + ox; val cy = c.py + oy
+            val pr = c.focal * FACE_R / c.pd
+            val ringCol = intArrayOf(Colors.WHITE, Colors.WHITE, 0xFF212121.toInt(), 0xFF212121.toInt(), 0xFF1E88E5.toInt(), 0xFF1E88E5.toInt(), 0xFFE53935.toInt(), 0xFFE53935.toInt(), 0xFFFFD600.toInt(), 0xFFFFD600.toInt())
+            g.fillCircle(cx + pr * 0.04f, cy + pr * 0.05f, pr * 1.02f, 0x44000000)
+            for (j in 0 until 10) {
+                val rr = pr * (10 - j) / 10f
+                g.fillCircle(cx, cy, rr, ringCol[j])
+                g.strokeCircle(cx, cy, rr, 1.5f, if (j in 2..3) 0x88FFFFFF.toInt() else 0x55000000)
+            }
+            g.fillCircleRadial(cx, cy, pr, cx - pr * 0.4f, cy - pr * 0.45f, pr * 1.4f, 0x30FFFFFF, 0x00000000)
+            g.line(cx - 6f, cy, cx + 6f, cy, 2f, 0xFF212121.toInt()); g.line(cx, cy - 6f, cx, cy + 6f, 2f, 0xFF212121.toInt())
+        }
+        // shade towards the archer
+        g.gradientRect(r.left, r.bottom - 280f, r.right, r.bottom, 0x00000000, 0x2A102008)
+    }
+
+    /** Small flags on poles either side of the target, blowing with the wind. */
+    private fun windFlags(g: Gfx, k: Int, d: Float, ox: Float, oy: Float, time: Double) {
+        val c = laneCam(d)
+        val wv = wind(k)
+        for (side in floatArrayOf(-1f, 1f)) {
+            if (!c.project(side * 2.4f, d + 0.6f, 0f)) continue
+            val bx = c.px + ox; val by = c.py + oy
+            if (!c.project(side * 2.4f, d + 0.6f, 3.2f)) continue
+            val tx = c.px + ox; val ty = c.py + oy
+            val s = (by - ty) / 3.2f
+            g.line(bx, by, tx, ty, (s * 0.05f).coerceIn(1.5f, 4f), 0xFFECEFF1.toInt())
+            val dir = if (wv >= 0f) 1f else -1f
+            val len = s * (0.35f + 0.25f * kotlin.math.abs(wv) / 2.8f)
+            val flap = sin(time.toFloat() * (4f + kotlin.math.abs(wv) * 2f) + side) * s * 0.06f
+            val fl = floatArrayOf(tx, ty, tx + dir * len, ty + s * 0.12f + flap, tx, ty + s * 0.3f)
+            g.fillPolygon(fl, 3, if (side < 0) 0xFFFFC107.toInt() else 0xFFE53935.toInt())
+        }
+    }
+
     /**
      * First-person bow: held upright in front of you, the arrow pointing up the lane at the sight, the string
      * coming back towards you (down the screen) as far as you draw.
      */
+    private val pts2 = FloatArray(18)
+
     private fun drawBow(g: Gfx, k: Int, inp: PlayerInput, r: Rect) {
         val a = aim[k]
         val bx = r.cx - 210f + (if (a.seen) a.x * 0.25f else 0f)
@@ -358,21 +441,45 @@ class ArcheryGame(env: GameEnv) : MiniGame(env) {
             val bend = sin(t * Math.PI.toFloat()) * (34f + 26f * pull) - (if (i == 0 || i == 8) 10f else 0f)
             pts[i * 2] = bx - bend; pts[i * 2 + 1] = yy
         }
-        g.polyline(pts, 9, 22f, 0xFF3E2723.toInt())
-        g.polyline(pts, 9, 12f, 0xFF8D6E63.toInt())
-        g.fillRoundRect(bx - 52f, by - 50f, bx - 18f, by + 50f, 12f, 0xFF263238.toInt()) // grip
+        // laminated wooden limbs: dark edge, warm wood, a pale lamination stripe, a sheen
+        g.polyline(pts, 9, 24f, 0xFF2B1A12.toInt())
+        g.polyline(pts, 9, 16f, 0xFF8D5A34.toInt())
+        for (j in 0..8) pts2[j * 2] = pts[j * 2] + 3f
+        for (j in 0..8) pts2[j * 2 + 1] = pts[j * 2 + 1]
+        g.polyline(pts2, 9, 4f, 0xFFE8C48C.toInt())
+        for (j in 0..8) pts2[j * 2] = pts[j * 2] - 4f
+        g.polyline(pts2, 9, 3f, 0x55FFFFFF)
+        // tips curling back, with string grooves
+        g.fillCircle(pts[0] + 6f, pts[1] - 4f, 9f, 0xFF2B1A12.toInt()); g.fillCircle(pts[16] + 6f, pts[17] + 4f, 9f, 0xFF2B1A12.toInt())
+        // the riser: machined metal with a leather grip and an arrow shelf
+        g.fillRoundRectGradient(bx - 56f, by - 120f, bx - 14f, by + 120f, 14f, 0xFF607D8B.toInt(), 0xFF263238.toInt())
+        g.fillRect(bx - 50f, by - 112f, bx - 44f, by + 112f, 0x44FFFFFF)
+        g.fillRoundRectGradient(bx - 60f, by - 46f, bx - 10f, by + 52f, 14f, 0xFF5D4037.toInt(), 0xFF2B1A12.toInt())
+        for (j in 0 until 6) g.line(bx - 58f, by - 36f + j * 15f, bx - 12f, by - 30f + j * 15f, 2f, 0x33000000)
+        g.fillRect(bx - 18f, by - 74f, bx - 4f, by - 66f, 0xFFB0BEC5.toInt())
         // nock point: comes towards you (down and out) with the draw
         val nx = bx + 40f + pull * 70f
         val ny = by + 40f + pull * 250f
-        g.line(pts[0], pts[1], nx, ny, 3f, 0xFFECEFF1.toInt())
-        g.line(pts[16], pts[17], nx, ny, 3f, 0xFFECEFF1.toInt())
+        g.line(pts[0] + 6f, pts[1] - 4f, nx, ny, 3.5f, 0xFFF5F5F5.toInt())
+        g.line(pts[16] + 6f, pts[17] + 4f, nx, ny, 3.5f, 0xFFF5F5F5.toInt())
+        g.fillRoundRect(nx - 5f, ny - 16f, nx + 5f, ny + 16f, 4f, 0xFF212121.toInt()) // serving at the nock
         if (inp.bowState >= 1) {
-            // the arrow from the string to the rest, pointing at the sight
+            // the arrow from the string to the rest, pointing at the sight: carbon shaft, steel point, fletching
             val tipX = bx - 30f; val tipY = by - 70f
-            g.line(nx, ny, tipX, tipY, 9f, 0xFF4E342E.toInt())
-            g.line(nx, ny, tipX, tipY, 5f, 0xFF8D6E63.toInt())
-            com.clrg.core.render.Draw.tri(g, tipX - 10f, tipY + 6f, tipX + 8f, tipY + 6f, tipX - 4f, tipY - 26f, 0xFFB0BEC5.toInt())
-            g.fillRoundRect(nx - 16f, ny - 34f, nx + 16f, ny + 4f, 6f, env.color(k)) // fletching
+            g.line(nx, ny, tipX, tipY, 10f, 0xFF111518.toInt())
+            g.line(nx, ny, tipX, tipY, 6f, 0xFF37474F.toInt())
+            g.line(nx - 2f, ny, tipX - 2f, tipY, 2f, 0x66FFFFFF)
+            com.clrg.core.render.Draw.tri(g, tipX - 10f, tipY + 6f, tipX + 8f, tipY + 6f, tipX - 4f, tipY - 26f, 0xFFCFD8DC.toInt())
+            com.clrg.core.render.Draw.tri(g, tipX - 4f, tipY + 6f, tipX + 8f, tipY + 6f, tipX - 4f, tipY - 26f, 0xFF78909C.toInt())
+            val dx = tipX - nx; val dy = tipY - ny
+            val l = kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
+            val ux = dx / l; val uy = dy / l
+            for (s in floatArrayOf(-1f, 1f)) {
+                val fx = nx + ux * 20f; val fy = ny + uy * 20f
+                val vane = floatArrayOf(fx, fy, fx + ux * 60f, fy + uy * 60f, fx + ux * 8f - uy * s * 22f, fy + uy * 8f + ux * s * 22f)
+                g.fillPolygon(vane, 3, if (s < 0) env.color(k) else Colors.lighter(env.color(k), 0.4f))
+            }
+            g.fillCircle(nx, ny, 6f, 0xFFFFC107.toInt()) // nock
         }
         // power meter
         val mx = r.right - 50f

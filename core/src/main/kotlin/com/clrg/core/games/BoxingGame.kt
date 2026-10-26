@@ -308,21 +308,16 @@ class BoxingGame(env: GameEnv) : MiniGame(env) {
         val o = 1 - k
         val r = Rect(if (k == 0) 0f else g.width / 2f, 0f, if (k == 0) g.width / 2f else g.width, g.height)
         g.save(); g.clipRect(r.left, r.top, r.right, r.bottom)
-        // arena: dark crowd, flashes, spotlight, ropes, canvas
-        g.gradientRect(r.left, 0f, r.right, 700f, 0xFF0A0F1E.toInt(), 0xFF1A2238.toInt())
-        SportsDraw.crowd(g, r.left, r.right, 300f, 560f, time + k, rows = 4)
-        g.fillRect(r.left, 300f, r.right, 560f, 0x88000000.toInt())
-        val rng = Rng((time * 3).toLong() + k * 999)
-        repeat(3) { if (rng.chance(0.35f)) g.glow(r.left + rng.nextFloat() * r.width, 320f + rng.nextFloat() * 200f, 30f, 0xCCFFFFFF.toInt()) }
-        val floorTop = 640f
-        g.gradientRect(r.left, floorTop, r.right, r.bottom, 0xFF90A4AE.toInt(), 0xFF5F7480.toInt())
-        Draw.lightPool(g, r.cx, 820f, r.width * 0.45f, 120f, 0x44FFFFFF)
-        for ((i, c) in listOf(0xFFE53935.toInt(), Colors.WHITE, 0xFF1E88E5.toInt()).withIndex()) {
-            val y = 470f + i * 55f
-            g.line(r.left, y, r.right, y, 7f, c)
-        }
-        g.fillRect(r.left + 30f, 420f, r.left + 60f, 700f, 0xFFB0BEC5.toInt())
-        g.fillRect(r.right - 60f, 420f, r.right - 30f, 700f, 0xFFB0BEC5.toInt())
+        // arena (two cached pictures, the same for both halves): the crowd and lights behind, softly out of focus;
+        // then the ring itself, sharp. Camera flashes in the crowd are live.
+        g.save(); g.translate(r.left, 0f)
+        g.layer("boxing_back", 0f, 0f, r.width, 700f, res = 0.5f, blur = 5f) { lg -> arenaBack(lg, r.width) }
+        val rng = Rng((time * 4).toLong() + k * 999)
+        g.setBlend(com.clrg.core.render.Blend.ADD)
+        repeat(4) { if (rng.chance(0.4f)) { val fx = rng.nextFloat() * r.width; val fy = 300f + rng.nextFloat() * 230f; g.glow(fx, fy, 46f, 0x99FFFFFF.toInt()); g.fillCircle(fx, fy, 4f, Colors.WHITE) } }
+        g.setBlend(com.clrg.core.render.Blend.NORMAL)
+        g.layer("boxing_ring", 0f, 380f, r.width, r.height, grain = 0.25f) { lg -> ring(lg, r.width, r.height) }
+        g.restore()
         // the opponent, facing this player: their own (mirror-view) pose flipped left to right
         val oInp = inputs[o]
         val pose = if (oInp.avatar.valid) oInp.avatar else idlePose
@@ -339,7 +334,7 @@ class BoxingGame(env: GameEnv) : MiniGame(env) {
             g.translate(bx, by); g.rotate(-flinch * 0.12f); g.translate(-bx, -by)
         }
         g.translate(bx, 0f); g.scale(-1f, 1f); g.translate(-bx, 0f)
-        Draw.athlete(g, bx, by, 700f, env.color(o), pose, expr, Prop.GLOVES, t = time + o, look = o * 3 + 1)
+        Draw.athlete(g, bx, by, 700f, env.color(o), pose, expr, Prop.GLOVES, t = time + o, look = o * 3 + 1, mirrored = true)
         g.restore()
         if (down(o)) {
             val count = (GETUP_SEC - (downUntil[o] - playTime)).toInt() + 1
@@ -382,6 +377,80 @@ class BoxingGame(env: GameEnv) : MiniGame(env) {
         if (me.guard && !env.players[k].cpu) g.text("GUARD", r.left + 110f, r.bottom - 110f, 34f, Colors.ICE, outline = Colors.BLACK, outlineWidth = 4f)
         if (stamina[k] < 30f && !env.players[k].cpu) g.text("TIRED - take a breath", r.right - r.width * 0.2f, r.bottom - 110f, 30f, Colors.WARN, outline = Colors.BLACK, outlineWidth = 4f)
         g.restore()
+    }
+
+    /** The arena behind the ring: dark stands full of people, the lighting rig and its beams (drawn once, blurred). */
+    private fun arenaBack(g: Gfx, w: Float) {
+        g.gradientRect(0f, 0f, w, 700f, 0xFF04060D.toInt(), 0xFF121A2C.toInt())
+        // tiers of seats rising into the dark, people in them
+        val colors = intArrayOf(0xFFE57373.toInt(), 0xFF64B5F6.toInt(), 0xFFFFD54F.toInt(), 0xFF81C784.toInt(), 0xFFBA68C8.toInt(), 0xFFFFB74D.toInt(), 0xFFECEFF1.toInt(), 0xFF90A4AE.toInt())
+        for (row in 0 until 9) {
+            val y = 250f + row * 40f
+            val scale = 0.6f + row * 0.06f
+            val dim = 0.12f + row * 0.045f
+            g.fillRect(0f, y + 8f * scale, w, y + 40f, Colors.withAlpha(0xFF1B2333.toInt(), 0.9f))
+            var x = (row % 2) * 9f
+            var i = row * 37
+            while (x < w + 20f) {
+                val c = Colors.lerp(0xFF0A0E18.toInt(), colors[(i * 7 + row) % colors.size], dim)
+                g.fillRoundRect(x - 9f * scale, y + 6f * scale, x + 9f * scale, y + 40f, 5f * scale, c)
+                g.fillCircle(x, y, 7.5f * scale, Colors.lerp(0xFF0A0E18.toInt(), 0xFFD7B08C.toInt(), dim))
+                x += 20f * scale + (Draw.hash01(i) * 6f); i++
+            }
+        }
+        // darkness over the far seats, fading towards the ring
+        g.gradientRect(0f, 200f, w, 480f, 0xFF04060D.toInt(), 0x0004060D)
+        g.fillRect(0f, 480f, w, 700f, 0x33000000)
+        // lighting rig over the ring
+        g.fillRect(0f, 70f, w, 78f, 0xFF2A3346.toInt()); g.fillRect(0f, 118f, w, 126f, 0xFF2A3346.toInt())
+        var tx = 0f
+        while (tx < w) { g.line(tx, 74f, tx + 30f, 122f, 4f, 0xFF2A3346.toInt()); g.line(tx + 30f, 122f, tx + 60f, 74f, 4f, 0xFF2A3346.toInt()); tx += 60f }
+        g.setBlend(com.clrg.core.render.Blend.ADD)
+        for (i in 0 until 4) {
+            val lx = w * (0.14f + i * 0.24f)
+            val beam = floatArrayOf(lx - 30f, 140f, lx + 30f, 140f, lx + 230f - i * 60f, 700f, lx - 110f - i * 40f, 700f)
+            g.fillPolygonGradient(beam, 4, 140f, 700f, 0x30FFF3D6, 0x00FFF3D6)
+            g.glow(lx, 140f, 120f, 0x88FFF3D6.toInt())
+        }
+        g.setBlend(com.clrg.core.render.Blend.NORMAL)
+        for (i in 0 until 4) {
+            val lx = w * (0.14f + i * 0.24f)
+            g.fillRoundRect(lx - 34f, 112f, lx + 34f, 142f, 8f, 0xFF1C2230.toInt())
+            g.fillOval(lx - 26f, 132f, lx + 26f, 148f, 0xFFFFFBEA.toInt())
+        }
+    }
+
+    /** The ring: lit canvas with the logo, corner posts with padded turnbuckles, three shaded ropes behind the boxer. */
+    private fun ring(g: Gfx, w: Float, h: Float) {
+        val floorTop = 640f
+        // canvas in perspective, brightest under the lights
+        g.gradientRect(0f, floorTop, w, h, 0xFFAFC0CC.toInt(), 0xFF5A6E7C.toInt())
+        g.fillRectRadial(0f, floorTop, w, h, w / 2f, 800f, w * 0.75f, 0x55FFFFFF, 0x00FFFFFF)
+        g.save(); g.translate(w / 2f, 905f); g.scale(1f, 0.26f)
+        g.strokeCircle(0f, 0f, 330f, 22f, 0x260D47A1)
+        g.strokeCircle(0f, 0f, 290f, 6f, 0x1E0D47A1)
+        g.fillCircle(0f, 0f, 250f, 0x160D47A1)
+        g.restore()
+        g.fillRect(0f, floorTop, w, floorTop + 6f, 0x33000000)
+        // corner posts with padded turnbuckles (red corner and blue corner)
+        for ((px, pad) in listOf(46f to 0xFFD32F2F.toInt(), w - 46f to 0xFF1E5BC6.toInt())) {
+            g.fillRectRadial(px - 24f, 420f, px + 24f, 700f, px - 10f, 500f, 60f, 0xFFE0E6EA.toInt(), 0xFF7D8D99.toInt())
+            g.fillRect(px - 24f, 690f, px + 24f, 700f, 0x55000000)
+            for (j in 0 until 3) {
+                val y = 470f + j * 55f
+                g.fillRoundRectGradient(px - 30f, y - 22f, px + 30f, y + 22f, 10f, Colors.lighter(pad, 0.25f), Colors.darker(pad, 0.6f))
+                g.fillRect(px - 26f, y - 18f, px - 18f, y + 14f, 0x33FFFFFF)
+            }
+        }
+        // ropes: dark underside, colour, a highlight along the top
+        for ((i, c) in listOf(0xFFE53935.toInt(), 0xFFF5F5F5.toInt(), 0xFF1E88E5.toInt()).withIndex()) {
+            val y = 470f + i * 55f
+            g.line(70f, y + 2f, w - 70f, y + 2f, 11f, Colors.darker(c, 0.45f))
+            g.line(70f, y, w - 70f, y, 8f, c)
+            g.line(70f, y - 2.5f, w - 70f, y - 2.5f, 2.5f, 0x88FFFFFF.toInt())
+        }
+        // ropes' shadow on the canvas
+        g.fillRect(0f, floorTop + 18f, w, floorTop + 30f, 0x14000000)
     }
 
     private fun bar(g: Gfx, r: Rect, frac: Float, color: Int, label: String) {
