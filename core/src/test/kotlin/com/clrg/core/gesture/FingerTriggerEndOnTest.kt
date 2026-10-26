@@ -156,7 +156,7 @@ class FingerTriggerEndOnTest {
 
     @Test
     fun debugTrace() {
-        if (System.getProperty("clrg.trackbench") == null) return
+        org.junit.jupiter.api.Assumptions.assumeTrue(System.getProperty("clrg.trackbench") != null, "developer trace: -Pclrg.trackbench=1")
         val cases = listOf(
             Quint("clicks 35/45", 35f, 45f, { t: Double -> clicks(t, 4) }, 0.05f, 109L, 6.5),
             Quint("small 35/45", 35f, 45f, { t: Double -> clicks(t, 4, up = 0.55f, down = 0.15f, warm = 2.0) }, 0.05f, 209L, 7.5),

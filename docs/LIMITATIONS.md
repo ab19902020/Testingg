@@ -98,6 +98,13 @@ device, though: the build environment had no Android device and no emulator, and
   may not be learned or followed (learning says so rather than guessing). Thin objects (a pencil-thin stick) are
   hard to see from 2-3 m. Strong colour changes in the room's light (a lamp switched on) can need re-learning.
   Tested on generated pictures only.
+* **Finger guns (1.9.0).** The thumb is now read flat on the picture and against each player's own thumb range,
+  because the old way (fixed limits in 3D) could never fire with a hand pointing at the camera when the hand
+  model's depth is squashed - measured on real hand-model landmarks turned to point at the camera, not on a camera.
+  Seen end-on, a finger gun and a fist with the thumb on top look alike, so a fist raising and dropping its thumb
+  can fire too; open hands and fists seen from the side cannot. A thumb drifting down very slowly can fire once it is
+  well down at some angles. The first shot may need a second or two of holding the gun up while the game learns
+  your thumb.
 * **Finger tracking** (shooting games, archery release, the Motion test) runs the MediaPipe hand landmark model on
   a crop around each player's gun hand. It was checked with the real model on real *still* photos of hands - also
   shrunk to about 70 pixels across, roughly a hand 2.5 m from a 720p camera - where pointing, a fist, a raised thumb

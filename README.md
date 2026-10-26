@@ -15,12 +15,11 @@ controlled with your body: lift a hand and hold it over a button. Real objects c
 racket or stick as your racket or club, a **toy gun** for the shooting games - right from a game's start screen.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
-> reports that versions up to 1.6.0 run on their phone and that 1.6.0 tracks better, "not perfect". On 1.8.0 the
-> owner reports that tracking got **worse than before** in every game they tried (bowling, skiing, archery): moves
-> missed and things triggering wrongly, at 2-3 m. 1.8.1 is the fix for that (below). It is tested with the real
-> pose models on still photos and with simulated bodies, but **has not been tried on the owner's phone yet**:
-> whether it brings tracking back to at least 1.7.0's level is only known once it has been played. See
-> [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
+> reports that versions up to 1.6.0 run on their phone. On 1.8.0 they found tracking worse than before (fixed in
+> 1.8.1), and on 1.8.1 that the finger gun does not see the thumb going down. 1.9.0 rebuilds the thumb trigger and
+> fixes faults found in the bow and the sleigh tuck. These are tested with the real hand model's landmarks of real
+> photos, turned to point at the camera, and with simulated bodies - **not yet on the owner's phone**: whether the
+> thumb is now seen in their room is only known once it has been played. See [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
 
 ## What's in the box
 
@@ -34,6 +33,40 @@ racket or stick as your racket or club, a **toy gun** for the shooting games - r
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.9.0 - the finger gun, rebuilt
+
+The owner: the gun games don't recognise the thumb going down; everything should react quickly without
+over-reacting. The gun is: one or two fingers pointing out, thumb up; thumb down shoots.
+
+* **Why the thumb was missed.** The old trigger used fixed limits measured on photos of hands seen from the side, in
+  3D, and also required a strict "index finger straight" shape. A finger gun points at the camera (seen end-on), where
+  the hand model's depth is at its least reliable: with depth squashed as such models do, a fully lowered thumb read
+  0.37-0.49 against a fire line of 0.33 - it could never fire - and the straight-index check failed too.
+* **The new trigger** reads the thumb flat on the picture, in hand widths, against the side of the fingers (one- or
+  two-finger gun), and learns each player's own thumb-up and thumb-down positions. Built like the pinch and
+  thumb-tap detection of headset hand tracking: a 0-100% scale with a wide gap between "ready" (above 70%) and "fire"
+  (below 30%), one quick movement (up to about 0.4 s), a 3-frame filter so one misread frame can't fire, and the shot
+  timed to when the thumb really dropped. Open hands, fists seen from the side and very fast-moving hands don't fire.
+* **Steadier hand crop** for a hand pointing at the camera (the crop the finger model sees no longer spins).
+* Measured on the real hand model's landmarks of a real photo, turned to point at the camera at 12 angles, with
+  squashed depth and frame-to-frame wobble - **not a camera**:
+
+  | Finger gun pointing at the camera | Up to 1.8.1 | 1.9.0 |
+  |---|---|---|
+  | One finger: thumb drops that fired | 33 of 48 | **48 of 48** |
+  | Two fingers: thumb drops that fired | 23 of 48 | **48 of 48** |
+  | Small thumb movements (half up, not fully down) | - | 47 of 48 |
+  | Shots with no thumb drop (held up, held down, twitches, misread frames, hand turning) | - | 0 |
+  | Wobble of the hand crop's direction | 10.3 deg | 3.6 deg |
+
+* **Archery:** pulling the string back quickly could fire an arrow by itself. Now a flick-back lets go only after
+  the draw has been held for a moment (as in real archery); opening the hand still lets go at once.
+* **Sleigh Slalom tuck** no longer flickers on and off when your hands are near the edge of "together", and survives
+  one wrist hiding behind the other for a moment.
+* **Motion test graph:** the new Graph button shows, live, what the game reads for a move (thumb, bowling hand,
+  lean and tuck, bow, swing) with the lines it has to cross and where it fired. A screenshot of it shows exactly why
+  a move did or didn't count - the quickest way to tune bowling and skiing to a real room.
 
 ## Changes in 1.8.1 - tracking fix
 

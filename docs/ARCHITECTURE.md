@@ -51,6 +51,16 @@ Camera buffers are sampled directly from YUV with the sensor rotation folded int
 full-frame rotated copy is made; mirroring is applied afterwards when converting to frame units. `FrameGeometry` converts to "frame units" (x in [0, aspect], y in [0, 1],
 mirrored if selected) which everything downstream uses.
 
+**Finger-gun trigger (1.9.0).** `HandShape.thumbLevel` is the thumb tip's distance on the picture from the side of
+the index finger's first bone and from the middle finger's middle joint (averaged), in hand widths (knuckle line or
+0.6 palm lengths) - flat, because a gun points at the camera and the model's depth is unreliable end-on.
+`FingerTrigger` puts it on a 0..1 scale between the player's learned thumb-down and thumb-up averages, cocks above 0.7
+(two frames), and fires below 0.3 if the thumb was at the top (0.75, judged on a 5-frame average) within the last
+0.4 s; the signal is a median of 3 frames, "open hand" and "may fire" are voted over frames, and the shot is stamped
+when the raw signal passed halfway. The design follows headset hand tracking (pinch strength with wide hysteresis;
+thumb taps recognised as one quick movement). For an end-on hand the crop's direction comes from the knuckle line
+and eases between frames (`HandLandmarkTracker.trackingRoi`).
+
 **Finger tracking (1.7.0).** `HandLandmarkTracker` runs the MediaPipe hand landmark model (224x224 crop, 21
 points with relative depth, presence score) on the hands that `GameApp` asks for (`Platform.setHandTracking`: per
 player, the gun hand every frame and the other hand every other frame, only while a game sets `usesFingers`). The
