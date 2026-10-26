@@ -57,8 +57,8 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
         val INFO = GameInfo(
             id = "gallery", title = "Shooting Gallery", tagline = "Ducks, bottles, balloons - bang!",
             howTo = listOf(
-                "Make a finger gun and point it at the TV - your crosshair follows your hand.",
-                "Raise your thumb, then drop it to fire (toy gun: flick it up). First shot: the bullseye sets your aim.",
+                "Point one or two fingers at the TV, thumb up - your crosshair follows your hand.",
+                "Drop your thumb to fire, raise it again for the next shot (toy gun: flick it up). First shot sets your aim.",
                 "Ducks and balloons 1 point, bottles 2, the gold star 5. Whoever hits a target first gets it.",
                 "Six shots, then a quick reload. Most points in 60 seconds wins!",
             ),

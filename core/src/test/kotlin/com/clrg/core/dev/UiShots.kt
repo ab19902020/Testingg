@@ -95,6 +95,14 @@ class UiShots {
         shot("settings_motion")
         tap("motionLab")
         shot("motion_test", 30)
+        // the live graph: bowling, then lean + tuck (simulated moves)
+        tap("labScope"); tap("labScope")
+        seconds(0.5f); app.sim.trigger(0, SimAction.BOWL); seconds(1.2f); app.sim.trigger(1, SimAction.BOWL); seconds(1.5f)
+        shot("motion_scope_bowl", 1)
+        tap("labScope")
+        app.sim.trigger(0, SimAction.LEAN_LEFT); seconds(1.0f); app.sim.trigger(0, SimAction.TUCK); app.sim.trigger(1, SimAction.LEAN_RIGHT); seconds(1.5f)
+        shot("motion_scope_lean", 1)
+        repeat(4) { tap("labScope") }
         // with the camera figures a phone would show (sample numbers for the layout, not measurements)
         app.settings.simulatedInput = false
         platform.perfSnapshot = com.clrg.core.app.PerfSnapshot(cameraFps = 30f, inferenceFps = 17f, inferenceMs = 41f, delegate = "GPU",

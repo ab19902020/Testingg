@@ -46,6 +46,25 @@ class BowTest {
         assertEquals(BowDetector.State.IDLE, r.controls[0].bow.state)
     }
 
+    /** Pulling the string back quickly is not letting go: the arrow flies only after the draw, from the anchor. */
+    @Test
+    fun aQuickDrawIsNotARelease() {
+        val r = Rig()
+        r.acquireAndLock()
+        // nock, then a brisk 0.25 s pull to full draw
+        nockAndDraw(r, sec = 0.25f)
+        r.seconds(0.15f)
+        assertEquals(0, releases(r).size, "a fast draw does not fire: ${releases(r)}")
+        assertEquals(BowDetector.State.DRAWING, r.controls[0].bow.state)
+        // a short anchor, then let go
+        r.seconds(0.25f)
+        r.seconds(0.08f) { t -> pose(r, 0.5f + 0.4f * (t / 0.08).toFloat(), 0.25f + 0.05f * (t / 0.08).toFloat()) }
+        r.seconds(0.3f)
+        val rel = releases(r)
+        assertEquals(1, rel.size, "released once, after the anchor: $rel")
+        assertTrue(rel[0].power > 0.8f, "full power ${rel[0].power}")
+    }
+
     @Test
     fun openingTheFingersReleases() {
         val r = Rig()

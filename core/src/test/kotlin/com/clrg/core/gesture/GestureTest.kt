@@ -8,6 +8,7 @@ import com.clrg.core.tracking.Hand
 import com.clrg.core.tracking.MovementMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -146,6 +147,27 @@ class GestureTest {
         r.clearEvents()
         r.seconds(0.4f) { t -> r.p1.setWrist(RIGHT, 0.3f, -0.8f + (t / 0.4).toFloat() * 0.75f) }
         assertEquals(1, r.count<GestureEvent.Bowl>(0))
+    }
+
+    /** Sleigh Slalom tuck: steady at the edge (no flicker), and a hand hiding the other wrist for a moment keeps it. */
+    @Test
+    fun tuckHoldsSteady() {
+        val r = Rig()
+        r.acquireAndLock()
+        r.seconds(0.4f) { r.p1.setWrist(LEFT, -0.2f, -0.35f); r.p1.setWrist(RIGHT, 0.2f, -0.35f) }
+        assertTrue(r.controls[0].tuck, "hands together in front: tuck")
+        // hands drifting around the old 0.6 edge (0.55-0.7 apart) stay tucked: no flicker
+        var flips = 0; var last = true
+        r.seconds(2f) { t -> val half = 0.31f + 0.04f * kotlin.math.sin(t * 9).toFloat(); r.p1.setWrist(LEFT, -half, -0.35f); r.p1.setWrist(RIGHT, half, -0.35f)
+            val now = r.controls[0].tuck; if (now != last) flips++; last = now }
+        assertEquals(0, flips, "no flicker")
+        // one wrist hidden for 0.15 s
+        r.seconds(0.15f) { r.p1.wristVisibility[RIGHT] = 0.05f }
+        assertTrue(r.controls[0].tuck, "a moment without the wrist keeps the tuck")
+        r.p1.wristVisibility[RIGHT] = Float.NaN
+        // arms clearly apart: no tuck
+        r.seconds(0.4f) { r.p1.setWrist(LEFT, -0.5f, -0.35f); r.p1.setWrist(RIGHT, 0.5f, -0.35f) }
+        assertFalse(r.controls[0].tuck, "hands apart")
     }
 
     @Test

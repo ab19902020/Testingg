@@ -70,8 +70,8 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         val INFO = GameInfo(
             id = "clays", title = "Clay Shooting", tagline = "Pull! Shoot them out of the sky",
             howTo = listOf(
-                "Make a finger gun and point it at the TV - your crosshair follows your hand.",
-                "Raise your thumb, then drop it to fire. Holding a toy gun? Flick it up to fire.",
+                "Point one or two fingers at the TV, thumb up - your crosshair follows your hand.",
+                "Drop your thumb to fire, raise it again for the next shot. Holding a toy gun? Flick it up to fire.",
                 "First shot of the game: hit the target in the middle (that sets your aim).",
                 "Each clay goes to whoever hits it first. Gold clays are worth 3. Two shells, quick reload.",
             ),

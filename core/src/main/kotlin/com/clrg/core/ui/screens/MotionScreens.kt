@@ -199,6 +199,22 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
     private val punches = IntArray(2)
     private val arrows = IntArray(2)
 
+    /**
+     * Live graph of one move's signal for both players over the last few seconds, with the lines it has to cross and
+     * a mark where the move fired: shows what the game reads from you (and a screenshot of it says what to tune).
+     */
+    private enum class Scope(val label: String) {
+        OFF("Graph: off"), THUMB("Graph: thumb"), BOWL("Graph: bowling"), LEAN("Graph: lean + tuck"), BOW("Graph: bow"), SWING("Graph: swing")
+    }
+    private var scope = Scope.OFF
+    private var clock = 0.0
+    private val scopeT = DoubleArray(SCOPE_N)
+    /** Per player, per signal (thumb, lowest wrist, lean, bow draw, swing, tuck, bow release speed). */
+    private val scopeV = Array(2) { Array(7) { FloatArray(SCOPE_N) } }
+    private var scopeN = 0
+    private val marks = ArrayList<Mark>()
+    private class Mark(val t: Double, val player: Int, val kind: Scope, val label: String)
+
     override fun onEnter() {
         // follow the fingers too, so finger guns can be tried out here
         for (c in app.controls) { c.discardEvents(); c.swingBoost = 0f; c.wantFingers = true }
@@ -215,6 +231,8 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
         PreviewView.draw(g, app, view, showAreas = false, labels = true)
         for (k in 0..1) drawHeldOverlay(g, app, k, view)
         // camera and tracking speed
+        sampleScope(dt)
+        if (scope != Scope.OFF) drawScope(g, Rect(view.left + 12f, view.top + view.height * 0.4f, view.right - 12f, view.bottom - 12f))
         val p = app.platform.perf()
         val lines = if (app.settings.simulatedInput) listOf("Simulated input - not the camera") else listOf(
             "Camera %.0f fps  -  tracking %.0f per second, %.0f ms each  -  delay %s".format(p.cameraFps, p.inferenceFps, p.inferenceMs,
@@ -228,8 +246,12 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
         val warn = if (app.settings.simulatedInput) null else p.warning()
         val health = warn ?: if (p.inferenceFps > 0.5f) "Tracking keeps up" else null
         if (health != null) g.text(health, view.cx, y, ui.fit(g, health, 27f, view.width, true), if (warn != null) Colors.GOLD else Colors.GOOD, bold = true)
-        if (ui.button(g, "labHeld", Rect(view.left, 900f, view.cx - 10f, 1010f), "Use a real object", "stick, toy racket, noodle", accent = Colors.GOOD, size = 36f)) app.push(HeldObjectScreen(app))
-        if (ui.button(g, "labCheck", Rect(view.cx + 10f, 900f, view.right, 1010f), "Check left/right", accent = Colors.ICE, size = 36f)) {
+        val bw = (view.width - 40f) / 3f
+        if (ui.button(g, "labScope", Rect(view.left, 900f, view.left + bw, 1010f), scope.label, "tap or hold: next move", accent = Colors.GOLD, size = 32f)) {
+            scope = Scope.values()[(scope.ordinal + 1) % Scope.values().size]
+        }
+        if (ui.button(g, "labHeld", Rect(view.left + bw + 20f, 900f, view.left + 2 * bw + 20f, 1010f), "Use a real object", "stick, toy racket, noodle", accent = Colors.GOOD, size = 32f)) app.push(HeldObjectScreen(app))
+        if (ui.button(g, "labCheck", Rect(view.right - bw, 900f, view.right, 1010f), "Check left/right", accent = Colors.ICE, size = 32f)) {
             app.directionCheck.request(); app.notify("Raise a hand to start the left/right check")
         }
         // per player
@@ -247,10 +269,11 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
         for (e in events) {
             val side = if (e.hand == LEFT) "left" else "right"
             val text = when (e) {
-                is GestureEvent.Swing -> { swings[k]++; "SWING $side hand, seen by the " + when (ctl.lastSwingSource) { 0 -> "wrist"; 1 -> "elbow"; else -> "object" } }
-                is GestureEvent.Shot -> { shots[k]++; "BANG! $side hand - " + if (e.byThumb) "thumb dropped" else "recoil flick" }
+                is GestureEvent.Swing -> { swings[k]++; marks.add(Mark(clock, k, Scope.SWING, "swing")); "SWING $side hand, seen by the " + when (ctl.lastSwingSource) { 0 -> "wrist"; 1 -> "elbow"; else -> "object" } }
+                is GestureEvent.Shot -> { shots[k]++; marks.add(Mark(clock, k, Scope.THUMB, if (e.byThumb) "BANG" else "flick")); "BANG! $side hand - " + if (e.byThumb) "thumb dropped" else "recoil flick" }
                 is GestureEvent.Punch -> { punches[k]++; "PUNCH: ${e.kind.name.lowercase()} with the $side hand" }
-                is GestureEvent.Release -> { arrows[k]++; "ARROW let go - power %.0f%%".format(e.power * 100f) }
+                is GestureEvent.Release -> { arrows[k]++; marks.add(Mark(clock, k, Scope.BOW, "arrow")); "ARROW let go - power %.0f%%".format(e.power * 100f) }
+                is GestureEvent.Bowl -> { marks.add(Mark(clock, k, Scope.BOWL, "bowl")); "BOWL with the $side hand" }
                 else -> null
             } ?: continue
             flash[k] = 0f
@@ -288,10 +311,12 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
         val pointer = app.pointers[k]
         val gc = ctl.gunCtl
         val gh = gc.gunHand
+        val tr = gc.trigger[gh]
         val fingers = when {
             !gc.fingersSeen[0] && !gc.fingersSeen[1] -> "Fingers: not seen (hold a hand up towards the TV)"
-            gc.trigger[gh].gun -> "Finger gun in the ${if (gh == RIGHT) "right" else "left"} hand - thumb ${if (gc.trigger[gh].cocked) "UP (ready)" else "down"}"
-            else -> "Fingers seen - make a finger gun: index out, other fingers in"
+            tr.level.isNaN() -> "Fingers seen - point one or two fingers at the TV, thumb up"
+            else -> "${if (gh == RIGHT) "Right" else "Left"} hand: thumb ${"%.0f".format(tr.thumb01 * 100)}% up - " +
+                if (tr.cocked) "READY, drop the thumb to shoot" else "raise the thumb to get ready"
         }
         val info = listOf(
             fingers,
@@ -301,6 +326,113 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
             "Pointer: " + if (pointer.active) "pointing with the ${if (pointer.hand == RIGHT) "right" else "left"} hand" else if (pointer.visible) "lift your hand a little higher" else "hand down",
         )
         for (l in info) { if (y > r.bottom - 16f) break; g.text(l, r.left + 30f, y, ui.fit(g, l, 26f, r.width - 60f, false), app.theme.dim, Align.LEFT, bold = false); y += 33f }
+    }
+
+    /** Records this frame's value of every graphed signal for both players. */
+    private fun sampleScope(dt: Float) {
+        clock += dt
+        val i = scopeN % SCOPE_N
+        scopeT[i] = clock
+        for (k in 0..1) {
+            val ctl = app.controls[k]
+            val v = scopeV[k]
+            val seen = app.tracker.slots[k].isPlaying && ctl.hasPose
+            val gc = ctl.gunCtl
+            val tr = gc.trigger[gc.gunHand]
+            v[0][i] = if (!seen || tr.level.isNaN() || !gc.fingersSeen[gc.gunHand]) Float.NaN else tr.thumb01
+            val f = ctl.history.latest
+            // the bowling (playing) hand's height
+            val dom = if (ctl.calibration?.dominantHand == com.clrg.core.tracking.Hand.LEFT) LEFT else RIGHT
+            v[1][i] = if (!seen || f == null || f.wv[dom] <= 0.2f) Float.NaN else f.wy[dom]
+            v[2][i] = if (seen) ctl.lean else Float.NaN
+            v[3][i] = if (seen && ctl.bow.state != com.clrg.core.gesture.BowDetector.State.IDLE) ctl.bow.draw else if (seen) 0f else Float.NaN
+            v[4][i] = if (seen) ((maxOf(ctl.swingLevel[0], ctl.swingLevel[1])) / 1.5f).coerceIn(0f, 1.2f) else Float.NaN
+            v[5][i] = if (seen && ctl.tuck) 1f else 0f
+            v[6][i] = if (seen) ctl.bow.releaseSpeed01.coerceIn(0f, 1.5f) else Float.NaN
+        }
+        scopeN++
+        marks.removeAll { clock - it.t > SCOPE_SEC + 0.5 }
+    }
+
+    private fun drawScope(g: Gfx, r: Rect) {
+        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 16f, 0xD80B1A36.toInt())
+        val plot = Rect(r.left + 16f, r.top + 44f, r.right - 16f, r.bottom - 14f)
+        val tune = app.controls[0].tuning
+        // signal index, vertical range, the lines to cross (value, label, colour), and a title
+        val (idx, lo, hi) = when (scope) {
+            Scope.THUMB -> Triple(0, -0.05f, 1.1f)
+            Scope.BOWL -> Triple(1, -1.6f, 0.6f)
+            Scope.LEAN -> Triple(2, -1.2f, 1.2f)
+            Scope.BOW -> Triple(3, -0.05f, 1.3f)
+            else -> Triple(4, -0.05f, 1.25f)
+        }
+        val lines: List<Triple<Float, String, Int>> = when (scope) {
+            Scope.THUMB -> listOf(Triple(com.clrg.core.gesture.FingerTrigger.COCK_AT, "thumb up: ready", Colors.GOOD), Triple(com.clrg.core.gesture.FingerTrigger.FIRE_AT, "drop below: BANG", Colors.GOLD))
+            Scope.BOWL -> listOf(Triple(tune.bowlLowY, "swing the hand down below here...", Colors.ICE), Triple(tune.bowlReleaseY, "...then up past here quickly", Colors.GOLD))
+            Scope.LEAN -> listOf(Triple(1f, "full right", Colors.GOOD), Triple(0f, "straight", 0x88FFFFFF.toInt()), Triple(-1f, "full left", Colors.GOOD))
+            Scope.BOW -> listOf(Triple(1f, "full draw / let-go speed", Colors.GOLD))
+            else -> listOf(Triple(1f / 1.5f, "a swing counts above here", Colors.GOLD))
+        }
+        val title = when (scope) {
+            Scope.THUMB -> "Thumb of the gun hand (0 = down, 100% = up), last 4 s"
+            Scope.BOWL -> "Height of the bowling hand (body units), last 4 s"
+            Scope.LEAN -> "Lean (bar along the bottom: tuck), last 4 s"
+            Scope.BOW -> "Bow draw (solid) and drawing-hand speed (thin), last 4 s"
+            else -> "Swing strength of the faster hand, last 4 s"
+        }
+        g.text(title, r.left + 20f, r.top + 24f, 26f, Colors.WHITE, Align.LEFT)
+        fun yOf(v: Float) = plot.bottom - (v - lo) / (hi - lo) * plot.height
+        for ((v, label, col) in lines) {
+            val y = yOf(v)
+            g.line(plot.left, y, plot.right, y, 3f, col)
+            g.text(label, plot.right - 8f, y - 14f, 22f, col, Align.RIGHT, bold = false)
+        }
+        val n = minOf(scopeN, SCOPE_N)
+        fun xOf(t: Double) = plot.right - ((clock - t) / SCOPE_SEC).toFloat() * plot.width
+        val players = if (app.tracker.solo) 1 else 2
+        for (k in 0 until players) {
+            val col = app.playerColor(k)
+            // tuck bar (lean graph) and release speed (bow graph) underneath the main trace
+            if (scope == Scope.LEAN || scope == Scope.BOW) {
+                var px = Float.NaN; var py = Float.NaN
+                for (j in n - 1 downTo 0) {
+                    val i = (scopeN - 1 - j) % SCOPE_N
+                    if (clock - scopeT[i] > SCOPE_SEC) continue
+                    val x = xOf(scopeT[i])
+                    if (scope == Scope.LEAN) {
+                        if (scopeV[k][5][i] > 0.5f) g.fillRect(x - 2f, plot.bottom - 10f - k * 12f, x + 2f, plot.bottom - k * 12f, col)
+                    } else {
+                        val v = scopeV[k][6][i]
+                        val y = if (v.isNaN()) Float.NaN else yOf(v)
+                        if (!py.isNaN() && !y.isNaN()) g.line(px, py, x, y, 2f, (col and 0x00FFFFFF) or 0x99000000.toInt())
+                        px = x; py = y
+                    }
+                }
+            }
+            var px = Float.NaN; var py = Float.NaN
+            for (j in n - 1 downTo 0) {
+                val i = (scopeN - 1 - j) % SCOPE_N
+                if (clock - scopeT[i] > SCOPE_SEC) { px = Float.NaN; continue }
+                val v = scopeV[k][idx][i]
+                val x = xOf(scopeT[i])
+                val y = if (v.isNaN()) Float.NaN else yOf(v.coerceIn(lo, hi))
+                if (!py.isNaN() && !y.isNaN()) g.line(px, py, x, y, 4f, col)
+                px = x; py = y
+            }
+        }
+        for (m in marks) {
+            if (m.kind != scope || clock - m.t > SCOPE_SEC) continue
+            val x = xOf(m.t)
+            val col = app.playerColor(m.player)
+            g.line(x, plot.top, x, plot.bottom, 3f, col)
+            g.text(m.label, x + 6f, plot.top + 14f, 22f, col, Align.LEFT)
+        }
+        if (scope == Scope.THUMB && app.controls.none { it.wantFingers }) g.text("Finger tracking is off", r.cx, r.cy, 28f, Colors.WARN)
+    }
+
+    private companion object {
+        const val SCOPE_N = 360
+        const val SCOPE_SEC = 4.0
     }
 
     /** Distance between the wrists in body units (NaN unless both are seen well). */

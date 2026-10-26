@@ -7,7 +7,8 @@ import kotlin.math.hypot
  * Archery with your arms, facing the TV: the bow hand points at the TV (it aims, like a gun hand), the other hand
  * nocks an arrow by touching it, pulls back towards your face (how far = how much power) and lets go:
  *  - open the drawing hand (when the finger tracker can see it), or
- *  - let the drawing hand fly back (the natural follow-through of a release), or
+ *  - let the drawing hand fly back (the natural follow-through of a release) - after a moment at the anchor, as in
+ *    real archery, so pulling the string back briskly is not mistaken for letting go, or
  *  - for reduced-movement and seated players: hold a good draw still for a moment.
  * Bringing the hands back together without letting go puts the arrow down again.
  */
@@ -25,11 +26,15 @@ class BowDetector {
     private var togetherSec = 0f
     private var letDownSec = 0f
     private var holdSec = 0f
+    /** Time the drawn string has been held steady (the anchor) during this draw. */
+    private var anchorSec = 0f
     private var cooldownUntil = -1.0
     private var lastT = Double.NaN
     private var lastDX = 0f
     private var lastDY = 0f
     private var drawSpeed = 0f
+    /** How fast the drawing hand is moving, as a fraction of the speed that counts as letting go (for the graph). */
+    val releaseSpeed01: Float get() = drawSpeed / FLICK_V
     private var peakDraw = 0f
     private var wasClosed = false
     private val shape = HandShape()
@@ -74,7 +79,7 @@ class BowDetector {
             }
             State.NOCKED -> {
                 if (!raised) { state = State.IDLE; return }
-                if (draw > 0.12f) { state = State.DRAWING; holdSec = 0f; letDownSec = 0f }
+                if (draw > 0.12f) { state = State.DRAWING; holdSec = 0f; letDownSec = 0f; anchorSec = 0f }
             }
             State.DRAWING -> {
                 peakDraw = maxOf(peakDraw, draw)
@@ -83,8 +88,9 @@ class BowDetector {
                 letDownSec = if (draw < 0.05f) letDownSec + dt else 0f
                 if (letDownSec > 0.3f || !raised) { state = if (raised) State.NOCKED else State.IDLE; return }
                 holdSec = if (draw >= 0.6f && drawSpeed < 0.6f) holdSec + dt else 0f
+                if (draw >= 0.25f && drawSpeed < ANCHOR_V * k) anchorSec += dt
                 val byFingers = wasClosed && fingersOpen && peakDraw > 0.2f
-                val byFlick = drawSpeed > FLICK_V * k && growing && peakDraw > 0.3f
+                val byFlick = drawSpeed > FLICK_V * k && growing && peakDraw > 0.3f && anchorSec >= ANCHOR_SEC
                 val byHold = gentle && holdSec >= HOLD_SEC
                 if (byFingers || byFlick || byHold) {
                     // the power is the draw held just before letting go (the flick itself pulls the hand further)
@@ -110,6 +116,9 @@ class BowDetector {
         /** Drawing hand flying back this fast (body units per second) is a release. */
         const val FLICK_V = 2.4f
         const val HOLD_SEC = 1.0f
+        /** Before a flick counts, the drawn string is held fairly still (slower than [ANCHOR_V]) this long. */
+        const val ANCHOR_SEC = 0.12f
+        const val ANCHOR_V = 1.0f
         const val DEPTH_W = 0.6f
     }
 }

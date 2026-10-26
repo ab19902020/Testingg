@@ -165,6 +165,9 @@ class PlayerControls(val playerIndex: Int) {
     val handsUp: Boolean get() = raise.handsUp
     var tuck = false
         private set
+    private var tuckUnseenSec = 0f
+    private var lastTuckT = Double.NaN
+    private fun dtTuck(t: Double) = if (lastTuckT.isNaN()) 0f else (t - lastTuckT).toFloat().coerceIn(0f, 0.25f)
     /** Hand positions in the player's reach space: (0,0) = shoulder centre, 1 = comfortable reach; y up. */
     val handX = FloatArray(2)
     val handY = FloatArray(2)
@@ -232,9 +235,19 @@ class PlayerControls(val playerIndex: Int) {
             handVisible[h] = frame.wv[h] > 0.3f
             pointX[h] = handX[h]; pointY[h] = handY[h]; pointSeen[h] = handVisible[h]
         }
-        tuck = frame.wv[0] > 0.3f && frame.wv[1] > 0.3f &&
-            hypot(frame.wx[0] - frame.wx[1], frame.wy[0] - frame.wy[1]) < 0.6f &&
-            frame.wy[0] in -1.0f..0.35f && frame.wy[1] in -1.0f..0.35f
+        // tuck: hands together in front of the body. Apart enough to switch it on, further to switch it off (no
+        // flicker at the edge), and a wrist hidden behind the other hand for a moment does not end it.
+        val bothSeen = frame.wv[0] > 0.3f && frame.wv[1] > 0.3f
+        if (bothSeen) {
+            val gap = hypot(frame.wx[0] - frame.wx[1], frame.wy[0] - frame.wy[1])
+            val inFront = frame.wy[0] in -1.0f..0.35f && frame.wy[1] in -1.0f..0.35f
+            tuck = inFront && gap < (if (tuck) TUCK_OFF else TUCK_ON)
+            tuckUnseenSec = 0f
+        } else if (tuck) {
+            tuckUnseenSec += dtTuck(frame.t)
+            if (tuckUnseenSec > 0.3f) tuck = false
+        }
+        lastTuckT = frame.t
     }
 
     /**
@@ -271,6 +284,9 @@ class PlayerControls(val playerIndex: Int) {
         const val LEAD_GAIN = 0.75f
         /** Largest forward shift of a joint (S units). */
         const val MAX_SHIFT = 0.35f
+        /** Tuck: hands closer than this (S units) to start, further apart than [TUCK_OFF] to stop. */
+        const val TUCK_ON = 0.55f
+        const val TUCK_OFF = 0.75f
     }
 
     private var propLost = 0f
