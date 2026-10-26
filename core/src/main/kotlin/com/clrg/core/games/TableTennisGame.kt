@@ -15,6 +15,8 @@ import com.clrg.core.render.Draw
 import com.clrg.core.render.Expression
 import com.clrg.core.render.Gfx
 import com.clrg.core.render.Prop
+import com.clrg.core.render.SportsDraw
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sin
 
@@ -95,27 +97,52 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
         screenW = g.width
         val w = g.width
         if (env.sporty) sportsHall(g, w, time) else christmasHall(g, w, time)
-        g.gradientRect(0f, 860f, w, g.height, if (env.sporty) 0xFFC8935A.toInt() else 0xFF6D4C41.toInt(), if (env.sporty) 0xFF8D5E2A.toInt() else 0xFF3E2723.toInt())
-        for (i in 0 until 16) g.line(i * w / 16f, 860f, i * w / 16f - 60f, g.height, 3f, 0x33000000)
-        if (env.sporty) g.line(0f, 950f, w, 950f, 5f, 0xAAFFFFFF.toInt())
+        g.gradientRect(0f, 860f, w, g.height, if (env.sporty) 0xFFB23A3A.toInt() else 0xFF6D4C41.toInt(), if (env.sporty) 0xFF6E1F24.toInt() else 0xFF3E2723.toInt())
+        if (env.sporty) {
+            g.line(0f, 950f, w, 950f, 5f, 0xAAFFFFFF.toInt())
+            g.fillRectRadial(0f, 860f, w, g.height, w / 2f, 900f, w * 0.45f, 0x33FFFFFF, 0x00FFFFFF)
+        } else for (i in 0 until 16) g.line(i * w / 16f, 860f, i * w / 16f - 60f, g.height, 3f, 0x33000000)
         tableAndLamp(g, w, inputs, time)
     }
 
-    /** Daylight sports hall: pale walls, high windows, banners. */
+    /** Tournament arena: floodlit roof truss, a crowd in the stands, glowing advertising boards and blue court surrounds. */
     private fun sportsHall(g: Gfx, w: Float, time: Double) {
-        g.gradientRect(0f, 0f, w, 860f, 0xFFE3E9F0.toInt(), 0xFFB9C5D3.toInt())
-        g.gradientRect(0f, 640f, w, 860f, 0xFF5C7A99.toInt(), 0xFF3F5A78.toInt())
-        for (i in 0 until 5) {
-            val wx = w * (0.1f + i * 0.2f)
-            g.fillRoundRect(wx - 110f, 120f, wx + 110f, 330f, 10f, 0xFFBFE3FF.toInt())
-            g.gradientRect(wx - 100f, 130f, wx + 100f, 320f, 0xFF7FB8EA.toInt(), 0xFFD6EEFF.toInt())
-            g.line(wx, 120f, wx, 330f, 6f, 0xFF90A4AE.toInt())
+        val t = time.toFloat()
+        g.gradientRect(0f, 0f, w, 860f, 0xFF0C1424.toInt(), 0xFF1B2A44.toInt())
+        // roof truss with floodlights
+        g.fillRect(0f, 128f, w, 136f, 0xFF39465C.toInt()); g.fillRect(0f, 176f, w, 184f, 0xFF39465C.toInt())
+        var tx = 0f
+        while (tx < w) { g.line(tx, 132f, tx + 40f, 180f, 4f, 0xFF39465C.toInt()); g.line(tx + 40f, 180f, tx + 80f, 132f, 4f, 0xFF39465C.toInt()); tx += 80f }
+        for (i in 0 until 6) {
+            val lx = w * (0.08f + i * 0.168f)
+            if (abs(lx - w / 2f) < 150f) continue
+            g.fillRoundRect(lx - 34f, 184f, lx + 34f, 214f, 8f, 0xFF263040.toInt())
+            g.glow(lx, 214f, 110f, 0x55FFF8E1)
+            g.fillOval(lx - 26f, 206f, lx + 26f, 220f, 0xFFFFFDE7.toInt())
+            val beam = floatArrayOf(lx - 26f, 214f, lx + 26f, 214f, lx + 150f, 860f, lx - 150f, 860f)
+            g.fillPolygonGradient(beam, 4, 214f, 860f, 0x14FFF8E1, 0x00FFF8E1)
         }
-        for (i in 0 until 3) {
-            val bx = w * (0.2f + i * 0.3f)
-            g.fillRect(bx - 120f, 400f, bx + 120f, 480f, if (i == 1) 0xFFE53935.toInt() else 0xFF1E88E5.toInt())
-            g.text(if (i == 1) "TABLE TENNIS" else "LRG CLUB", bx, 440f, 30f, Colors.WHITE)
+        // the stands
+        SportsDraw.crowd(g, 0f, w, 290f, 590f, time, rows = 4)
+        g.gradientRect(0f, 290f, w, 590f, 0x660C1424, 0x220C1424)
+        g.fillRect(0f, 586f, w, 592f, 0xFF90A4AE.toInt())
+        // advertising boards
+        g.fillRect(0f, 592f, w, 650f, 0xFF0A0F1A.toInt())
+        val ads = arrayOf("LRG OPEN", "TABLE TENNIS", "LIVING ROOM GAMES", "TABLE TENNIS")
+        val adCol = intArrayOf(0xFF4FC3F7.toInt(), 0xFFFFD54F.toInt(), 0xFFFF7043.toInt(), 0xFF81C784.toInt())
+        val panels = 4
+        for (i in 0 until panels) {
+            val l = i * w / panels; val r = l + w / panels
+            val c = adCol[i % adCol.size]
+            val pulse = 0.75f + 0.25f * sin(t * 1.5f + i)
+            g.gradientRect(l + 4f, 596f, r - 4f, 646f, Colors.withAlpha(Colors.darker(c, 0.35f), 0.9f), 0xFF0A0F1A.toInt())
+            g.text(ads[i], (l + r) / 2f, 621f, 30f, Colors.withAlpha(c, pulse))
         }
+        // court surrounds
+        g.gradientRect(0f, 650f, w, 860f, 0xFF1C3F94.toInt(), 0xFF112A66.toInt())
+        for (i in 0..10) { val x = i * w / 10f; g.fillRect(x - 2f, 650f, x + 2f, 860f, 0x33000000) }
+        g.fillRect(0f, 650f, w, 656f, 0x66FFFFFF)
+        for (i in 0 until 10) { val x = (i + 0.5f) * w / 10f; g.text("LRG", x, 760f, 44f, 0x22FFFFFF, bold = true) }
     }
 
     /** Cosy Christmas hall: warm wall, windows with snow, garlands. */
@@ -141,12 +168,20 @@ class TableTennisGame(env: GameEnv) : RallyGame(env) {
     private fun tableAndLamp(g: Gfx, w: Float, inputs: Array<PlayerInput>, time: Double) {
         // the lamp over the table
         val lampX = w / 2f
-        g.line(lampX, 0f, lampX, 170f, 4f, 0xFF2A1A20.toInt())
         Draw.spotBeam(g, lampX, 220f, lampX, tableY, (toScreenX(1f) - toScreenX(-1f)) * 1.1f, 0x22FFE7B0)
-        lampShade[0] = lampX - 110f; lampShade[1] = 225f; lampShade[2] = lampX + 110f; lampShade[3] = 225f; lampShade[4] = lampX + 40f; lampShade[5] = 170f; lampShade[6] = lampX - 40f; lampShade[7] = 170f
-        g.fillPolygonGradient(lampShade, 4, 170f, 225f, 0xFF2E7D32.toInt(), 0xFF1B4D20.toInt())
-        g.fillOval(lampX - 60f, 215f, lampX + 60f, 240f, 0xFFFFF3D6.toInt())
-        g.glow(lampX, 235f, 120f, 0x55FFE7B0)
+        if (env.sporty) {
+            // a broadcast light bar hanging from the truss
+            g.line(lampX - 120f, 184f, lampX - 120f, 210f, 4f, 0xFF39465C.toInt()); g.line(lampX + 120f, 184f, lampX + 120f, 210f, 4f, 0xFF39465C.toInt())
+            g.fillRoundRect(lampX - 170f, 206f, lampX + 170f, 232f, 10f, 0xFF263040.toInt())
+            for (i in -3..3) g.fillOval(lampX + i * 46f - 18f, 222f, lampX + i * 46f + 18f, 236f, 0xFFFFFDE7.toInt())
+            g.glow(lampX, 236f, 200f, 0x44FFF8E1)
+        } else {
+            g.line(lampX, 0f, lampX, 170f, 4f, 0xFF2A1A20.toInt())
+            lampShade[0] = lampX - 110f; lampShade[1] = 225f; lampShade[2] = lampX + 110f; lampShade[3] = 225f; lampShade[4] = lampX + 40f; lampShade[5] = 170f; lampShade[6] = lampX - 40f; lampShade[7] = 170f
+            g.fillPolygonGradient(lampShade, 4, 170f, 225f, 0xFF2E7D32.toInt(), 0xFF1B4D20.toInt())
+            g.fillOval(lampX - 60f, 215f, lampX + 60f, 240f, 0xFFFFF3D6.toInt())
+            g.glow(lampX, 235f, 120f, 0x55FFE7B0)
+        }
         Draw.lightPool(g, lampX, 905f, (toScreenX(1f) - toScreenX(-1f)) * 0.75f, 70f, 0x44FFE7B0)
         // table
         val l = toScreenX(-1f); val r = toScreenX(1f)

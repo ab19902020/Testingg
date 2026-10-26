@@ -21,6 +21,9 @@ import com.clrg.core.render.Gfx
 import com.clrg.core.render.Particles
 import com.clrg.core.render.SportsDraw
 import com.clrg.core.tracking.MovementMode
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
@@ -247,30 +250,21 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
     override fun render(g: Gfx, inputs: Array<PlayerInput>, time: Double) {
         screenW = g.width
         val ox = g.width / 2f; val oy = 540f
-        // back wall: deep red with gold stars
-        g.gradientRect(0f, 0f, g.width, g.height, 0xFF4A0E1E.toInt(), 0xFF2A0712.toInt())
-        for (i in 0 until 18) Draw.star(g, (i * 137f) % g.width, 180f + (i * 71f) % 300f, 10f, 0x55FFD54F, time.toFloat() * 0.3f + i)
-        // awning stripes and bulbs
-        for (i in 0 until 16) g.fillRect(i * g.width / 16f, 0f, (i + 1) * g.width / 16f, 120f, if (i % 2 == 0) 0xFFE53935.toInt() else Colors.WHITE)
-        for (i in 0 until 16) g.fillCircle((i + 0.5f) * g.width / 16f, 128f, 18f, if (i % 2 == 0) 0xFFE53935.toInt() else Colors.WHITE)
-        for (i in 0 until 24) {
-            val on = sin(time * 4 + i).toFloat() > 0f
-            g.fillCircle((i + 0.5f) * g.width / 24f, 158f, 7f, if (on) 0xFFFFF59D.toInt() else 0x66FFF59D)
-        }
-        // duck rails and water waves
+        val tf = time.toFloat()
+        // a fairground booth at night: painted backdrop, the duck rows between wooden waves, the shelf, then balloons
+        backdrop(g, tf)
         for ((i, ry) in rowY.withIndex()) {
-            val y = ry + oy + 52f
-            g.fillRect(0f, y, g.width, y + 26f, 0xFF1565C0.toInt())
-            for (w in 0 until 40) g.fillCircle(w * 60f + ((time * (60 + i * 30)) % 60).toFloat(), y, 18f, 0xFF1E88E5.toInt())
+            val y = ry + oy
+            wave(g, y + 4f, tf, i, front = false)
+            for (tg in targets) if (tg.kind == Kind.DUCK && tg.alive(playTime) && abs(tg.y(playTime) - ry) < 1f) drawTarget(g, tg, tg.x(playTime) + ox, y, time)
+            wave(g, y + 34f, tf, i, front = true)
         }
-        // bottle shelf
-        g.fillRect(0f, 270f + oy + 34f, g.width, 270f + oy + 58f, 0xFF6D4C41.toInt())
-        // targets (balloons behind, ducks and bottles, stars in front)
-        val order = listOf(Kind.BALLOON, Kind.BOTTLE, Kind.DUCK, Kind.STAR)
-        for (kind in order) for (tg in targets) if (tg.kind == kind && tg.alive(playTime)) drawTarget(g, tg, tg.x(playTime) + ox, tg.y(playTime) + oy, time)
-        // counter
-        g.gradientRect(0f, g.height - 150f, g.width, g.height, 0xFF8D6E63.toInt(), 0xFF5D4037.toInt())
-        g.fillRect(0f, g.height - 156f, g.width, g.height - 146f, Colors.GOLD)
+        shelf(g, 270f + oy + 34f)
+        // balloons float in front of everything, so they are never hidden while rising
+        for (tg in targets) if (tg.kind == Kind.BALLOON && tg.alive(playTime)) drawTarget(g, tg, tg.x(playTime) + ox, tg.y(playTime) + oy, time)
+        for (tg in targets) if (tg.kind == Kind.BOTTLE && tg.alive(playTime)) drawTarget(g, tg, tg.x(playTime) + ox, tg.y(playTime) + oy, time)
+        for (tg in targets) if (tg.kind == Kind.STAR && tg.alive(playTime)) drawTarget(g, tg, tg.x(playTime) + ox, tg.y(playTime) + oy, time)
+        boothFrame(g, tf)
         // intro bullseye
         if (playTime < INTRO_SEC && !(loaded[0] && loaded[1])) {
             for ((r, c) in listOf(110f to Colors.WHITE, 80f to 0xFFE53935.toInt(), 50f to Colors.WHITE, 22f to 0xFFE53935.toInt())) g.fillCircle(ox, oy, r, c)
@@ -302,16 +296,163 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
         Hud.topBar(g, env, points, Hud.formatTime(left), "Shooting Gallery", inputs)
     }
 
+    /** Painted night sky with a ferris wheel, tent tops and strings of lights. */
+    private fun backdrop(g: Gfx, t: Float) {
+        val w = g.width; val h = g.height
+        g.gradientRect(0f, 0f, w, h, 0xFF0E1640.toInt(), 0xFF3B1D58.toInt())
+        for (i in 0 until 60) {
+            val sx = (i * 197f + 53f) % w; val sy = 170f + (i * 113f) % 520f
+            val tw = 0.35f + 0.35f * sin(t * 2f + i * 1.7f)
+            g.fillCircle(sx, sy, 1.6f + (i % 3), Colors.withAlpha(Colors.WHITE, tw))
+        }
+        g.glow(w * 0.82f, 250f, 160f, 0x33FFF59D)
+        g.fillCircle(w * 0.82f, 250f, 52f, 0xFFFFF8E1.toInt())
+        g.fillCircle(w * 0.82f + 16f, 238f, 46f, 0xFF2A1B52.toInt()) // a crescent
+        // ferris wheel, slowly turning, lights on its rim
+        val fx = w * 0.16f; val fy = 430f; val fr = 230f
+        g.line(fx - 120f, fy + 330f, fx, fy, 10f, 0x553D3470); g.line(fx + 120f, fy + 330f, fx, fy, 10f, 0x553D3470)
+        g.strokeCircle(fx, fy, fr, 8f, 0x665E4B9A)
+        g.strokeCircle(fx, fy, fr * 0.55f, 4f, 0x445E4B9A)
+        for (i in 0 until 12) {
+            val a = t * 0.15f + i * (2f * PI.toFloat() / 12f)
+            g.line(fx, fy, fx + cos(a) * fr, fy + sin(a) * fr, 3f, 0x445E4B9A)
+            val gx = fx + cos(a) * fr; val gy = fy + sin(a) * fr
+            g.fillRoundRect(gx - 14f, gy + 6f, gx + 14f, gy + 30f, 6f, if (i % 3 == 0) 0x99E53935.toInt() else if (i % 3 == 1) 0x991E88E5.toInt() else 0x99FDD835.toInt())
+            val on = sin(t * 3f + i) > -0.2f
+            g.fillCircle(gx, gy, 6f, if (on) 0xFFFFF59D.toInt() else 0x55FFF59D)
+        }
+        // striped tent tops along the horizon
+        for ((cx, ht, wd) in listOf(Triple(w * 0.55f, 210f, 260f), Triple(w * 0.72f, 170f, 200f), Triple(w * 0.95f, 240f, 300f))) {
+            val base = 680f
+            for (sIdx in 0 until 8) {
+                val x0 = cx - wd / 2f + sIdx * wd / 8f; val x1 = x0 + wd / 8f
+                val pts = floatArrayOf(cx, base - ht, x0, base, x1, base)
+                g.fillPolygon(pts, 3, if (sIdx % 2 == 0) 0x88C62828.toInt() else 0x88ECEFF1.toInt())
+            }
+            g.fillCircle(cx, base - ht - 8f, 8f, 0xAAFFD54F.toInt())
+        }
+        g.gradientRect(0f, 700f, w, h, 0x00000000, 0xAA12082A.toInt())
+        // strings of lights hanging across
+        for (row in 0..1) {
+            val y0 = 200f + row * 70f
+            var px = -20f; var py = y0
+            for (i in 0..24) {
+                val x = i * w / 24f
+                val y = y0 + 34f * sin(PI.toFloat() * ((i % 6) / 6f))
+                if (i > 0) g.line(px, py, x, y, 2f, 0x88000000.toInt())
+                val c = when ((i + row) % 4) { 0 -> 0xFFFF5252.toInt(); 1 -> 0xFFFFEB3B.toInt(); 2 -> 0xFF69F0AE.toInt(); else -> 0xFF40C4FF.toInt() }
+                val lit = ((t * 4f).toInt() + i + row) % 3 != 0
+                if (lit) g.glow(x, y + 8f, 22f, Colors.withAlpha(c, 0.45f))
+                g.fillCircle(x, y + 8f, 7f, if (lit) c else Colors.withAlpha(c, 0.35f))
+                px = x; py = y
+            }
+        }
+    }
+
+    /** One wooden wave cut-out across the booth (the ducks ride between a back and a front one). */
+    private fun wave(g: Gfx, base: Float, t: Float, row: Int, front: Boolean) {
+        val w = g.width
+        val n = 49
+        val pts = FloatArray((n + 2) * 2)
+        val speed = (if (row == 0) 1.6f else -1.9f) * (if (front) 1f else 0.7f)
+        val phase = if (front) 0f else 1.5f
+        for (i in 0 until n) {
+            val x = i * w / (n - 1f)
+            pts[i * 2] = x
+            pts[i * 2 + 1] = base + 12f * sin(x / 70f + t * speed + phase) + 5f * sin(x / 23f + t * speed * 1.7f)
+        }
+        pts[n * 2] = w; pts[n * 2 + 1] = base + 70f
+        pts[n * 2 + 2] = 0f; pts[n * 2 + 3] = base + 70f
+        val top = if (front) 0xFF42A5F5.toInt() else 0xFF1E5AA8.toInt()
+        val bottom = if (front) 0xFF1565C0.toInt() else 0xFF0D2F6B.toInt()
+        g.fillPolygonGradient(pts, n + 2, base - 18f, base + 70f, top, bottom)
+        g.polyline(pts, n, 4f, if (front) 0xDDE3F2FD.toInt() else 0x8890CAF9.toInt())
+        if (front) g.fillRect(0f, base + 52f, w, base + 70f, 0xFF6D4C41.toInt()) // the wooden rail under the front wave
+    }
+
+    /** Wooden shelf for the bottles, on brackets. */
+    private fun shelf(g: Gfx, y: Float) {
+        val w = g.width
+        g.fillRect(0f, y + 24f, w, y + 34f, 0x55000000)
+        g.gradientRect(0f, y, w, y + 24f, 0xFFA1887F.toInt(), 0xFF6D4C41.toInt())
+        g.fillRect(0f, y, w, y + 3f, 0xFFD7CCC8.toInt())
+        for (i in 0 until 7) {
+            val bx = 160f + i * (w - 320f) / 6f
+            Draw.tri(g, bx - 18f, y + 24f, bx + 18f, y + 24f, bx, y + 64f, 0xFF5D4037.toInt())
+        }
+    }
+
+    /** The booth itself: striped valance with scallops and chasing bulbs, barber-pole posts, the counter and prizes. */
+    private fun boothFrame(g: Gfx, t: Float) {
+        val w = g.width; val h = g.height
+        // posts
+        for (side in 0..1) {
+            val l = if (side == 0) 0f else w - 56f
+            g.save(); g.clipRect(l, 150f, l + 56f, h - 150f)
+            g.gradientRect(l, 150f, l + 56f, h - 150f, 0xFFF5F5F5.toInt(), 0xFFD7CCC8.toInt())
+            var yy = 110f - (t * 30f) % 80f
+            while (yy < h) { g.line(l - 10f, yy, l + 66f, yy + 46f, 18f, 0xFFD32F2F.toInt()); yy += 80f }
+            g.restore()
+            g.fillRect(if (side == 0) l + 52f else l, 150f, if (side == 0) l + 56f else l + 4f, h - 150f, 0x55000000)
+        }
+        // valance: stripes, gold trim, scalloped edge, chasing bulbs
+        val n = 16
+        for (i in 0 until n) g.fillRect(i * w / n, 0f, (i + 1) * w / n, 150f, if (i % 2 == 0) 0xFFD32F2F.toInt() else 0xFFFAFAFA.toInt())
+        g.gradientRect(0f, 60f, w, 150f, 0x00000000, 0x33000000)
+        for (i in 0 until n) g.fillPie((i + 0.5f) * w / n, 150f, w / n / 2f, 0f, PI.toFloat(), if (i % 2 == 0) 0xFFD32F2F.toInt() else 0xFFFAFAFA.toInt())
+        g.fillRect(0f, 146f, w, 152f, Colors.GOLD)
+        for (i in 0 until 32) {
+            val x = (i + 0.5f) * w / 32f
+            val lit = ((t * 6f).toInt() - i).mod(4) == 0
+            if (lit) g.glow(x, 112f, 26f, 0x88FFF59D.toInt())
+            g.fillCircle(x, 112f, 8f, if (lit) 0xFFFFFDE7.toInt() else 0xFFFFE082.toInt())
+        }
+        // counter: wooden top with a gold lip, red-and-yellow front boards
+        g.gradientRect(0f, h - 150f, w, h - 120f, 0xFFA1887F.toInt(), 0xFF795548.toInt())
+        g.fillRect(0f, h - 156f, w, h - 148f, Colors.GOLD)
+        val boards = 12
+        for (i in 0 until boards) {
+            val l = i * w / boards
+            g.gradientRect(l, h - 120f, l + w / boards, h, if (i % 2 == 0) 0xFFC62828.toInt() else 0xFFF9A825.toInt(), if (i % 2 == 0) 0xFF8E1B1B.toInt() else 0xFFC17900.toInt())
+            g.fillRect(l, h - 120f, l + 3f, h, 0x44000000)
+        }
+        // prizes on the counter: a teddy at each end, clear of the bottles
+        for (side in 0..1) {
+            val x = if (side == 0) 140f else w - 140f
+            val y = h - 150f
+            val fur = if (side == 0) 0xFFBCAAA4.toInt() else 0xFFF48FB1.toInt()
+            g.fillOval(x - 40f, y - 66f, x + 40f, y, fur)
+            g.fillCircle(x, y - 92f, 32f, fur)
+            g.fillCircle(x - 26f, y - 118f, 13f, fur); g.fillCircle(x + 26f, y - 118f, 13f, fur)
+            g.fillOval(x - 14f, y - 88f, x + 14f, y - 68f, 0xFFFFF3E0.toInt())
+            g.fillCircle(x - 11f, y - 98f, 4f, Colors.BLACK); g.fillCircle(x + 11f, y - 98f, 4f, Colors.BLACK)
+            g.fillCircle(x, y - 84f, 4f, 0xFF4E342E.toInt())
+            g.fillRoundRect(x - 22f, y - 62f, x + 22f, y - 52f, 5f, if (side == 0) 0xFF1E88E5.toInt() else 0xFF8E24AA.toInt())
+        }
+    }
+
     private fun drawTarget(g: Gfx, tg: Target, x: Float, y: Float, time: Double) {
         when (tg.kind) {
             Kind.DUCK -> {
                 val dir = if (tg.vx >= 0) 1f else -1f
-                g.fillOval(x - 46f, y - 20f, x + 46f, y + 30f, Colors.GOLD)
-                g.fillCircle(x + dir * 30f, y - 34f, 24f, Colors.GOLD)
-                g.fillCircle(x + dir * 38f, y - 40f, 5f, Colors.BLACK)
-                Draw.tri(g, x + dir * 50f, y - 38f, x + dir * 50f, y - 26f, x + dir * 70f, y - 32f, 0xFFFF8F00.toInt())
-                g.fillCircle(x, y + 2f, 16f, Colors.WHITE); g.fillCircle(x, y + 2f, 10f, 0xFFE53935.toInt())
-                g.fillRect(x - 4f, y + 30f, x + 4f, y + 52f, 0xFF5D4037.toInt())
+                val yy = y + 4f * sin(time.toFloat() * 5f + tg.id)
+                g.fillRect(x - 4f, yy + 28f, x + 4f, yy + 60f, 0xFF5D4037.toInt())
+                // body with a shaded underside, a wing and a tail flick
+                Draw.tri(g, x - dir * 44f, yy - 4f, x - dir * 70f, yy - 26f, x - dir * 50f, yy + 12f, 0xFFFFB300.toInt())
+                g.fillOval(x - 50f, yy - 22f, x + 50f, yy + 32f, 0xFFFFC107.toInt())
+                g.fillOval(x - 46f, yy + 4f, x + 46f, yy + 32f, 0xFFFFA000.toInt())
+                g.fillOval(x - dir * 34f - 22f, yy - 12f, x - dir * 34f + 22f, yy + 14f, 0xFFFFB300.toInt())
+                g.fillOval(x - 30f, yy - 18f, x + 10f, yy - 6f, 0x66FFFFFF)
+                // head, eye with a glint, beak
+                g.fillCircle(x + dir * 32f, yy - 38f, 26f, 0xFFFFC107.toInt())
+                g.fillCircle(x + dir * 24f, yy - 48f, 9f, 0x55FFFFFF)
+                g.fillCircle(x + dir * 40f, yy - 44f, 7f, Colors.WHITE)
+                g.fillCircle(x + dir * 41f, yy - 44f, 4.5f, Colors.BLACK)
+                g.fillCircle(x + dir * 42.5f, yy - 46f, 1.6f, Colors.WHITE)
+                Draw.tri(g, x + dir * 54f, yy - 42f, x + dir * 54f, yy - 28f, x + dir * 78f, yy - 34f, 0xFFFF6F00.toInt())
+                // the target painted on its side
+                g.fillCircle(x + dir * 2f, yy + 4f, 17f, Colors.WHITE); g.fillCircle(x + dir * 2f, yy + 4f, 11f, 0xFFE53935.toInt())
+                g.fillCircle(x + dir * 2f, yy + 4f, 4f, Colors.WHITE)
             }
             Kind.BOTTLE -> {
                 val wob = sin(time.toFloat() * 6f + tg.id) * 0.06f
