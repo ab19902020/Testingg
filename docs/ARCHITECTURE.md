@@ -171,6 +171,19 @@ on/off hysteresis (on above -0.58 reach, off below -0.68), a One Euro filter in 
 zone, a 0.3 s hold through lost hands, and hand switching only when the other hand is clearly higher. `Ui` keeps a
 slipping cursor's ring for 0.35 s and moves it to a new button after 0.12 s there.
 
+**Menu control (1.10.0).** `MenuControl` (in `GameApp`) decides who steers the menus: slot 0 (Player 1, the red
+area) after a wave - three changes of direction of a raised hand (above -0.35 reach), each a swing of at least 0.09
+reach and within 0.9 s of the last. It releases after 12 s with no hand above the pointer's off line or 2 s without
+Player 1 tracked. `GameApp.updateCursors` gives cursor 0 to Player 1 only when the screen does not need a wave
+(`Screen.needsWave`, off for a golfer aiming) or control is engaged; cursor 1 only on screens with
+`Screen.secondPointer` (none at present). Simulated input and the left/right check grant control.
+`GameApp.drawControlPrompt` draws the "wave to take control" pill.
+
+**Steady-hold dwell (1.10.0).** Each `HandCursor` keeps its last 16 positions; its speed is measured over the last
+0.15 s (tracking jitter averages out, a real move does not). Below 380 px/s the cursor is steady: the ring fills and
+buttons attract it (32 px, sticky to 36 px). Moving, the ring drains at 2.5x the fill rate, there is no magnetism and
+no slip grace. The pointer's One Euro filter opens up sooner (min cutoff 1.4 Hz, beta 0.006).
+
 **Finger gun, flick, punches, bow (1.7.0).**
 * `HandShape` measures each finger's bend at the middle joint and reach from the wrist in 3D (scale- and
   rotation-free), and the thumb tip's distance from the side of the index finger in palm lengths. A gun = index out,
@@ -281,9 +294,9 @@ landmarks) -> `BodyFrame.obj*` -> `AvatarPose.propAngle` (drawn rackets and bats
 ## UI (`core/ui`)
 
 Immediate-mode UI on a virtual 1080-unit-high canvas (width follows the screen's aspect ratio). Input: touch,
-D-pad/keyboard focus, and two hands-free dwell cursors (one per calibrated player). Dwell protection: full hold
-time, must leave a button before it can fire again, 0.8 s global lock after any selection, cursors off during
-live play.
+D-pad/keyboard focus, and hands-free dwell cursors (Player 1's after a wave on menus; see Menu control above).
+Dwell protection: full hold time held steady, must leave a button before it can fire again, 0.8 s global lock after
+any selection, cursors off during live play.
 
 ## Sound (`core/audio`)
 

@@ -11,21 +11,23 @@ on the main menu:
 
 Every game is two players at once (or one person against a computer opponent with **Play Solo**); golf is 1 to 4
 players taking turns. A **party tournament** rotates pairs and keeps a family scoreboard. Everything can be
-controlled with your body: lift a hand and hold it over a button. Real objects can be taught to the game - a toy
+controlled with your body: Player 1 (the red player) waves at the screen to take control of the menus, then lifts a
+hand and holds it still over a button. Real objects can be taught to the game - a toy
 racket or stick as your racket or club, a **toy gun** for the shooting games - right from a game's start screen.
 
 > **Status, plainly:** all automated tests pass and a signed debug APK has been built and verified. The owner
 > reports that versions up to 1.6.0 run on their phone. On 1.8.0 they found tracking worse than before (fixed in
-> 1.8.1), and on 1.8.1 that the finger gun does not see the thumb going down. 1.9.0 rebuilds the thumb trigger and
-> fixes faults found in the bow and the sleigh tuck. These are tested with the real hand model's landmarks of real
-> photos, turned to point at the camera, and with simulated bodies - **not yet on the owner's phone**: whether the
-> thumb is now seen in their room is only known once it has been played. See [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
+> 1.8.1), and on 1.8.1 that the finger gun does not see the thumb going down. 1.9.0 rebuilt the thumb trigger;
+> 1.10.0 changes how the menus are steered (Player 1 waves to take control; hold still to choose) and makes golf
+> accept a clasped grip. These are tested with simulated bodies and cursors (and, for the finger gun, the real hand
+> model's landmarks of real photos) - **not yet on the owner's phone**: whether they feel right in their room is only
+> known once played. See [docs/TEST_REPORT.md](docs/TEST_REPORT.md).
 
 ## What's in the box
 
 | | |
 |---|---|
-| APK | `dist/LivingRoomGames-debug.apk` (debug-signed, ~23.6 MB, arm64-v8a + x86_64), SHA-256 in `dist/SHA256SUMS` |
+| APK | `dist/LivingRoomGames-debug.apk` (debug-signed, ~23.7 MB, arm64-v8a + x86_64), SHA-256 in `dist/SHA256SUMS` |
 | Build guide + versions | [BUILDING.md](BUILDING.md) |
 | Install + TV setup | [docs/INSTALL_AND_TV_SETUP.md](docs/INSTALL_AND_TV_SETUP.md) |
 | Controls for every game | [docs/CONTROLS.md](docs/CONTROLS.md) |
@@ -33,6 +35,33 @@ racket or stick as your racket or club, a **toy gun** for the shooting games - r
 | Limitations + device compatibility | [docs/LIMITATIONS.md](docs/LIMITATIONS.md) |
 | How it works | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Licences | [LICENSES.md](LICENSES.md) |
+
+## Changes in 1.10.0 - Player 1 steers the menus, steadier choosing, golf grip
+
+The owner: only Player 1 (whoever is in the red position) should control the menus; it should say "wave at the
+screen" to take control; choosing happens too easily while the hand is just hovering, and the pointer is too slow to
+move away; golf wasn't picking up the swing; better graphics.
+
+* **Wave to take control.** Menus are steered by Player 1 only - the person in the red (left) player area. Until
+  they wave, a prompt says *"Player 1: wave at the screen to take control"* with a waving hand and a progress bar.
+  A wave is a hand at chest height or above moving side to side: three changes of direction, each a clear swing,
+  in quick succession (tracking jitter and an arm being lowered don't count). A chime confirms it. Control is kept
+  while Player 1 is in view; it is given up after about 12 s with both hands down or 2 s out of view, and taken back
+  with another wave. Player 2 no longer gets a menu pointer. Following the arrows of the left/right check also gives
+  control. The golfer choosing a club during their turn doesn't need to wave.
+* **Hold still to choose.** The gold ring now fills only while the pointer is held steady over a button, and empties
+  2.5 times faster than it fills as soon as the hand moves - so a hand passing over a button, or moving away from one
+  it didn't mean to choose, never selects it. A held hand's small tremble still counts as still. Buttons pull a
+  steady pointer in from a shorter distance (32 px instead of 60), and never pull a moving one.
+* **Quicker pointer.** The pointer's smoothing lets go sooner when the hand moves (it follows a deliberate movement
+  faster), while still damping jitter when the hand is held still.
+* **Golf grip.** Clasped hands often hide one wrist behind the other; the camera then barely sees it and the grip was
+  not recognised, so the swing never started. Now a hidden wrist placed right next to the visible one counts as the
+  grip. Tests also confirm a blurred downswing and a quick swing on a slow (15 pictures a second) camera still hit.
+  The Motion test graph has a new **golf** view: hands height, the grip and address, the backswing and the strike.
+* **Graphics:** the Shooting Gallery is now a fairground booth at night (striped awning with chasing bulbs, ferris
+  wheel, ducks riding between wooden waves, a wooden bottle shelf, prize teddies on the counter), and Table Tennis in
+  Sports mode is played in a floodlit arena with a crowd, advertising boards and court surrounds.
 
 ## Changes in 1.9.0 - the finger gun, rebuilt
 

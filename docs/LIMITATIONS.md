@@ -128,6 +128,12 @@ device, though: the build environment had no Android device and no emulator, and
   toy. A toy gun can hide the fingers, so fire with the recoil flick.
 * **Hand pointer**: each hand points from its own side; reaching the far left of the screen is easier with the
   left hand. The pointer box sizes are estimates, not tuned on a phone.
+* **Wave to take control (1.10.0)**: the wave thresholds (three side-to-side swings of about a tenth of an arm's
+  reach, each within 0.9 s) and the "hold still" speed (380 px/s) are set from simulated movements, not tuned in a
+  room. A very small or very slow wave may not register - wave a little wider. Only the person in the red (left)
+  area can take control; if Player 1 has left, Player 2 must move to the red side.
+* **Golf grip**: a clasped grip now counts when one wrist is hidden, but only if the body model still places the
+  hidden wrist next to the other; a wrist the model loses entirely still breaks the grip.
 
 ## Game and UI limitations
 

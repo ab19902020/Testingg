@@ -1,6 +1,6 @@
 # Test report
 
-Date: 2026-10-26 (version 1.9.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
+Date: 2026-10-26 (version 1.10.0). Environment: Linux cloud container, OpenJDK 21, Gradle 8.14.3. **No Android phone, emulator
 (no KVM) or TV was available here.** The only real-device evidence is the owner's reports that versions 1.0.1 to
 1.6.0 run on their phone, with their comments on how well tracking works (section 4). Everything else that needs a device is marked **UNVERIFIED**.
 
@@ -8,7 +8,7 @@ Date: 2026-10-26 (version 1.9.0). Environment: Linux cloud container, OpenJDK 21
 
 | Area | Result |
 |---|---|
-| Automated JVM tests | **221 passed, 0 failed, 8 skipped** (the skipped ones are developer tools: diagnostics, screenshots, a sound dump, the tracking benchmark, the hand-model probe and a trace) (`./gradlew :core:test` with the real-model environment configured) |
+| Automated JVM tests | **230 passed, 0 failed, 8 skipped** (the skipped ones are developer tools: diagnostics, screenshots, a sound dump, the tracking benchmark, the hand-model probe and a trace) (`./gradlew :core:test` with the real-model environment configured) |
 | Pose pipeline with the real BlazePose models (on still images, JVM) | **Passed** - matches official MediaPipe output |
 | Finger tracking with the real MediaPipe hand model (on still photos of hands, JVM) | **Passed** - finger shapes read correctly, also on hands shrunk to ~70 px; hands found from the body pose on a real two-person photo |
 | APK build, signature, contents | **Passed** - built, aligned, v2+v3 signed, verified |
@@ -25,6 +25,7 @@ Date: 2026-10-26 (version 1.9.0). Environment: Linux cloud container, OpenJDK 21
 | Tracking aids: dark-room search, brightened crops, jump guard, steadier crops (1.8.0) | Passed with the **real pose models on a real two-person photo turned into hard sequences** (noise, darkening, backlight, sway, lunges, jumps): better in most sequences, worse in one (section 1). A proxy for a camera: **not yet tried with a live camera** |
 | Tracking fix after the owner's report that 1.8.0 tracks worse (1.8.1) | Low-light boost rebuilt (no jump at a threshold, smoothed per player, lookup table) and checked on the JVM; real pose models on photo sequences: in normal light the default now tracks **identically to 1.7.0**, and dark rooms are still found. **Not yet tried on the owner's phone** - whether this is the whole cause is not known |
 | Finger-gun trigger rebuilt, steadier hand crop, archery anchor, steady tuck, Motion test graph (1.9.0) | Passed with the **real hand model's landmarks of a real photo turned to point at the camera** (12 angles, squashed depth, frame-to-frame wobble) and with simulated bodies; the real lite and full hand models read the thumb clearly on real photos shrunk to living-room size. **Not yet tried with a live camera** |
+| Player 1 waves to take control of the menus, hold-still selection, quicker pointer, golf grip with a hidden wrist, golf graph, gallery and arena graphics (1.10.0) | Passed in JVM tests with simulated bodies (whole app: two players, waves, raised hands, slow pointing), scripted cursor paths with jitter, and simulated golf swings at 30 and 15 pictures a second; screens rendered with Java2D and checked by eye. **Not yet tried with a live camera** |
 | On-device performance (fps, latency, thermal) | **UNVERIFIED** - no numbers measured; none are claimed |
 | TV output over USB-C/HDMI, Presentation mode, cable unplug | **UNVERIFIED** |
 | Audio output and latency | **UNVERIFIED** |
@@ -33,12 +34,36 @@ Important: the game tests drive the games with **scripted, simulated body input*
 scoring, gesture logic, identity logic, menus and flows work as programmed. They do **not** prove that real camera
 tracking works, how fast it is on a phone, or that the TV output works.
 
-## 1. Automated tests (229: 221 passed, 8 skipped)
+## 1. Automated tests (238: 230 passed, 8 skipped)
 
 Run: `./gradlew :core:test` with the real-model validation environment configured
 (`tools/pose-validation/run_real_model_tests.sh` sets it up). 13 of the tests use the real pose and hand models and are
 skipped without that environment. The 8 skipped tests are developer tools that run only when asked: two
 diagnostics, a sound dump, two screenshot tools, the tracking benchmark, the hand-model probe and a finger-gun trace.
+
+### Menus and golf grip (new in 1.10.0)
+
+The owner asked that only Player 1 (the red player) controls the menus after waving at the screen, that a hand
+hovering by accident should not choose, that the pointer should move away faster, and that golf should pick up the
+swing.
+
+* `MenuControlTest` (3 tests, the whole app with two simulated players): raised hands alone give no pointer; a wave
+  from the blue player gives no control and Player 2 never gets a menu pointer; a wave from the red player gives
+  control and a pointer; a short rest keeps control and about 12 s with hands down gives it up; raising a hand,
+  pointing around slowly and scratching the head are not a wave.
+* `UiDwellTest` (3 new tests, 10 in all): a cursor sweeping back and forth across a long button for 5 s never
+  selects it (the ring stays under 30%); a ring 2/3 full empties completely while the hand moves away over a quarter
+  of a second, nothing chosen; a held hand trembling by about 6 px every frame still selects. The other tests (hold
+  time, edges and wobble, the lock after a selection, two players) still pass.
+* `GolfSwingTest` (3 new tests): a clasped grip with one wrist barely seen (visibility 0.12) from the start addresses
+  and swings (it did not before the change - the test was checked failing first); a downswing lost to blur from
+  halfway down until just after impact is still struck at 30 and 15 pictures a second, with its power; a quick
+  downswing (0.12 s and 0.2 s) at 15 pictures a second is seen.
+* Screens: the "wave to take control" prompt, the golf graph, the new Shooting Gallery booth and the Table Tennis
+  arena were rendered with the screenshot tools and checked by eye.
+
+What this does not show: how big and how fast real people wave, how still a real hand is when held over a button,
+or how the clasped grip looks to the body model on the owner's camera. These need the phone.
 
 ### Finger guns, bow and tuck (new in 1.9.0)
 
@@ -437,13 +462,13 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Check | Result |
 |---|---|
-| File | `dist/LivingRoomGames-debug.apk`, 23,647,448 bytes, SHA-256 `ae7280fd7493a9321ffb335d4821a169372b8ade161623479492feff34719575` |
-| Package / version | `com.clrg.christmasgames` (unchanged, so it installs over earlier versions), versionCode 12, versionName 1.9.0, label "Living Room Games" |
+| File | `dist/LivingRoomGames-debug.apk`, 23,651,544 bytes, SHA-256 `1ca3601b4bdbef2046be9528a178b41647e1f347044f8179b7169513e0010e40` |
+| Package / version | `com.clrg.christmasgames` (unchanged, so it installs over earlier versions), versionCode 13, versionName 1.10.0, label "Living Room Games" |
 | SDK levels | minSdk 29 (Android 10), targetSdk 35 |
 | Signature | `apksigner verify --min-sdk-version 24`: APK Signature Scheme v2 and v3 verified, 1 signer (`CN=Android Debug`, certificate SHA-256 `af5122d7549be77841521095d8fb1cd74f0ddf5410a4a76286c93b377221836e`) |
 | Reproducibility | Two clean builds (`./gradlew clean :app:assembleDebugApk`) produced byte-identical APKs with the same debug key |
 | Alignment | `zipalign -p 4` |
-| Code | single `classes.dex`, 1,742 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
+| Code | single `classes.dex`, 1,744 classes (game, Android layer, TFLite Java API, Kotlin stdlib) |
 | Models | 5 `.tflite` files (4 pose + 1 hand landmark), stored uncompressed (memory-mappable); the build downloads and checks each against a SHA-256 |
 | Native libs | TFLite + GPU delegate for `arm64-v8a` and `x86_64` |
 | Permissions | `CAMERA` only. No `INTERNET` (enforced by the build) |
@@ -466,6 +491,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 | Ten complete games with instructions, countdown, scoring, results, rematch | Passed (scripted) | AllGamesTest, AppFlowTest |
 | Tournament pair rotation + persistent scores | Passed | AppFlowTest |
 | Hands-free dwell menus with accidental-activation protection | Passed (unit) / UNVERIFIED with real hands | UiDwellTest |
+| Only Player 1 steers the menus, after a wave | Passed (simulated bodies, whole app) / UNVERIFIED with real people | MenuControlTest |
 | Debug overlays (skeleton, performance) | Implemented / UNVERIFIED on device | Settings -> Developer |
 | Camera fps, inference latency, render fps, tracking-loss counters | Implemented (overlay) / no measurements yet | DevOverlay |
 | Camera keeps running while TV shows the game | Implemented / UNVERIFIED | DisplayRouter, GameRenderer |
@@ -485,6 +511,7 @@ Screens rendered by these tests (Java2D, simulated input, not device screenshots
 
 | Report | Version | Status |
 |---|---|---|
+| "Only player one can control the main menu screen ... anyone who's in the red player will be player one ... it should say wave at the screen to get full control ... it's selecting a bit too quickly if I'm not able to control it ... if it's hovering above something when I don't want it, I've got to move my hand and it's too slow at moving ... the golf game wasn't picking up my swing properly ... make the graphics even better" - owner | 1.9.0 | 1.10.0: Player 1 (red area) waves to take control and is the only one with a menu pointer; the ring fills only while the hand is held still and empties quickly when it moves; the pointer follows movement sooner; golf accepts a clasped grip with one wrist hidden (a likely reason the swing never started); golf graph in the Motion test; new Shooting Gallery and Table Tennis arena graphics. **Not yet confirmed on the phone.** |
 | "Motion tracking still not working on the gun game. It doesn't recognise my thumb going down to shoot ... very reactive, but doesn't overreact ... the gun should be your hand pointing out with your two fingers pointing out and your thumb up; when your thumb goes down, it shoots ... look how other games do it" - owner | 1.8.1 | Cause found: fixed 3D limits and a strict shape check that a gun pointing at the camera cannot pass. 1.9.0 rebuilds the trigger (flat measure, learned per player, wide on/off gap, quick-movement rule - as in headset hand tracking), steadies the hand crop, fixes a bow that fired during a quick draw and a flickering sleigh tuck, and adds a live graph to the Motion test. **Not yet confirmed on the phone.** |
 | "Motion tracking is not working at all really well with anything - bowling, skiing, archery, all doesn't work great" - owner; asked further: moves missed and wrong triggers, worse than before, standing 2-3 m away | 1.8.0 | Two faults found in 1.8.0's new low-light brightening (abrupt switching that can make the picture flicker; cost per frame), fixed in 1.8.1; the other new tracking aids are now off by default (Settings -> Motion -> Extra tracking aids), so in normal light 1.8.1 tracks as 1.7.0. The Motion test now shows whether the phone is holding tracking back. **Not yet confirmed on the phone.** |
 | "Improve the UI menu and game screens, make golf better, massive graphics improvement on every mini game, massive sound FX upgrade ... then more upgrades for the camera tracking, we need it flawless" - owner | 1.7.0 | 1.8.0 rebuilds the sound, menus and in-game screens, improves the graphics of the mini games, upgrades golf and adds tracking aids for dark rooms, backlight and players swapping tracks (section 1). Tracking was measured with the real models on photo sequences only; "flawless" cannot be shown without the phone. **Not yet confirmed on the phone.** |
@@ -572,6 +599,13 @@ overlay**. Record PASS/FAIL and the overlay numbers. Repeat key items on a secon
 25r. [ ] 1.9.0 finger gun: Motion test, Graph: thumb. Point one or two fingers at the TV from 2-3 m, thumb up: the
     trace sits near the top; drop the thumb: it falls below the lower line and "BANG" is marked. Note how far the
     trace moves and any misses or extra BANGs; screenshot it. Then Clay Shooting with two players.
+25t. [ ] 1.10.0 menus: stand on the red side, raise a hand - no pointer yet, the prompt says to wave; wave side to
+    side - the bar fills and a chime plays; then point and hold still over a card. Note how many waves it took, and
+    whether a wave was ever missed or a stray movement took control. Move across buttons and away from a half-filled
+    ring: nothing should be chosen. Check the blue player gets no pointer.
+25u. [ ] 1.10.0 golf: Motion test, Graph: golf. Clasp the hands as for a real club: the line should read "grip OK",
+    then "ready - swing!" after holding still low; swing back and through: a SHOT mark appears. Screenshot it,
+    especially when a swing is missed. Then play a hole.
 25s. [ ] 1.9.0 graphs for bowling and skiing: Graph: bowling while bowling a few times, Graph: lean + tuck while
     steering and tucking; screenshot each, especially when a move was missed or fired by itself.
 25q. [ ] 1.8.1: play bowling, Sleigh Slalom and archery as before; note whether moves are picked up and whether
