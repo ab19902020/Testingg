@@ -14,6 +14,7 @@ import com.clrg.core.render.Colors
 import com.clrg.core.render.Draw
 import com.clrg.core.render.Expression
 import com.clrg.core.render.Gfx
+import com.clrg.core.render.Scenery
 import com.clrg.core.render.Particles
 import com.clrg.core.tracking.MovementMode
 import kotlin.math.abs
@@ -309,29 +310,37 @@ class PresentCatchGame(env: GameEnv) : MiniGame(env) {
 
     private fun scenery(g: Gfx, k: Int, r: Rect, time: Double) {
         val full = Rect(r.left, 0f, r.right, g0h)
-        Draw.nightSky(g, full, time + k * 3)
+        Scenery.nightSky(g, "catch$k", Rect(r.left, 0f, r.right, 900f), time + k * 3)
         Draw.aurora(g, Rect(r.left, 0f, r.right, 520f), time + k * 5, 0.9f)
+        // the moon, a forest and a little village with lit windows, snowy hills (cached)
+        g.layer("catch$k.village", r.left, 150f, r.right, g0h, grain = 0.12f) { lg -> village(lg, k, r) }
+        if (!env.settings.reducedEffects) Draw.snowfall(g, full, time + k, 26)
+    }
+
+    private fun village(g: Gfx, k: Int, r: Rect) {
         Draw.moon(g, if (k == 0) r.left + 110f else r.right - 110f, 230f, 44f)
         Draw.pineRow(g, r.left, r.right, 930f, 0xFF0F2A2A.toInt(), 110f, 31 + k)
-        // a little village: snowy roofs and lit windows
         var i = 0
         var x = r.left + 30f
         while (x < r.right - 60f) {
             val w = 120f + (i * 37 % 50); val h = 70f + (i * 53 % 40)
             val base = 990f
             g.fillRect(x, base - h, x + w, base, 0xFF3E2A2A.toInt())
+            for (j in 0 until (h / 12f).toInt()) g.line(x, base - h + j * 12f + 6f, x + w, base - h + j * 12f + 6f, 1.5f, 0x22000000)
             pts[0] = x - 12f; pts[1] = base - h; pts[2] = x + w / 2f; pts[3] = base - h - 50f; pts[4] = x + w + 12f; pts[5] = base - h
             g.fillPolygon(pts, 3, 0xFF2B1B1B.toInt())
             pts[0] = x - 14f; pts[1] = base - h + 2f; pts[2] = x + w / 2f; pts[3] = base - h - 52f; pts[4] = x + w + 14f; pts[5] = base - h + 2f
             g.polyline(pts, 3, 10f, Colors.SNOW)
-            val lit = sin(time * 0.7 + i * 1.9) > -0.6
-            g.fillRect(x + w * 0.2f, base - h * 0.62f, x + w * 0.42f, base - h * 0.3f, if (lit) 0xFFFFD27A.toInt() else 0xFF5A4636.toInt())
-            g.fillRect(x + w * 0.58f, base - h * 0.62f, x + w * 0.8f, base - h * 0.3f, if (lit) 0xFFFFE0A0.toInt() else 0xFF5A4636.toInt())
-            if (lit) g.glow(x + w * 0.5f, base - h * 0.45f, w * 0.5f, 0x22FFC870)
+            g.fillRect(x + w * 0.2f, base - h * 0.62f, x + w * 0.42f, base - h * 0.3f, 0xFFFFD27A.toInt())
+            g.fillRect(x + w * 0.58f, base - h * 0.62f, x + w * 0.8f, base - h * 0.3f, 0xFFFFE0A0.toInt())
+            g.line(x + w * 0.31f, base - h * 0.62f, x + w * 0.31f, base - h * 0.3f, 2f, 0xFF3E2A2A.toInt())
+            g.line(x + w * 0.69f, base - h * 0.62f, x + w * 0.69f, base - h * 0.3f, 2f, 0xFF3E2A2A.toInt())
+            g.glow(x + w * 0.5f, base - h * 0.45f, w * 0.6f, 0x2AFFC870)
+            // chimney with a cap of snow
+            if (i % 2 == 0) { g.fillRect(x + w * 0.7f, base - h - 46f, x + w * 0.82f, base - h - 16f, 0xFF5D4037.toInt()); g.fillRect(x + w * 0.68f, base - h - 50f, x + w * 0.84f, base - h - 44f, Colors.SNOW) }
             x += w + 40f + (i * 29 % 30); i++
         }
         Draw.snowHills(g, Rect(r.left, 0f, r.right, g0h), 1000f)
-        if (!env.settings.reducedEffects) Draw.snowfall(g, full, time + k, 26)
     }
 
     private val g0h = 1080f

@@ -256,23 +256,33 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
         cam.lookAt(xs * 0.8f, ys - 7.5f, zAt(ys) + 3.0f + bounce, xs * 0.45f, ys + 14f, zAt(ys + 14f) + 0.2f)
         // sky, low sun glow and mountains
         val hz = cam.horizonY()
-        g.gradientRect(r.left, r.top, r.right, hz + 10f, 0xFF7FB2E5.toInt(), 0xFFE9F0FA.toInt())
-        g.glow(r.left + r.width * 0.72f, hz - 70f, 260f, 0x55FFE3B3)
-        val mt = FloatArray(2 * 12)
-        for (layer in 0..1) {
-            val base = hz + 6f
-            val amp = if (layer == 0) 150f else 90f
-            for (i in 0 until 10) {
-                val px = r.left - 40f + (r.width + 80f) * i / 9f
-                mt[i * 2] = px
-                mt[i * 2 + 1] = base - amp * (0.45f + 0.55f * hash01(i * 7 + layer * 31 + k * 0)) - (if (i % 2 == 0) 0f else amp * 0.25f)
-            }
-            mt[20] = r.right + 40f; mt[21] = base; mt[22] = r.left - 40f; mt[23] = base
-            g.fillPolygonGradient(mt, 12, base - amp, base, if (layer == 0) 0xFFB7C9E2.toInt() else 0xFF9DB4D3.toInt(), 0xFFDCE7F6.toInt())
-            if (layer == 0) for (i in 0 until 10 step 2) {
-                // snow caps
-                val px = mt[i * 2]; val py = mt[i * 2 + 1]
-                Draw.tri(g, px - 46f, py + 40f, px + 46f, py + 40f, px, py, 0xEEFFFFFF.toInt())
+        g.gradientRect(r.left, r.top, r.right, hz + 10f, 0xFF6FA6DE.toInt(), 0xFFE9F0FA.toInt())
+        // the mountains (one cached picture that moves with the horizon as the sleigh bounces)
+        g.layer("slalom.mtn$k", r.left, hz - 200f, r.right, hz + 12f, res = 0.6f, blur = 1.5f) { lg ->
+            lg.glow(r.left + r.width * 0.72f, hz - 70f, 260f, 0x55FFE3B3)
+            val mt = FloatArray(2 * 18)
+            for (layer in 0..1) {
+                val base = hz + 6f
+                val amp = if (layer == 0) 150f else 90f
+                val n = 16
+                for (i in 0 until n) {
+                    val px = r.left - 40f + (r.width + 80f) * i / (n - 1f)
+                    mt[i * 2] = px
+                    mt[i * 2 + 1] = base - amp * (0.45f + 0.55f * hash01(i * 7 + layer * 31)) - (if (i % 2 == 0) 0f else amp * 0.25f)
+                }
+                mt[n * 2] = r.right + 40f; mt[n * 2 + 1] = base; mt[n * 2 + 2] = r.left - 40f; mt[n * 2 + 3] = base
+                lg.fillPolygonGradient(mt, n + 2, base - amp, base, if (layer == 0) 0xFFB7C9E2.toInt() else 0xFF9DB4D3.toInt(), 0xFFDCE7F6.toInt())
+                if (layer == 0) for (i in 0 until n step 2) {
+                    // snow caps and the shaded side of each peak
+                    val px = mt[i * 2]; val py = mt[i * 2 + 1]
+                    Draw.tri(lg, px, py, px + 60f, base, px + 10f, base, 0x22526E96)
+                    Draw.tri(lg, px - 40f, py + 36f, px + 40f, py + 36f, px, py, 0xEEFFFFFF.toInt())
+                }
+                // a dark band of forest along the foot of the range
+                if (layer == 1) for (i in 0 until 60) {
+                    val tx = r.left + i * r.width / 59f
+                    Draw.tri(lg, tx - 9f, base + 4f, tx + 9f, base + 4f, tx, base - 18f - 10f * hash01(i * 3), 0xFF5D7F8F.toInt())
+                }
             }
         }
         // the slope, far to near, in strips
@@ -398,8 +408,10 @@ class SleighSlalomGame(env: GameEnv) : MiniGame(env) {
         when (o.kind) {
             10, Kind.TREE.ordinal -> {
                 val h = (if (o.kind == 10) o.s else 4.2f) * pxm
-                Draw.softShadow(g, bx + h * 0.12f, by, h * 0.32f, h * 0.06f, 0.3f)
-                Draw.pineTree(g, bx, by, h, fogMix(if (o.kind == 10) 0xFF2E7D4F.toInt() else 0xFF2F8A55.toInt(), d))
+                if (h > 40f) Draw.softShadow(g, bx + h * 0.12f, by, h * 0.32f, h * 0.06f, 0.3f)
+                // fog in a few steps, so each step is one cached tree picture
+                val dq = (kotlin.math.floor(d / 10f) * 10f + 5f)
+                Draw.pineSprite(g, bx, by, h, fogMix(if (o.kind == 10) 0xFF2E7D4F.toInt() else 0xFF2F8A55.toInt(), dq))
             }
             Kind.ROCK.ordinal -> {
                 val w = 1.4f * pxm

@@ -15,6 +15,7 @@ import com.clrg.core.render.Colors
 import com.clrg.core.render.Draw
 import com.clrg.core.render.Expression
 import com.clrg.core.render.Gfx
+import com.clrg.core.render.Scenery
 import com.clrg.core.render.Particles
 import com.clrg.core.tracking.MovementMode
 import kotlin.math.abs
@@ -215,15 +216,23 @@ class ReindeerRaceGame(env: GameEnv) : MiniGame(env) {
         val r = Rect(if (k == 0) 0f else screenW / 2f, 0f, if (k == 0) screenW / 2f else screenW, 1080f)
         g.save(); g.clipRect(r.left, r.top, r.right, r.bottom)
         val horizon = 360f
-        Draw.nightSky(g, Rect(r.left, 0f, r.right, horizon), time)
+        Scenery.nightSky(g, "reindeer$k", Rect(r.left, 0f, r.right, horizon + 10f), time)
         Draw.aurora(g, Rect(r.left, 0f, r.right, horizon), time, 0.7f)
-        // distant mountains
-        var mn = 0
-        for (i in 0..12) { val u = i / 12f; mpts[mn++] = r.left + r.width * u; mpts[mn++] = horizon - 70f - 60f * kotlin.math.abs(sin(u * 7.3f + k)) - 30f * sin(u * 17f) }
-        mpts[mn++] = r.right; mpts[mn++] = horizon; mpts[mn++] = r.left; mpts[mn++] = horizon
-        g.fillPolygonGradient(mpts, mn / 2, horizon - 160f, horizon, 0xFF3E5F8F.toInt(), 0xFF1D3A63.toInt())
-        Draw.pineRow(g, r.left, r.right, horizon + 6f, 0xFF173F33.toInt(), 90f, 21 + k)
-        g.gradientRect(r.left, horizon, r.right, r.bottom, 0xFFC7D9F0.toInt(), 0xFFF7FBFF.toInt())
+        // distant mountains, a pine forest and the snowfield (cached)
+        g.layer("reindeer$k.back", r.left, horizon - 200f, r.right, r.bottom, grain = 0.12f) { lg ->
+            var mn = 0
+            for (i in 0..24) { val u = i / 24f; mpts[mn++] = r.left + r.width * u; mpts[mn++] = horizon - 70f - 60f * kotlin.math.abs(sin(u * 7.3f + k)) - 30f * sin(u * 17f) }
+            mpts[mn++] = r.right; mpts[mn++] = horizon; mpts[mn++] = r.left; mpts[mn++] = horizon
+            lg.fillPolygonGradient(mpts, mn / 2, horizon - 160f, horizon, 0xFF3E5F8F.toInt(), 0xFF1D3A63.toInt())
+            for (i in 0..24) if (mpts[i * 2 + 1] < horizon - 110f) Draw.tri(lg, mpts[i * 2] - 22f, mpts[i * 2 + 1] + 20f, mpts[i * 2] + 22f, mpts[i * 2 + 1] + 20f, mpts[i * 2], mpts[i * 2 + 1], 0xCCDCE7F6.toInt())
+            Draw.pineRow(lg, r.left, r.right, horizon + 6f, 0xFF173F33.toInt(), 90f, 21 + k)
+            lg.gradientRect(r.left, horizon, r.right, r.bottom, 0xFFC7D9F0.toInt(), 0xFFF7FBFF.toInt())
+            // moonlit sparkle in the snow
+            for (i in 0 until 90) {
+                val x = r.left + Draw.hash01(i * 7 + k) * r.width; val y = horizon + 20f + Draw.hash01(i * 11 + 3).let { it * it } * (r.bottom - horizon)
+                lg.fillCircle(x, y, 1f + Draw.hash01(i) * 1.5f, 0xAAFFFFFF.toInt())
+            }
+        }
         val cx = r.cx
         val f = r.width * 0.55f
         val camH = 1.7f
@@ -273,7 +282,7 @@ class ReindeerRaceGame(env: GameEnv) : MiniGame(env) {
                 val s = f / z
                 for (side in intArrayOf(-1, 1)) {
                     val tx = sx(side * (3.4f + 0.8f * Draw.hash01((tz.toInt() * 7 + side))), z)
-                    items.add(z to { Draw.pineTree(g, tx, sy(z), 2.6f * s, 0xFF1F5A3F.toInt()) })
+                    items.add(z to { Draw.pineSprite(g, tx, sy(z), 2.6f * s, 0xFF1F5A3F.toInt()) })
                     // a cheering snow buddy now and then by the barrier
                     if (Draw.hash01(tz.toInt() * 13 + side * 5) > 0.55f) {
                         val fx = sx(side * 2.9f, z + 3f)
@@ -351,7 +360,7 @@ class ReindeerRaceGame(env: GameEnv) : MiniGame(env) {
         g.restore()
     }
 
-    private val mpts = FloatArray(40)
+    private val mpts = FloatArray(64)
 
     private val rpts = FloatArray(16)
 

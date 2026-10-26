@@ -18,6 +18,7 @@ import com.clrg.core.render.Colors
 import com.clrg.core.render.Draw
 import com.clrg.core.render.Expression
 import com.clrg.core.render.Gfx
+import com.clrg.core.render.Scenery
 import com.clrg.core.render.Particles
 import com.clrg.core.render.Prop
 import kotlin.math.abs
@@ -192,42 +193,24 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
     override fun render(g: Gfx, inputs: Array<PlayerInput>, time: Double) {
         screenW = g.width
         val w = g.width
-        Draw.nightSky(g, Rect(0f, 0f, w, g.height), time)
+        Scenery.nightSky(g, "snowball", Rect(0f, 0f, w, 700f), time)
         Draw.aurora(g, Rect(0f, 0f, w, 520f), time, 0.7f)
-        Draw.moon(g, w * 0.83f, 190f, 46f)
-        Draw.pineRow(g, -20f, w, 610f, 0xFF0F2E25.toInt(), 110f, 4)
-        // log cabin in the background: chimney smoke, glowing windows, light spilling onto the snow
-        val hx0 = w * 0.38f; val hx1 = w * 0.62f
-        g.fillRect(w * 0.555f, 250f, w * 0.585f, 330f, 0xFF5D4037.toInt())
+        // the log cabin and the forest behind it (cached); chimney smoke and fairy lights are live
+        g.layer("snowball.cabin", 0f, 120f, w, 700f, grain = 0.15f) { lg -> cabin(lg, w) }
         for (i in 0 until 6) {
             val k = ((time * 0.25 + i / 6.0) % 1.0).toFloat()
             g.glow(w * 0.57f + kotlin.math.sin(k * 6f + i) * 30f * k, 240f - k * 190f, 26f + 50f * k, Colors.withAlpha(0xFFB0BEC5.toInt(), 0.35f * (1f - k)))
         }
-        g.fillRoundRectGradient(hx0, 360f, hx1, 640f, 6f, 0xFF7B5446.toInt(), 0xFF3E2723.toInt())
-        for (i in 0 until 7) g.line(hx0 + 4f, 380f + i * 38f, hx1 - 4f, 380f + i * 38f, 4f, 0x33000000)
-        pts4[0] = w * 0.35f; pts4[1] = 370f; pts4[2] = w * 0.65f; pts4[3] = 370f; pts4[4] = w * 0.5f; pts4[5] = 230f
-        g.fillPolygonGradient(pts4, 3, 230f, 370f, 0xFF5D4037.toInt(), 0xFF2B1B16.toInt())
-        pts4[0] = w * 0.36f; pts4[1] = 372f; pts4[2] = w * 0.64f; pts4[3] = 372f; pts4[4] = w * 0.5f; pts4[5] = 245f
-        g.fillPolygonGradient(pts4, 3, 245f, 372f, Colors.WHITE, 0xFFC5D8F0.toInt())
-        Draw.lightPool(g, w * 0.5f, 660f, w * 0.2f, 40f, 0x55FFB74D)
-        for (i in 0..2) {
-            val wx = w * (0.42f + i * 0.08f)
-            if (i == 1) {
-                g.glow(wx, 560f, 90f, 0x44FFB74D)
-                g.fillRoundRectGradient(wx - 34f, 500f, wx + 34f, 640f, 6f, 0xFFFFE0A3.toInt(), 0xFFFFA94D.toInt())
-                g.fillRoundRect(wx - 30f, 504f, wx + 30f, 640f, 6f, 0x88542E1F.toInt())
-                g.fillCircle(wx + 18f, 575f, 5f, Colors.GOLD)
-                continue
-            }
-            g.glow(wx, 470f, 85f, 0x66FFB74D)
-            g.fillRoundRectGradient(wx - 35f, 430f, wx + 35f, 510f, 6f, 0xFFFFE6B0.toInt(), 0xFFFFA94D.toInt())
-            g.line(wx, 430f, wx, 510f, 4f, 0xFF4E342E.toInt()); g.line(wx - 35f, 470f, wx + 35f, 470f, 4f, 0xFF4E342E.toInt())
-            g.fillRoundRect(wx - 40f, 508f, wx + 40f, 518f, 4f, Colors.SNOW)
-        }
         Draw.stringLights(g, w * 0.36f, w * 0.64f, 378f, time, sag = 18f, spacing = 50f)
-        Draw.pineRow(g, 0f, w * 0.33f, 640f, 0xFF173F33.toInt(), 160f, 7)
-        Draw.pineRow(g, w * 0.67f, w, 640f, 0xFF173F33.toInt(), 160f, 9)
-        Draw.snowHills(g, Rect(0f, 0f, w, g.height), 690f)
+        g.layer("snowball.front", 0f, 420f, w, g.height, grain = 0.12f) { lg ->
+            Draw.pineRow(lg, 0f, w * 0.33f, 640f, 0xFF173F33.toInt(), 160f, 7)
+            Draw.pineRow(lg, w * 0.67f, w, 640f, 0xFF173F33.toInt(), 160f, 9)
+            Draw.snowHills(lg, Rect(0f, 0f, w, lg.height), 690f)
+            for (i in 0 until 80) {
+                val x = Draw.hash01(i * 7 + 3) * w; val y = 720f + Draw.hash01(i * 13 + 1) * 340f
+                lg.fillCircle(x, y, 1f + Draw.hash01(i) * 1.6f, 0xAAFFFFFF.toInt())
+            }
+        }
         Draw.snowfall(g, Rect(0f, 0f, w, g.height), time, 50)
         // fort areas
         for (k in 0..1) {
@@ -300,6 +283,54 @@ class SnowballGame(env: GameEnv) : MiniGame(env) {
 
     private val pts4 = FloatArray(8)
     private val idle = AvatarPose().apply { upper[0] = -2.3f; fore[0] = -2.0f; upper[1] = 0.4f; fore[1] = 1.6f; valid = true }
+
+    /** The log cabin with glowing windows, a snowy roof with icicles, and the forest behind it. */
+    private fun cabin(g: Gfx, w: Float) {
+        Draw.moon(g, w * 0.83f, 190f, 46f)
+        Draw.pineRow(g, -20f, w, 610f, 0xFF0F2E25.toInt(), 110f, 4)
+        val hx0 = w * 0.38f; val hx1 = w * 0.62f
+        g.fillRect(w * 0.555f, 250f, w * 0.585f, 330f, 0xFF5D4037.toInt())
+        for (i in 0 until 6) g.line(w * 0.555f, 258f + i * 12f, w * 0.585f, 258f + i * 12f, 2f, 0x33000000)
+        g.fillRect(w * 0.55f, 246f, w * 0.59f, 256f, Colors.SNOW)
+        // log walls: each log shaded round, with end grain at the corners
+        g.fillRoundRectGradient(hx0, 360f, hx1, 640f, 6f, 0xFF7B5446.toInt(), 0xFF3E2723.toInt())
+        for (i in 0 until 8) {
+            val y = 366f + i * 34f
+            g.fillRoundRectGradient(hx0, y, hx1, y + 32f, 14f, 0xFF8D6352.toInt(), 0xFF4E3229.toInt())
+            g.line(hx0 + 8f, y + 6f, hx1 - 8f, y + 6f, 2f, 0x22FFE0C0)
+            for (side in 0..1) { val ex = if (side == 0) hx0 + 6f else hx1 - 6f; g.fillCircle(ex, y + 16f, 14f, 0xFFB08868.toInt()); g.strokeCircle(ex, y + 16f, 8f, 1.5f, 0x55603A2A) }
+        }
+        pts4[0] = w * 0.35f; pts4[1] = 370f; pts4[2] = w * 0.65f; pts4[3] = 370f; pts4[4] = w * 0.5f; pts4[5] = 230f
+        g.fillPolygonGradient(pts4, 3, 230f, 370f, 0xFF5D4037.toInt(), 0xFF2B1B16.toInt())
+        pts4[0] = w * 0.36f; pts4[1] = 372f; pts4[2] = w * 0.64f; pts4[3] = 372f; pts4[4] = w * 0.5f; pts4[5] = 245f
+        g.fillPolygonGradient(pts4, 3, 245f, 372f, Colors.WHITE, 0xFFC5D8F0.toInt())
+        // icicles along the eaves
+        for (i in 0 until 26) {
+            val x = w * 0.36f + i * (w * 0.28f) / 25f
+            val l = 10f + 16f * Draw.hash01(i * 5 + 1)
+            Draw.tri(g, x - 4f, 372f, x + 4f, 372f, x, 372f + l, 0xCCE3F2FD.toInt())
+        }
+        Draw.lightPool(g, w * 0.5f, 660f, w * 0.2f, 40f, 0x55FFB74D)
+        for (i in 0..2) {
+            val wx = w * (0.42f + i * 0.08f)
+            if (i == 1) {
+                g.glow(wx, 560f, 90f, 0x44FFB74D)
+                g.fillRoundRectGradient(wx - 34f, 500f, wx + 34f, 640f, 6f, 0xFFFFE0A3.toInt(), 0xFFFFA94D.toInt())
+                g.fillRoundRect(wx - 30f, 504f, wx + 30f, 640f, 6f, 0x88542E1F.toInt())
+                g.fillCircle(wx + 18f, 575f, 5f, Colors.GOLD)
+                // a wreath on the door
+                g.strokeCircle(wx, 535f, 16f, 7f, 0xFF2E7D32.toInt())
+                g.fillCircle(wx, 552f, 4f, 0xFFE53935.toInt())
+                continue
+            }
+            g.glow(wx, 470f, 85f, 0x66FFB74D)
+            g.fillRoundRectGradient(wx - 35f, 430f, wx + 35f, 510f, 6f, 0xFFFFE6B0.toInt(), 0xFFFFA94D.toInt())
+            g.line(wx, 430f, wx, 510f, 4f, 0xFF4E342E.toInt()); g.line(wx - 35f, 470f, wx + 35f, 470f, 4f, 0xFF4E342E.toInt())
+            g.fillRoundRect(wx - 40f, 508f, wx + 40f, 518f, 4f, Colors.SNOW)
+            // warm light spilling onto the snow below
+            g.fillOval(wx - 70f, 645f, wx + 70f, 680f, 0x22FFB74D)
+        }
+    }
 
     override fun demo(g: Gfx, r: Rect, t: Double) {
         val phase = ((t % 2.0) / 2.0).toFloat()

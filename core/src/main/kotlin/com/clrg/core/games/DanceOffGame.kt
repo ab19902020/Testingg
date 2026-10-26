@@ -20,6 +20,7 @@ import com.clrg.core.render.Colors
 import com.clrg.core.render.Draw
 import com.clrg.core.render.Expression
 import com.clrg.core.render.Gfx
+import com.clrg.core.math.PI_F
 import com.clrg.core.render.Particles
 import com.clrg.core.tracking.MovementMode
 import kotlin.math.abs
@@ -222,16 +223,36 @@ class DanceOffGame(env: GameEnv) : MiniGame(env) {
         val beat = if (playTime > 0) beat() else 0f
         val frac = beat - floor(beat)
         val pulse = if (env.settings.reducedEffects) 0.2f else (1f - frac).coerceIn(0f, 1f)
-        g.gradientRect(0f, 0f, w, g.height, 0xFF2C1248.toInt(), 0xFF0B0716.toInt())
-        // stage curtains
-        for (side in 0..1) {
-            val x0 = if (side == 0) 0f else w - 150f
-            g.fillRectRadial(x0, 0f, x0 + 150f, 900f, if (side == 0) x0 + 150f else x0, 450f, 500f, 0xFFB71C1C.toInt(), 0xFF3E0710.toInt())
-            for (f in 0..4) g.line(x0 + 15f + f * 30f, 0f, x0 + 15f + f * 30f, 900f, 4f, 0x33000000)
+        // the stage: back wall, velvet curtains with folds, a valance, the mirror ball (cached)
+        g.layer("dance.stage", 0f, 0f, w, 900f, grain = 0.15f) { lg ->
+            lg.gradientRect(0f, 0f, w, 900f, 0xFF2C1248.toInt(), 0xFF120A22.toInt())
+            lg.fillRectRadial(0f, 200f, w, 900f, w / 2f, 700f, w * 0.5f, 0x33B388FF, 0x00B388FF)
+            for (side in 0..1) {
+                val x0 = if (side == 0) 0f else w - 170f
+                lg.fillRectRadial(x0, 0f, x0 + 170f, 900f, if (side == 0) x0 + 170f else x0, 450f, 520f, 0xFFC62828.toInt(), 0xFF3E0710.toInt())
+                for (f in 0..6) {
+                    val fx = x0 + 12f + f * 25f
+                    lg.line(fx, 0f, fx + 6f * sin(f * 1.3f), 900f, 8f, 0x2A000000)
+                    lg.line(fx + 6f, 0f, fx + 8f + 6f * sin(f * 1.3f), 900f, 3f, 0x18FFFFFF)
+                }
+                // gold tie-back
+                lg.fillRoundRect(x0 + 20f, 600f, x0 + 150f, 618f, 9f, Colors.GOLD)
+            }
+            // valance across the top
+            for (i in 0 until 24) {
+                val x = i * w / 24f
+                lg.fillPie(x + w / 48f, 70f, w / 48f, 0f, PI_F, 0xFF8E1B1B.toInt())
+            }
+            lg.gradientRect(0f, 0f, w, 72f, 0xFFB71C1C.toInt(), 0xFF7F1010.toInt())
+            lg.fillRect(0f, 68f, w, 74f, Colors.GOLD)
+            // mirror ball: tiles catching the light
+            lg.line(w / 2f, 0f, w / 2f, 60f, 3f, 0xFF90A4AE.toInt())
+            lg.fillCircleRadial(w / 2f, 92f, 34f, w / 2f - 10f, 80f, 48f, 0xFFECEFF1.toInt(), 0xFF546E7A.toInt())
+            for (j in -3..3) for (i in -3..3) {
+                val tx = w / 2f + i * 9f; val ty = 92f + j * 9f
+                if ((tx - w / 2f) * (tx - w / 2f) + (ty - 92f) * (ty - 92f) < 30f * 30f) lg.fillRect(tx - 3.5f, ty - 3.5f, tx + 3.5f, ty + 3.5f, if ((i + j) % 2 == 0) 0x55FFFFFF else 0x22000000)
+            }
         }
-        // mirror ball
-        g.line(w / 2f, 0f, w / 2f, 60f, 3f, 0xFF90A4AE.toInt())
-        g.fillCircleRadial(w / 2f, 92f, 34f, w / 2f - 10f, 80f, 48f, 0xFFECEFF1.toInt(), 0xFF546E7A.toInt())
         for (i in 0 until 6) {
             val a = (time * 1.4 + i * 1.05).toFloat()
             if (cos(a) > 0f) Draw.sparkle(g, w / 2f + sin(a) * 26f, 92f + (i - 2.5f) * 9f, 10f, 0xFFFFFFFF.toInt())

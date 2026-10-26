@@ -210,6 +210,23 @@ object Draw {
         }
     }
 
+    /**
+     * A pine for scenes where trees move past (3D courses): one cached picture per colour, scaled - a single image
+     * instead of a dozen shapes. Very small (distant) trees are a simple triangle. Pass a small set of colours
+     * (e.g. fog in a few steps), since each colour is its own picture.
+     */
+    fun pineSprite(g: Gfx, x: Float, baseY: Float, h: Float, color: Int) {
+        if (h < 34f) {
+            tri(g, x - h * 0.34f, baseY, x + h * 0.34f, baseY, x, baseY - h * 0.95f, color)
+            tri(g, x - h * 0.12f, baseY - h * 0.62f, x + h * 0.12f, baseY - h * 0.62f, x, baseY - h * 0.95f, 0xCCF4F8FF.toInt())
+            return
+        }
+        val ref = 300f
+        g.save(); g.translate(x, baseY); g.scale(h / ref)
+        g.layer("pine.${Integer.toHexString(color)}", -ref * 0.5f, -ref * 1.02f, ref * 0.5f, ref * 0.06f) { lg -> pineTree(lg, 0f, 0f, ref, color) }
+        g.restore()
+    }
+
     fun tri(g: Gfx, x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float, color: Int) {
         pts[0] = x0; pts[1] = y0; pts[2] = x1; pts[3] = y1; pts[4] = x2; pts[5] = y2
         g.fillPolygon(pts, 3, color)
@@ -359,6 +376,7 @@ object Draw {
         /** Optional screen-space mitten targets [lx, ly, rx, ry]: arms reach there (IK, cartoon stretch). */
         handTargets: FloatArray? = null, mittenScale: Float = 1f,
     ) {
+        if (h < 90f && handTargets == null && !shielded && prop == Prop.NONE) { buddySmall(g, x, y, h, color, pose); return }
         val rise = pose?.rise ?: 0f
         val crouch = (-rise).coerceIn(0f, 0.9f)
         val lift = (-rise * h * 0.16f).coerceIn(-h * 0.08f, h * 0.12f)
@@ -496,6 +514,33 @@ object Draw {
             g.strokeCircle(x, cy, h * 0.62f, 6f, 0xCC80D8FF.toInt())
             g.arc(x, cy, h * 0.55f, -2.6f, 0.9f, 5f, 0xAAFFFFFF.toInt())
         }
+    }
+
+    /** A snow buddy seen from far away (small on screen): the same look in a dozen shapes instead of a hundred. */
+    private fun buddySmall(g: Gfx, x: Float, y: Float, h: Float, color: Int, pose: AvatarPose?) {
+        g.fillOval(x - h * 0.3f, y - h * 0.05f, x + h * 0.3f, y + h * 0.05f, 0x44000000)
+        val lr = h * 0.26f; val tr = h * 0.2f; val hr = h * 0.15f
+        val ty = y - h * 0.6f; val hy = ty - tr - hr * 0.75f
+        g.fillCircleRadial(x, y - lr, lr, x - lr * 0.4f, y - lr * 1.4f, lr * 1.8f, SNOW_LIT, SNOW_SHADE)
+        g.fillCircleRadial(x, ty, tr, x - tr * 0.4f, ty - tr * 0.4f, tr * 1.8f, SNOW_LIT, SNOW_SHADE)
+        val sy = ty - tr * 0.35f
+        for (side in 0..1) {
+            val sx = x + (if (side == 0) -1f else 1f) * tr * 0.85f
+            val up = pose?.upper?.get(side) ?: if (side == 0) -2.0f else -1.14f
+            val fo = pose?.fore?.get(side) ?: if (side == 0) -1.9f else -1.24f
+            val ex = sx + h * 0.17f * cos(up); val ey = sy - h * 0.17f * sin(up)
+            val wx = ex + h * 0.16f * cos(fo); val wy = ey - h * 0.16f * sin(fo)
+            g.line(sx, sy, ex, ey, h * 0.035f, 0xFF6D4C41.toInt()); g.line(ex, ey, wx, wy, h * 0.03f, 0xFF6D4C41.toInt())
+            g.fillCircle(wx, wy, h * 0.045f, color)
+        }
+        g.fillCircleRadial(x, hy, hr, x - hr * 0.4f, hy - hr * 0.4f, hr * 1.8f, SNOW_LIT, SNOW_SHADE)
+        g.fillRoundRect(x - tr * 0.8f, hy + hr * 0.7f, x + tr * 0.8f, hy + hr * 1.05f, hr * 0.2f, color)
+        g.save(); g.clipRect(x - hr * 1.2f, hy - hr * 1.4f, x + hr * 1.2f, hy - hr * 0.3f)
+        g.fillCircle(x, hy - hr * 0.3f, hr * 0.95f, color)
+        g.restore()
+        g.fillCircle(x + hr * 0.1f, hy - hr * 1.3f, hr * 0.25f, Colors.WHITE)
+        g.fillCircle(x - hr * 0.35f, hy - hr * 0.08f, hr * 0.12f, 0xFF1E272C.toInt()); g.fillCircle(x + hr * 0.35f, hy - hr * 0.08f, hr * 0.12f, 0xFF1E272C.toInt())
+        tri(g, x, hy + hr * 0.05f, x, hy + hr * 0.22f, x + hr * 0.45f, hy + hr * 0.14f, 0xFFFF8F00.toInt())
     }
 
     /** The player's character: the snowman buddy (Christmas) or the athlete (sports). Same arguments as [buddy]. */
@@ -1093,10 +1138,38 @@ object Draw {
             pts[0] = cx - w; pts[1] = y0; pts[2] = cx + w; pts[3] = y0; pts[4] = cx; pts[5] = y0 - h * 0.34f
             val c = if (tier % 2 == 0) Colors.PINE else 0xFF34A065.toInt()
             g.fillPolygonGradient(pts, 3, y0 - h * 0.34f, y0, Colors.lighter(c, 0.2f), Colors.darker(c, 0.62f))
+            if (h > 200f) {
+                // shade on the right, needle tufts along the lower edge, a dusting of snow, fine needles inside
+                pts[0] = cx; pts[1] = y0 - h * 0.34f; pts[2] = cx + w; pts[3] = y0; pts[4] = cx + w * 0.15f; pts[5] = y0
+                g.fillPolygon(pts, 3, 0x22000000)
+                val tufts = (w / (h * 0.03f)).toInt().coerceIn(6, 30)
+                for (i in 0 until tufts) {
+                    val u = (i + 0.5f) / tufts
+                    val tx = cx - w + 2f * w * u
+                    val tl = h * (0.03f + 0.015f * hash01(i * 7 + tier))
+                    tri(g, tx - tl * 0.7f, y0 - tl * 0.6f, tx + tl * 0.7f, y0 - tl * 0.6f, tx + (u - 0.5f) * tl, y0 + tl * 0.5f, Colors.darker(c, 0.7f + 0.2f * hash01(i * 3 + tier)))
+                    if (hash01(i * 11 + tier * 5) > 0.55f) g.fillOval(tx - tl * 0.6f, y0 - tl * 0.8f, tx + tl * 0.5f, y0 - tl * 0.35f, 0xCCF4F8FF.toInt())
+                }
+                for (i in 0 until 40) {
+                    val v = hash01(i * 13 + tier * 7); val u = hash01(i * 17 + tier * 3) * 2f - 1f
+                    val yy = y0 - h * 0.34f * v
+                    val xx = cx + u * w * (1f - v) * 0.85f
+                    g.line(xx, yy, xx + h * 0.012f * (if (u < 0) -1f else 1f), yy + h * 0.014f, h * 0.004f, Colors.withAlpha(Colors.lighter(c, 0.35f), 0.5f))
+                }
+            }
             // garland
             g.arc(cx, y0 - h * 0.34f - w * 0.6f, w * 1.15f, 1.15f, 0.85f, h * 0.012f, 0xCCFFD54F.toInt())
+            if (h > 200f) for (i in 0..10) {
+                val a = 1.15f + 0.85f * i / 10f
+                g.fillCircle(cx + cos(a) * w * 1.15f, y0 - h * 0.34f - w * 0.6f + sin(a) * w * 1.15f, h * 0.007f, 0xFFFFF59D.toInt())
+            }
         }
-        if (lights) for (i in 0 until 18) {
+        if (lights) christmasTreeLights(g, cx, baseY, h, t)
+    }
+
+    /** The twinkling lights on a finished tree (drawn live over a cached tree). */
+    fun christmasTreeLights(g: Gfx, cx: Float, baseY: Float, h: Float, t: Double) {
+        for (i in 0 until 18) {
             val u = hash01(i * 13 + 2)
             val v = hash01(i * 29 + 5)
             val ty = baseY - h * 0.12f - v * h * 0.72f
