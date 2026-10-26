@@ -34,7 +34,7 @@ data class PipelineConfig(
      */
     val searchRegions: List<RegionSpec> = listOf(RegionSpec(0f, 0.56f), RegionSpec(0.44f, 1f), RegionSpec(0f, 1f)),
     /** Move each person's crop along with their recent motion (fewer losses when someone moves quickly). */
-    val predictMotion: Boolean = true,
+    val predictMotion: Boolean = false,
     /** When the landmark model loses a tracked person, try once more with a wider crop before giving up. */
     val retryWider: Boolean = true,
     /** Smooth the tracking crop while a person is still (steadier landmarks), follow it closely when they move. */
@@ -43,6 +43,23 @@ data class PipelineConfig(
     val keepPresence: Float = 0.4f,
     /** Brighten dark or backlit crops before the models see them. */
     val autoLevel: Boolean = true,
+    /** Also brighten the person detector's input (not only the landmark crops). */
+    val autoLevelDetector: Boolean = true,
+    /** How much of a person's recent motion to move the crop on by (0..1), and how much wider it may get. */
+    val predictFraction: Float = 1f,
+    val predictGrow: Float = 0.22f,
+    /** How quickly the smoothed crop catches up with movement (higher = follows sooner). */
+    val smoothGain: Float = 6f,
+    /** When above 0: smooth only while the crop moves less than this (fraction of its size per frame), else follow exactly. */
+    val smoothStill: Float = 0f,
+    /**
+     * Guard against a track jumping onto the other player when both move quickly side by side: a result far from
+     * where the person's own motion says they should be is checked again at the expected place, and when two
+     * tracks end up on the same person the one that jumped is dropped (not simply the newer one).
+     */
+    val guardJumps: Boolean = true,
+    /** A track result further than this from its own motion's prediction (fraction of the crop) is re-checked. */
+    val jumpDev: Float = 0.06f,
 )
 
 /** Horizontal slice of the upright frame (fractions of width), full height. */
@@ -85,6 +102,10 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         var vy = 0f
         /** Frames in a row the wider retry had to rescue this person. */
         var rescued = 0
+        /** The crop the landmark model itself gave last frame (before smoothing). */
+        var measured: RotatedRect = roi
+        /** How far this frame's result was from where the person's motion predicted (fraction of crop size). */
+        var dev = 0f
     }
 
     private val tracks = ArrayList<Track>()
@@ -106,6 +127,8 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
     var levelledCrops = 0L
         private set
     var rescues = 0L
+        private set
+    var jumpFixes = 0L
         private set
 
     /** Finds held objects (sticks, toy rackets) next to the players' hands when set. */
@@ -153,21 +176,39 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
             var lm = runLandmarks(src, toBuffer, crop, clock, config.keepPresence)
             if (lm == null && config.retryWider) {
                 // lost them: one more look with a wider crop around where they were
-                lm = runLandmarks(src, toBuffer, tr.roi.copy(side = tr.roi.side * 1.45f), clock, config.keepPresence)
+                val m = tr.measured
+                lm = runLandmarks(src, toBuffer, m.copy(side = m.side * 1.45f), clock, config.keepPresence)
                 if (lm != null) { rescues++; tr.rescued++ }
             } else tr.rescued = 0
             if (lm == null || tr.rescued > 8) { it.remove(); continue }
-            tr.frames++
-            tr.lastPresence = lmFlag[0]
-            val measured = lm.trackingRoi()
+            var presence = lmFlag[0]
+            var measured = lm.trackingRoi()
             if (!roiPlausible(measured, uw, uh)) { it.remove(); continue }
+            // where this person should be by their own motion
+            val pcx = tr.measured.cx + tr.vx
+            val pcy = tr.measured.cy + tr.vy
+            tr.dev = kotlin.math.hypot(measured.cx - pcx, measured.cy - pcy) / measured.side
+            if (config.guardJumps && tr.frames > 2 && tr.dev > config.jumpDev) {
+                // a sudden jump: look again where they should be; keep whichever result fits their motion
+                val again = runLandmarks(src, toBuffer, tr.roi.copy(cx = pcx, cy = pcy), clock, config.keepPresence)
+                if (again != null) {
+                    val m2 = again.trackingRoi()
+                    val dev2 = kotlin.math.hypot(m2.cx - pcx, m2.cy - pcy) / m2.side
+                    if (roiPlausible(m2, uw, uh) && dev2 < tr.dev * 0.6f) {
+                        lm = again; measured = m2; presence = lmFlag[0]; tr.dev = dev2; jumpFixes++
+                    }
+                }
+            }
+            tr.frames++
+            tr.lastPresence = presence
             val prev = tr.roi
             val roi = if (config.smoothRoi) smoothed(prev, measured) else measured
             // motion of the crop centre, smoothed over a few frames
-            tr.vx += 0.6f * ((measured.cx - prev.cx) - tr.vx)
-            tr.vy += 0.6f * ((measured.cy - prev.cy) - tr.vy)
+            tr.vx += 0.6f * ((measured.cx - tr.measured.cx) - tr.vx)
+            tr.vy += 0.6f * ((measured.cy - tr.measured.cy) - tr.vy)
             tr.roi = roi
-            results.add(RawPose(tr.id, lm, lmFlag[0], roi, Appearance.compute(src, toBuffer, lm), tr.frames))
+            tr.measured = measured
+            results.add(RawPose(tr.id, lm, presence, roi, Appearance.compute(src, toBuffer, lm), tr.frames))
         }
 
         // 2) Remove duplicate tracks that converged on the same person (keep the older one).
@@ -184,7 +225,12 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
                 val spec = config.searchRegions[regionCursor % config.searchRegions.size]
                 regionCursor++
                 val region = CropRegion(spec.x0 * uw, 0f, (spec.x1 - spec.x0) * uw, uh)
-                for (det in detect(src, toBuffer, region, clock)) {
+                var dets: List<PoseDetection> = detect(src, toBuffer, region, clock, brighten = false)!!
+                // nobody new in the picture as it is: in a dark room, look again at a brightened copy
+                if (config.autoLevel && config.autoLevelDetector && dets.none { d -> tracks.none { overlaps(it.roi, d.roi()) } }) {
+                    detect(src, toBuffer, region, clock, brighten = true)?.let { dets = it }
+                }
+                for (det in dets) {
                     if (tracks.size >= config.maxPoses) break
                     val roi = det.roi()
                     if (!roiPlausible(roi, uw, uh)) continue
@@ -206,12 +252,19 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         return results
     }
 
-    private fun detect(src: PixelSource, toBuffer: Affine, region: CropRegion, clock: () -> Long): List<PoseDetection> {
-        observer?.invoke(region, null)
-        lastRegions.add(region)
+    /**
+     * Runs the person detector over [region]. With [brighten], only when the picture there is dark: it is brightened
+     * first, and null is returned (no model run) when it is not dark.
+     */
+    private fun detect(src: PixelSource, toBuffer: Affine, region: CropRegion, clock: () -> Long, brighten: Boolean): List<PoseDetection>? {
         val a = clock()
         CropSampler.sample(src, region.detectorTransform().andThen(toBuffer), BlazePose.DETECTOR_SIZE, detInput, 1f / 127.5f, -1f, zeroBorder = true)
-        if (config.autoLevel && AutoLevel.apply(detInput, BlazePose.DETECTOR_SIZE * BlazePose.DETECTOR_SIZE, -1f, 1f)) levelledCrops++
+        if (brighten) {
+            if (!AutoLevel.apply(detInput, BlazePose.DETECTOR_SIZE * BlazePose.DETECTOR_SIZE, -1f, 1f)) return null
+            levelledCrops++
+        }
+        observer?.invoke(region, null)
+        lastRegions.add(region)
         val b = clock()
         runner.runDetector(detInput, detRegressors, detScores)
         val c = clock()
@@ -229,8 +282,9 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         val r = tr.roi
         val speed = kotlin.math.hypot(tr.vx, tr.vy)
         if (speed < 0.004f * r.side) return r
-        val grow = 1f + (1.2f * speed / r.side).coerceAtMost(0.22f)
-        return RotatedRect(r.cx + tr.vx, r.cy + tr.vy, r.side * grow, r.rotation)
+        val grow = 1f + (1.2f * speed / r.side).coerceAtMost(config.predictGrow)
+        val k = config.predictFraction
+        return RotatedRect(r.cx + tr.vx * k, r.cy + tr.vy * k, r.side * grow, r.rotation)
     }
 
     /**
@@ -241,7 +295,9 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
     private fun smoothed(prev: RotatedRect, m: RotatedRect): RotatedRect {
         val move = kotlin.math.hypot(m.cx - prev.cx, m.cy - prev.cy) / prev.side
         val grow = kotlin.math.abs(m.side - prev.side) / prev.side
-        val k = (0.3f + 6f * maxOf(move, grow)).coerceAtMost(1f)
+        val change = maxOf(move, grow)
+        val k = if (config.smoothStill > 0f) (if (change < config.smoothStill) 0.35f else 1f)
+            else (0.3f + config.smoothGain * change).coerceAtMost(1f)
         var dr = m.rotation - prev.rotation
         while (dr > Math.PI) dr -= (2 * Math.PI).toFloat()
         while (dr < -Math.PI) dr += (2 * Math.PI).toFloat()
@@ -272,7 +328,13 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
             val a = tracks[i]
             val b = tracks[j]
             if (a.id in remove || b.id in remove) continue
-            if (overlaps(a.roi, b.roi, strict = true)) remove.add(max(a.id, b.id))
+            if (!overlaps(a.roi, b.roi, strict = true)) continue
+            // two tracks on one person: drop the one that jumped there (both settled: the newer one)
+            val jumped = when {
+                !config.guardJumps || a.frames <= 3 || b.frames <= 3 -> if (a.id > b.id) a else b
+                else -> if (a.dev > b.dev) a else b
+            }
+            remove.add(jumped.id)
         }
         if (remove.isEmpty()) return
         tracks.removeAll { it.id in remove }

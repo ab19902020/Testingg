@@ -47,10 +47,10 @@ object AutoLevel {
         lastMedian = median; lastHigh = high; lastGain = 1f
         if (high >= DARK_HIGH && median >= DARK_MEDIAN) return false
         // stretch so the brightest few percent reach near white (bounded: noise grows with the gain)
-        val gain = (0.92f / high.coerceAtLeast(0.04f)).coerceIn(1f, MAX_GAIN)
+        val gain = (0.92f / high.coerceAtLeast(0.04f)).coerceIn(1f, maxGain)
         // then lift the mid-tones if the middle of the picture is still dark
         val m = (median * gain).coerceAtLeast(0.02f)
-        val gamma = if (m < 0.38f) (ln(0.42f) / ln(m)).coerceIn(0.5f, 1f) else 1f
+        val gamma = if (m < 0.38f) (ln(0.42f) / ln(m)).coerceIn(minGamma, 1f) else 1f
         if (gain < 1.05f && gamma > 0.97f) return false
         lastGain = gain
         for (k in 0 until n * 3) {
@@ -74,5 +74,7 @@ object AutoLevel {
     const val DARK_HIGH = 0.55f
     /** ... and so are crops whose median brightness is below this (a dark subject against a bright window). */
     const val DARK_MEDIAN = 0.2f
-    const val MAX_GAIN = 4f
+    /** Largest brightening (noise grows with it) and the strongest mid-tone lift (gamma; 1 = none). */
+    @Volatile var maxGain = 4f
+    @Volatile var minGamma = 0.5f
 }

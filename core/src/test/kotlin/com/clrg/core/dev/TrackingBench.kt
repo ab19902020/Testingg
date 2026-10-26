@@ -1,6 +1,7 @@
 package com.clrg.core.dev
 
 import com.clrg.core.json.Json
+import com.clrg.core.pose.AutoLevel
 import com.clrg.core.pose.FrameOrientation
 import com.clrg.core.pose.Lm
 import com.clrg.core.pose.MultiPosePipeline
@@ -50,7 +51,7 @@ class TrackingBench {
             val sx = ((x - cx) / t.scale + cx - t.dx).toInt().coerceIn(0, w - 1)
             val sy = ((y - cy) / t.scale + cy - t.dy).toInt().coerceIn(0, h - 1)
             val p = base.pixels[sy * w + sx]
-            val inWindow = t.window > 0f && x > w * 0.6f && y < h * 0.7f
+            val inWindow = t.window > 0f && (y < h * 0.1f || x < w * 0.06f || x > w * 0.94f)
             var rgb = 0
             for (ch in 0..2) {
                 var v = ((p shr (16 - ch * 8)) and 0xFF) / 255f
@@ -86,7 +87,7 @@ class TrackingBench {
         }.average().toFloat()
     }
 
-    class Result(val found: Float, val err: Float, val jitter: Float, val ids: Int, val lm: Float, val det: Float, val levelled: Long, val rescues: Long, val recover: Int)
+    class Result(val found: Float, val err: Float, val jitter: Float, val ids: Int, val lm: Float, val det: Float, val levelled: Long, val rescues: Long, val recover: Int, val fixes: Long = 0)
 
     private fun run(server: RealModelServer, variant: Char, base: RgbImage, scene: String, sc: Scenario, cfg: PipelineConfig): Result {
         val pipe = MultiPosePipeline(server.runner(variant), cfg)
@@ -104,6 +105,8 @@ class TrackingBench {
             if (t.blank) { firstBlankEnd = k + 1; continue }
             if (firstBlankEnd >= 0 && recoveredAt < 0 && poses.size >= 2) recoveredAt = k - firstBlankEnd
             poses.forEach { ids.add(it.trackId) }
+            if (System.getProperty("clrg.trackscene")?.contains("debug") == true)
+                println("BENCH   f$k dx=${"%.0f".format(t.dx)} " + poses.joinToString { "id${it.trackId} p%.2f x%.0f".format(it.presence, it.landmarks.x[Lm.NOSE]) })
             if (poses.size >= 2) found++
             for (p in poses) { errSum += error(p, ref, base.width, base.height, t); errN++ }
             if (sc.photometric && poses.size >= 2 && k >= 3) {
@@ -124,7 +127,7 @@ class TrackingBench {
         }
         return Result(found / frames.toFloat(), if (errN > 0) errSum / errN else Float.NaN, if (jn > 0) jit / jn else Float.NaN,
             ids.size, (server.landmarkCalls - lm0) / sc.frames.toFloat(), (server.detectorCalls - det0) / sc.frames.toFloat(),
-            pipe.levelledCrops, pipe.rescues, recoveredAt)
+            pipe.levelledCrops, pipe.rescues, recoveredAt, pipe.jumpFixes)
     }
 
     @Test
@@ -146,20 +149,41 @@ class TrackingBench {
             Scenario("dropout", 24, false) { k -> Xf(blank = k in 8..10) },
             Scenario("dark+sway", 30, false) { k -> Xf(dx = 120f * sin(k * 2 * Math.PI.toFloat() / 14f), gain = 0.2f, noise = 5f) },
         ).filter { only.isEmpty() || it.name.replace(" ", "") in only }
-        val old = PipelineConfig(predictMotion = false, retryWider = false, smoothRoi = false, keepPresence = 0.5f, autoLevel = false)
-        val new = PipelineConfig()
+        val off = PipelineConfig(predictMotion = false, retryWider = false, smoothRoi = false, keepPresence = 0.5f, autoLevel = false, guardJumps = false)
+        val configs = linkedMapOf(
+            "old" to off, "new" to PipelineConfig(),
+            "pred" to off.copy(predictMotion = true), "smooth" to off.copy(smoothRoi = true),
+            "retry" to off.copy(retryWider = true, keepPresence = 0.4f), "level" to off.copy(autoLevel = true),
+            "lvlLm" to off.copy(autoLevel = true, autoLevelDetector = false),
+            "pred50" to off.copy(predictMotion = true, predictFraction = 0.5f, predictGrow = 0.08f),
+            "smRet" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f),
+            "best" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true),
+            "bestG20" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, smoothGain = 20f),
+            "bestNoDet" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, autoLevelDetector = false),
+            "bestG20ND" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, autoLevelDetector = false, smoothGain = 20f),
+            "still1" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, smoothStill = 0.01f),
+            "still2" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, smoothStill = 0.02f),
+            "bestJ" to PipelineConfig(),
+            "j10" to PipelineConfig(jumpDev = 0.1f),
+            "j04" to PipelineConfig(jumpDev = 0.04f),
+            "bestP" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, predictMotion = true, predictFraction = 0.5f, predictGrow = 0.08f),
+        )
+        System.getProperty("clrg.trackgain")?.let { AutoLevel.maxGain = it.toFloat() }
+        System.getProperty("clrg.trackgamma")?.let { AutoLevel.minGamma = it.toFloat() }
+        val pick = (System.getProperty("clrg.trackcfg") ?: "old,new").split(',')
+        val scenePick = System.getProperty("clrg.trackscene")?.split(',')
         RealModelServer(python!!, models!!).use { server ->
-            for (scene in listOf("sceneA_two_players.png", "sceneE_real_pair.png")) {
+            for (scene in listOf("sceneA_two_players.png", "sceneE_real_pair.png").filter { scenePick == null || scenePick.any { p -> it.startsWith(p) } }) {
                 val base = load(scene)
                 for (variant in listOf('f')) {
                     println("BENCH ---- $scene (${if (variant == 'l') "lite" else "full"})")
-                    println("BENCH %-11s | %-36s | %-36s".format("scenario", "old: found err jitter ids lm/f", "new: found err jitter ids lm/f lev resc"))
+                    println("BENCH %-11s | ".format("scenario") + pick.joinToString(" | ") { "%-30s".format("$it: found err jitter ids") })
                     for (sc in scenarios) {
-                        val a = run(server, variant, base, scene, sc, old)
-                        val b = run(server, variant, base, scene, sc, new)
-                        fun fmt(r: Result, extra: Boolean) = "%4.0f%% %.4f %.4f %d %.1f".format(r.found * 100, r.err, r.jitter, r.ids, r.lm) +
-                            (if (r.recover >= 0) " rec${r.recover}" else "") + (if (extra) " ${r.levelled} ${r.rescues}" else "")
-                        println("BENCH %-11s | %-36s | %-36s".format(sc.name, fmt(a, false), fmt(b, true)))
+                        val cells = pick.map { name ->
+                            val r = run(server, variant, base, scene, sc, configs[name]!!)
+                            "%-30s".format("%4.0f%% %.4f %.4f %d".format(r.found * 100, r.err, r.jitter, r.ids) + (if (r.rescues > 0) " r${r.rescues}" else "") + (if (r.fixes > 0) " j${r.fixes}" else "") + " %.1f".format(r.lm))
+                        }
+                        println("BENCH %-11s | ".format(sc.name) + cells.joinToString(" | "))
                     }
                 }
             }
