@@ -60,6 +60,10 @@ class UiShots {
         app.sim.controlsVisible = false
         app.mode = GameMode.SPORTS
         frames(10)
+        // the "wave to take control" prompt (camera mode: the simulation has control straight away)
+        app.settings.simulatedInput = false; app.menuControl.release()
+        shot("menu_wave_prompt", 30)
+        app.settings.simulatedInput = true
         shot("menu_sports")
         app.ui.focusId = "solo"
         shot("menu_sports_focus", 30)

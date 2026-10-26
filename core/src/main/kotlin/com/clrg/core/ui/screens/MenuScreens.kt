@@ -79,14 +79,18 @@ class MainMenuScreen(app: GameApp) : Screen(app) {
         if (ui.tile(g, "setup", r2(2), "TV & Camera", if (app.calibrated) "Players calibrated" else "Connect, place, calibrate", Colors.GOOD, icon = Icon.TV, titleSize = 34f)) SetupFlow.startFull(app)
         if (ui.tile(g, "settings", r2(3), "Settings", "Sound, motion, camera", 0xFFB388FF.toInt(), icon = Icon.GEAR, titleSize = 34f)) app.push(SettingsScreen(app))
         if (ui.tile(g, "help", r2(4), "How to Play", "Controls for every game", Colors.WARM, icon = Icon.HELP, titleSize = 34f)) app.push(HelpScreen(app))
-        // hands-free: anyone in front of the camera can steer the menus with a raised hand
+        // hands-free: Player 1 (the red player) waves to take control, then steers the menus with a raised hand
         var y = y2 + h2 + 34f
-        run {
+        val prompt = !app.settings.simulatedInput && (!app.menuControl.engaged || app.menuControl.sinceEngaged < 2.5f)
+        if (prompt) {
+            app.drawControlPrompt(g, g.width / 2f, y - 6f)
+            y += 66f
+        } else run {
             val hint = when {
-                app.ui.cursors.any { it.active && it.hoverId != null } -> "Keep your hand there until the ring fills"
-                app.ui.cursors.any { it.active } -> "Move your hand over a card and hold it there - small movements are enough"
+                app.ui.cursors.any { it.active && it.hoverId != null } -> "Hold your hand still until the ring fills"
+                app.ui.cursors.any { it.active } -> "Move your hand over a card and hold it still - small movements are enough"
                 app.handCursorShown -> "Lift your hand to chest height to point"
-                else -> "Hands-free: stand in front of the camera and lift a hand to chest height to point"
+                else -> "Player 1: lift a hand to chest height to point"
             }
             val hw = g.measureText(hint, 30f, false) + 110f
             g.fillRoundRect(g.width / 2f - hw / 2f, y, g.width / 2f + hw / 2f, y + 56f, 28f, 0xAA0B2A4F.toInt())

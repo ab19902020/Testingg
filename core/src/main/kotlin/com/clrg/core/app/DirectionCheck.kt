@@ -102,6 +102,8 @@ class DirectionCheck(private val app: GameApp) {
     }
 
     private fun finish(id: String) {
+        // following the arrows with a hand is as deliberate as a wave: that person has control of the menus
+        app.menuControl.grant()
         app.settings.directionChecked.add(id)
         forced = false
         attempts = 0

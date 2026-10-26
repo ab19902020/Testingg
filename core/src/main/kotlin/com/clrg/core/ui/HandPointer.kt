@@ -130,8 +130,8 @@ class HandPointer {
         /** Movements smaller than this (virtual px) are jitter: the pointer stays put. */
         const val STILL_PX = 3f
         /** Adaptive filter: steady when still (cutoff Hz), opening up with speed (per px/s). */
-        const val MIN_CUTOFF = 0.9f
-        const val BETA = 0.0035f
+        const val MIN_CUTOFF = 1.4f
+        const val BETA = 0.006f
         const val D_CUTOFF = 1.2f
     }
 }

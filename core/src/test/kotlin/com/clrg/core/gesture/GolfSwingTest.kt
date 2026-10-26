@@ -123,4 +123,43 @@ class GolfSwingTest {
         assertEquals(1, shots.size, "the swing is still struck after the hands come back into view")
         assertTrue(shots[0].power > 0.7f, "with the power of the backswing: ${shots[0].power}")
     }
+
+    /** Clasped hands hide one wrist behind the other: the camera barely sees it, but it is still a grip. */
+    @Test
+    fun aClaspedGripWithOneWristHiddenStillSwings() {
+        val r = rig()
+        // the left wrist is behind the right hand from the start: address, swing and all
+        r.p1.wristVisibility[LEFT] = 0.12f
+        val shots = r.perform(GolfStroke.FULL) { t -> Motions.golfSwing(r.p1, t, rise = 1.35f) }
+        r.p1.wristVisibility[LEFT] = Float.NaN
+        assertEquals(1, shots.size, "a swing from a clasped grip")
+    }
+
+    /** A real downswing is so fast the wrists blur: lost for a few frames right around impact. */
+    @Test
+    fun aBlurredDownswingStillHits() {
+        for (fps in floatArrayOf(30f, 15f)) {
+            val r = rig(fps)
+            val shots = r.perform(GolfStroke.FULL) { t ->
+                val going = Motions.golfSwing(r.p1, t, rise = 1.3f, down = 0.18)
+                // back 0.9 s + hold 0.15 s, then the 0.18 s downswing: hands lost from halfway down until just after impact
+                val blur = t in 1.14..1.32
+                r.p1.wristVisibility[LEFT] = if (blur) 0.05f else Float.NaN
+                r.p1.wristVisibility[RIGHT] = if (blur) 0.05f else Float.NaN
+                going
+            }
+            assertEquals(1, shots.size, "a blurred downswing is struck at $fps fps")
+            assertTrue(shots[0].power > 0.6f, "with the backswing's power: ${shots[0].power}")
+        }
+    }
+
+    /** A slow phone (15 pictures a second) and a quick swing: the bottom of the swing may fall between frames. */
+    @Test
+    fun aQuickSwingOnASlowCameraIsSeen() {
+        for (down in doubleArrayOf(0.12, 0.2)) {
+            val r = rig(15f)
+            val shots = r.perform(GolfStroke.FULL) { t -> Motions.golfSwing(r.p1, t, rise = 1.3f, down = down) }
+            assertEquals(1, shots.size, "a ${down}s downswing at 15 fps")
+        }
+    }
 }

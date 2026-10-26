@@ -126,6 +126,8 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
     override val ambience: Ambience? = Ambience.PARK
     override val room: Room? = Room.OUTDOOR
     override val needsCamera = true
+    /** The golfer picks clubs and aims by pointing as part of their turn: no wave needed then (the pause menu needs one). */
+    override val needsWave: Boolean get() = paused || match.phase != GolfMatch.Phase.AIM
     override val allowCursors: Boolean get() = when {
         paused -> true
         match.phase == GolfMatch.Phase.AIM -> humanTurn && app.controls[0].golf.phase == GolfSwingDetector.Phase.IDLE

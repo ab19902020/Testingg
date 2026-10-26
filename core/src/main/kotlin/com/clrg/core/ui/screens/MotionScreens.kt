@@ -204,13 +204,15 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
      * a mark where the move fired: shows what the game reads from you (and a screenshot of it says what to tune).
      */
     private enum class Scope(val label: String) {
-        OFF("Graph: off"), THUMB("Graph: thumb"), BOWL("Graph: bowling"), LEAN("Graph: lean + tuck"), BOW("Graph: bow"), SWING("Graph: swing")
+        OFF("Graph: off"), THUMB("Graph: thumb"), BOWL("Graph: bowling"), LEAN("Graph: lean + tuck"), BOW("Graph: bow"), SWING("Graph: swing"),
+        GOLF("Graph: golf")
     }
     private var scope = Scope.OFF
     private var clock = 0.0
     private val scopeT = DoubleArray(SCOPE_N)
-    /** Per player, per signal (thumb, lowest wrist, lean, bow draw, swing, tuck, bow release speed). */
-    private val scopeV = Array(2) { Array(7) { FloatArray(SCOPE_N) } }
+    /** Per player, per signal (thumb, bowling hand, lean, bow draw, swing, tuck, bow release speed, golf hands). */
+    private val scopeV = Array(2) { Array(8) { FloatArray(SCOPE_N) } }
+    private val golfShots = ArrayList<com.clrg.core.gesture.GolfSwingDetector.Shot>()
     private var scopeN = 0
     private val marks = ArrayList<Mark>()
     private class Mark(val t: Double, val player: Int, val kind: Scope, val label: String)
@@ -221,7 +223,7 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
     }
 
     override fun onExit() {
-        for (c in app.controls) c.wantFingers = false
+        for (c in app.controls) { c.wantFingers = false; c.golfStroke = com.clrg.core.gesture.GolfStroke.NONE }
     }
 
     override fun frame(g: Gfx, ui: Ui, dt: Float) {
@@ -349,6 +351,11 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
             v[4][i] = if (seen) ((maxOf(ctl.swingLevel[0], ctl.swingLevel[1])) / 1.5f).coerceIn(0f, 1.2f) else Float.NaN
             v[5][i] = if (seen && ctl.tuck) 1f else 0f
             v[6][i] = if (seen) ctl.bow.releaseSpeed01.coerceIn(0f, 1.5f) else Float.NaN
+            // golf: the swing detector only runs while its graph is shown (it needs a grip and an address first)
+            ctl.golfStroke = if (scope == Scope.GOLF) com.clrg.core.gesture.GolfStroke.FULL else com.clrg.core.gesture.GolfStroke.NONE
+            v[7][i] = if (seen && !ctl.golf.handsY.isNaN()) ctl.golf.handsY else Float.NaN
+            golfShots.clear(); ctl.drainGolfShots(golfShots)
+            for (sh in golfShots) marks.add(Mark(clock, k, Scope.GOLF, "SHOT %.0f%%".format(sh.power * 100)))
         }
         scopeN++
         marks.removeAll { clock - it.t > SCOPE_SEC + 0.5 }
@@ -364,6 +371,7 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
             Scope.BOWL -> Triple(1, -1.6f, 0.6f)
             Scope.LEAN -> Triple(2, -1.2f, 1.2f)
             Scope.BOW -> Triple(3, -0.05f, 1.3f)
+            Scope.GOLF -> Triple(7, -1.6f, 0.9f)
             else -> Triple(4, -0.05f, 1.25f)
         }
         val lines: List<Triple<Float, String, Int>> = when (scope) {
@@ -371,6 +379,7 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
             Scope.BOWL -> listOf(Triple(tune.bowlLowY, "swing the hand down below here...", Colors.ICE), Triple(tune.bowlReleaseY, "...then up past here quickly", Colors.GOLD))
             Scope.LEAN -> listOf(Triple(1f, "full right", Colors.GOOD), Triple(0f, "straight", 0x88FFFFFF.toInt()), Triple(-1f, "full left", Colors.GOOD))
             Scope.BOW -> listOf(Triple(1f, "full draw / let-go speed", Colors.GOLD))
+            Scope.GOLF -> listOf(Triple(0.25f, "full backswing: about here", Colors.GOOD), Triple(-0.55f, "address: hands together below here, still", Colors.ICE))
             else -> listOf(Triple(1f / 1.5f, "a swing counts above here", Colors.GOLD))
         }
         val title = when (scope) {
@@ -378,6 +387,9 @@ class MotionLabScreen(app: GameApp) : Screen(app) {
             Scope.BOWL -> "Height of the bowling hand (body units), last 4 s"
             Scope.LEAN -> "Lean (bar along the bottom: tuck), last 4 s"
             Scope.BOW -> "Bow draw (solid) and drawing-hand speed (thin), last 4 s"
+            Scope.GOLF -> app.controls[0].golf.let { gd -> "Golf hands height - P1: " + (if (gd.grip) "grip OK" else "hands apart") + ", " +
+                when (gd.phase) { com.clrg.core.gesture.GolfSwingDetector.Phase.IDLE -> "address: hold still"; com.clrg.core.gesture.GolfSwingDetector.Phase.ADDRESS -> "ready - swing!"
+                    com.clrg.core.gesture.GolfSwingDetector.Phase.BACKSWING -> "swinging"; else -> "follow-through" } }
             else -> "Swing strength of the faster hand, last 4 s"
         }
         g.text(title, r.left + 20f, r.top + 24f, 26f, Colors.WHITE, Align.LEFT)

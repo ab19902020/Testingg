@@ -10,7 +10,8 @@ import kotlin.test.assertTrue
 class UiDwellTest {
     private val ui = Ui(Theme()) { _, _ -> }
     private val dt = 1f / 60f
-    private val boxes = mapOf("a" to Rect(0f, 0f, 200f, 100f), "b" to Rect(300f, 0f, 500f, 100f), "off" to Rect(600f, 0f, 800f, 100f))
+    private val boxes = mapOf("a" to Rect(0f, 0f, 200f, 100f), "b" to Rect(300f, 0f, 500f, 100f), "off" to Rect(600f, 0f, 800f, 100f),
+        "wide" to Rect(0f, 400f, 1600f, 520f))
     private val activations = ArrayList<Pair<Double, String>>()
 
     init { ui.dwellSeconds = 1.5f }
@@ -68,7 +69,8 @@ class UiDwellTest {
         run(6f) { point(0, "a") }
         assertEquals(1, activations.size, "keeping the hand on a button selects it once")
         run(0.3f) { point(0, "off") }
-        run(1.6f) { point(0, "a") }
+        // (the ring starts once the hand has settled on the button: a moment after arriving)
+        run(1.8f) { point(0, "a") }
         assertEquals(2, activations.size, "leaving and coming back allows a new selection")
     }
 
@@ -102,5 +104,35 @@ class UiDwellTest {
         run(4f, disabled = setOf("a")) { point(0, "a") }
         assertTrue(activations.isEmpty(), "disabled buttons never fire")
         assertNull(ui.activated)
+    }
+
+    /** A hand moving across a long button (on its way somewhere else) never fills the ring. */
+    @Test
+    fun movingAcrossAButtonDoesNotSelectIt() {
+        var t = 0f
+        run(5f) { t += dt; val c = ui.cursors[0]; c.active = true; c.y = 460f; c.x = 100f + 1400f * (0.5f + 0.5f * kotlin.math.sin(t * 0.9f)) }
+        assertTrue(activations.isEmpty(), "passing over the long button: $activations")
+        assertTrue(ui.dwellOn("wide") < 0.3f, "the ring stays low while moving: ${ui.dwellOn("wide")}")
+    }
+
+    /** Hovering over a button by accident, then moving away: the half-filled ring empties, no selection. */
+    @Test
+    fun movingAwayCancelsQuickly() {
+        run(1.0f) { point(0, "a") }
+        assertTrue(ui.dwellOn("a") > 0.6f)
+        // move off to the right over a quarter of a second, then hold near "off"
+        var t = 0f
+        run(0.25f) { t += dt; val c = ui.cursors[0]; c.active = true; c.y = 50f; c.x = 100f + 600f * (t / 0.25f) }
+        assertTrue(ui.dwellOn("a") == 0f, "the ring on the first button is gone: ${ui.dwellOn("a")}")
+        assertTrue(activations.isEmpty(), "nothing chosen")
+    }
+
+    /** A real hand held over a button wobbles a few pixels every frame: that is still holding still. */
+    @Test
+    fun aJitteryButHeldHandSelects() {
+        val rnd = java.util.Random(3)
+        val r = boxes.getValue("b")
+        run(1.75f) { val c = ui.cursors[0]; c.active = true; c.x = r.cx + (rnd.nextGaussian() * 6).toFloat(); c.y = r.cy + (rnd.nextGaussian() * 6).toFloat() }
+        assertEquals(listOf("b"), activations.map { it.second }, "selected while held with jitter")
     }
 }

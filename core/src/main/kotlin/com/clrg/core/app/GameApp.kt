@@ -373,6 +373,7 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
         if (ui.backPressed && scr.onBack()) audio.play(Sfx.UI_BACK, 0.6f)
         g.fillRect(0f, 0f, g.width, g.height, Colors.NIGHT_TOP)
         scr.frame(g, ui, dt)
+        if (scr !is com.clrg.core.ui.screens.MainMenuScreen) drawControlPrompt(g, g.width / 2f, g.height - 150f)
         drawGlobalOverlays(g, scr)
         if (settings.simulatedInput) { sim.drawControls(g, ui); sim.banner(g) }
         if (settings.devOverlay) devOverlay.draw(g)
@@ -468,6 +469,8 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
 
     /** One steady pointer per player (see [HandPointer]). */
     val pointers = arrayOf(com.clrg.core.ui.HandPointer(), com.clrg.core.ui.HandPointer())
+    /** Player 1 waves to take control of the menus (see [com.clrg.core.ui.MenuControl]). */
+    val menuControl = com.clrg.core.ui.MenuControl()
 
     /**
      * Hand cursors for everyone the camera is following - calibrated players, or anyone standing in front of the
@@ -475,15 +478,57 @@ class GameApp(val platform: Platform, val audio: AudioEngine) {
      * the chest, and selects by holding over a button.
      */
     private fun updateCursors(g: Gfx, dt: Float) {
+        val scr = current
+        val wasEngaged = menuControl.engaged
+        val p1 = tracker.slots[0]
+        menuControl.update(controls[0], p1.enabled && p1.isPlaying, dt)
+        // simulated input (a developer tool) cannot wave: it has control straight away
+        if (settings.simulatedInput && !menuControl.engaged) menuControl.grant()
+        if (menuControl.engaged && !wasEngaged && !settings.simulatedInput) audio.play(Sfx.UI_CONFIRM, 0.7f)
         for (k in 0..1) {
             val c = ui.cursors[k]
             val slot = tracker.slots[k]
             val p = pointers[k]
             c.color = playerColor(k)
             p.update(controls[k], slot.enabled && slot.isPlaying, g.width, g.height, dt)
-            c.visible = p.visible && !p.x.isNaN()
+            // menus: Player 1 only, once they have waved; Player 2 only where a screen asks for both
+            val allowed = if (k == 0) scr?.needsWave == false || menuControl.engaged else scr?.secondPointer == true
+            c.visible = allowed && p.visible && !p.x.isNaN()
             c.active = c.visible && p.active
             if (c.visible) { c.x = p.x; c.y = p.y }
+        }
+    }
+
+    /**
+     * The "wave to take control" prompt (and a moment of "you have control"), on screens a hand can steer. Shown at
+     * the bottom of the screen; the main menu shows it in place of its own hint.
+     */
+    fun drawControlPrompt(g: Gfx, cx: Float, y: Float) {
+        val scr = current ?: return
+        if (!scr.allowCursors || !scr.needsWave || settings.simulatedInput) return
+        if (platform.cameraStatus().state != CameraState.RUNNING) return
+        val p1 = tracker.slots[0]
+        val engaged = menuControl.engaged
+        if (engaged && menuControl.sinceEngaged > 2.5f) return
+        val text = when {
+            engaged -> "Player 1 has control - hold your hand still over a button to choose it"
+            p1.enabled && p1.isPlaying -> "Player 1: wave at the screen to take control"
+            tracker.slots[1].isPlaying || tracker.others.isNotEmpty() -> "Player 1 steers the menus: stand on the red side and wave"
+            else -> "Stand in front of the camera on the red side and wave to take control"
+        }
+        val col = if (engaged) Colors.GOOD else Colors.GOLD
+        val w = g.measureText(text, 32f, true) + 150f
+        val l = cx - w / 2f
+        g.fillRoundRect(l, y, l + w, y + 66f, 33f, 0xE60B1A36.toInt())
+        g.strokeRoundRect(l, y, l + w, y + 66f, 33f, 3f, if (engaged) Colors.GOOD else playerColor(0))
+        // a waving hand: rocks side to side while waiting, still once control is taken
+        val rock = if (engaged) 0f else kotlin.math.sin(time.toFloat() * 9f) * 0.35f
+        g.save(); g.translate(l + 48f, y + 33f); g.rotate(rock)
+        com.clrg.core.ui.Icons.draw(g, com.clrg.core.ui.Icon.HAND, 0f, 0f, 40f, col)
+        g.restore()
+        g.text(text, l + 88f, y + 33f, 32f, Colors.WHITE, com.clrg.core.render.Align.LEFT)
+        if (!engaged && menuControl.waveProgress > 0f) {
+            g.fillRoundRect(l + 30f, y + 56f, l + 30f + (w - 60f) * menuControl.waveProgress, y + 62f, 3f, col)
         }
     }
 

@@ -16,6 +16,13 @@ abstract class Screen(val app: GameApp) {
     open val room: Room? = Room.STUDIO
     /** Whether hands-free dwell cursors may operate this screen. */
     open val allowCursors: Boolean = true
+    /**
+     * Hands-free pointing here needs Player 1 to have waved to take control (menus). Screens where the person playing
+     * points as part of their turn (a golfer choosing a club) turn this off.
+     */
+    open val needsWave: Boolean = true
+    /** Player 2 gets a pointer too. Off for menus: only Player 1 (the red player) steers them. */
+    open val secondPointer: Boolean = false
     /** Whether this screen needs the camera (shows camera problems prominently). */
     open val needsCamera: Boolean = false
 

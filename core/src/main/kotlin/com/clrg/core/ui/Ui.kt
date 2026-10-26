@@ -33,6 +33,16 @@ class HandCursor(val player: Int) {
     var otherSec = 0f
     /** Seconds since this cursor selected something (for the "pop" on screen), large when long ago. */
     var sinceSelect = 9f
+    /** How fast the cursor is moving (virtual px per second, over the last [Ui.STEADY_WINDOW] s). */
+    var speed = 0f
+        internal set
+    // recent positions, to tell a hand held over a button from one passing over it
+    internal val histT = DoubleArray(16)
+    internal val histX = FloatArray(16)
+    internal val histY = FloatArray(16)
+    internal var histN = 0
+
+    internal fun clearHistory() { histN = 0; speed = 0f }
 }
 
 /** Visual theme; high-contrast and large-text accessibility options adjust it. */
@@ -49,8 +59,10 @@ class Theme(var highContrast: Boolean = false, var largeText: Boolean = false) {
 /**
  * Immediate-mode UI. Each frame screens call [button] etc.; activation is decided at the start of the next frame
  * from the boxes registered in the previous frame, using (1) touch taps, (2) keyboard / D-pad focus + Enter and
- * (3) dwell: a player's raised hand held over a button until the ring fills ([dwellSeconds]), after which the
- * cursor must leave the button before it can activate again.
+ * (3) dwell: a player's raised hand *held still* over a button until the ring fills ([dwellSeconds]), after which
+ * the cursor must leave the button before it can activate again. The ring only fills while the hand is steady and
+ * drains quickly while it moves, so a hand passing over a button - or moving away from one it did not mean to
+ * choose - never selects it.
  */
 class Ui(val theme: Theme, private val sound: (Sfx, Float) -> Unit) {
     class Box(val id: String, val rect: Rect, val enabled: Boolean)
@@ -69,10 +81,15 @@ class Ui(val theme: Theme, private val sound: (Sfx, Float) -> Unit) {
     var pointerY = 0f
         private set
     companion object {
-        /** A hand cursor this close (virtual px) to a button points at it. */
-        const val MAGNET_PX = 60f
-        /** A hand cursor on a button keeps pointing at it until it is this far (px) outside. */
-        const val STICKY_PX = 70f
+        /** A steady hand cursor this close (virtual px) to a button points at it. */
+        const val MAGNET_PX = 32f
+        /** A steady hand cursor on a button keeps pointing at it until it is this far (px) outside. */
+        const val STICKY_PX = 36f
+        /** Moving slower than this (px/s, over [STEADY_WINDOW]) counts as holding still: the ring fills. */
+        const val STEADY_PX_S = 380f
+        const val STEADY_WINDOW = 0.15
+        /** While the hand moves, the ring empties this many times faster than it fills. */
+        const val DRAIN = 2.5f
         /** Slipping off a button for less than this (s) pauses the ring instead of restarting it. */
         const val SLIP_GRACE = 0.35f
         /** Hovering a different button this long (s) moves the ring to it. */
@@ -132,21 +149,28 @@ class Ui(val theme: Theme, private val sound: (Sfx, Float) -> Unit) {
         // hands-free dwell
         for (c in cursors) {
             c.sinceSelect += dt
-            if (!cursorsEnabled || !c.active) { c.dwell = 0f; c.hoverId = null; c.awaySec = 0f; c.otherSec = 0f; continue }
-            val id = hitMagnetic(c)
+            if (!cursorsEnabled || !c.active) { c.dwell = 0f; c.hoverId = null; c.awaySec = 0f; c.otherSec = 0f; c.clearHistory(); continue }
+            trackSpeed(c)
+            val steady = c.speed < STEADY_PX_S
+            val id = hitMagnetic(c, steady)
             if (c.lockoutUntilLeave != null && id != c.lockoutUntilLeave) c.lockoutUntilLeave = null
             if (globalLock > 0f || (id != null && id == c.lockoutUntilLeave)) { c.hoverId = id; c.dwell = 0f; continue }
             when {
                 id != null && id == c.hoverId -> {
                     c.awaySec = 0f; c.otherSec = 0f
-                    val before = c.dwell
-                    c.dwell += dt
-                    // the hold-to-choose ring ticks, rising in pitch as it fills
-                    val q = (c.dwell / dwellSeconds * 4).toInt()
-                    if ((before / dwellSeconds * 4).toInt() != q && q < 4) sound(Sfx.TICK, 1f + 0.15f * q)
+                    if (steady) {
+                        val before = c.dwell
+                        c.dwell += dt
+                        // the hold-to-choose ring ticks, rising in pitch as it fills
+                        val q = (c.dwell / dwellSeconds * 4).toInt()
+                        if ((before / dwellSeconds * 4).toInt() != q && q < 4) sound(Sfx.TICK, 1f + 0.15f * q)
+                    } else {
+                        // passing over, or moving away: the ring empties instead of filling
+                        c.dwell = (c.dwell - dt * DRAIN).coerceAtLeast(0f)
+                    }
                 }
-                // a moment off the button (a wobble, a tracking blip): the ring pauses rather than restarting
-                c.hoverId != null && id == null && c.awaySec + dt < SLIP_GRACE -> c.awaySec += dt
+                // a moment off the button while holding still (a wobble, a tracking blip): the ring pauses
+                c.hoverId != null && id == null && steady && c.awaySec + dt < SLIP_GRACE -> c.awaySec += dt
                 c.hoverId != null && id != null && c.otherSec + dt < SWITCH_SEC -> c.otherSec += dt
                 else -> {
                     if (id != null && id != c.hoverId) sound(Sfx.UI_HOVER, 1f)
@@ -179,13 +203,30 @@ class Ui(val theme: Theme, private val sound: (Sfx, Float) -> Unit) {
      * magnetic: a cursor just outside a button still points at the nearest one, and once on a button it stays there
      * through a small wobble over its edge (so the hold-to-choose ring does not keep restarting).
      */
-    private fun hitMagnetic(c: HandCursor): String? {
+    private fun hitMagnetic(c: HandCursor, steady: Boolean): String? {
         hit(c.x, c.y)?.let { return it }
+        // a moving hand points exactly where it is: no pull towards buttons it is passing or leaving
+        if (!steady) return null
         c.hoverId?.let { h -> boxes.lastOrNull { it.id == h && it.enabled }?.let { b -> if (distToRect(b.rect, c.x, c.y) < STICKY_PX) return h } }
         var best: Box? = null
         var bd = MAGNET_PX
         for (b in boxes) if (b.enabled) { val d = distToRect(b.rect, c.x, c.y); if (d < bd) { bd = d; best = b } }
         return best?.id
+    }
+
+    /** The cursor's speed over the last [STEADY_WINDOW] seconds (tracking jitter averages out; a real move does not). */
+    private fun trackSpeed(c: HandCursor) {
+        val i = c.histN % c.histT.size
+        c.histT[i] = time; c.histX[i] = c.x; c.histY[i] = c.y; c.histN++
+        val n = minOf(c.histN, c.histT.size)
+        var oldest = i
+        for (k in 1 until n) {
+            val j = ((c.histN - 1 - k) % c.histT.size + c.histT.size) % c.histT.size
+            if (time - c.histT[j] > STEADY_WINDOW) break
+            oldest = j
+        }
+        val span = (time - c.histT[oldest]).toFloat()
+        c.speed = if (span < 0.05f) 0f else hypot(c.x - c.histX[oldest], c.y - c.histY[oldest]) / span
     }
 
     private fun distToRect(r: Rect, x: Float, y: Float): Float {

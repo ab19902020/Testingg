@@ -17,7 +17,8 @@ enum class GolfStroke { NONE, FULL, PUTT }
  * clearly each is seen, so a wrist hidden behind the head during the backswing does not drag it off).
  *
  * Full swing (driver, woods, irons, wedge):
- *  0. **Grip** - both hands together, as if holding a club ([grip], [handsGap] show how close they are).
+ *  0. **Grip** - both hands together, as if holding a club ([grip], [handsGap] show how close they are). Clasped
+ *     hands often hide one wrist behind the other; it still counts when the model places it right by the other.
  *  1. **Address** - hands gripped, low in front of you and still for a moment.
  *  2. **Backswing** - hands rise to either side. How high they go sets the power (a full swing takes them about
  *     level with your head; going much higher is an overswing - a little more distance, less accuracy).
@@ -88,8 +89,12 @@ class GolfSwingDetector {
     /** Hands position from a body frame; false when neither wrist is seen well enough. */
     private fun hands(f: BodyFrame): Boolean {
         val v0 = f.wv[LEFT]; val v1 = f.wv[RIGHT]
-        handsGap = if (v0 >= 0.3f && v1 >= 0.3f) hypot(f.wx[LEFT] - f.wx[RIGHT], f.wy[LEFT] - f.wy[RIGHT]) else Float.NaN
-        grip = !handsGap.isNaN() && handsGap < GRIP_GAP
+        // clasped hands hide one wrist behind the other: the camera sees one clearly and barely sees the other, but
+        // the model still places the hidden one - right next to the visible one when the hands are together
+        val bothClear = v0 >= 0.3f && v1 >= 0.3f
+        val oneHidden = !bothClear && maxOf(v0, v1) >= 0.3f && minOf(v0, v1) >= HIDDEN_VIS
+        handsGap = if (bothClear || oneHidden) hypot(f.wx[LEFT] - f.wx[RIGHT], f.wy[LEFT] - f.wy[RIGHT]) else Float.NaN
+        grip = !handsGap.isNaN() && handsGap < (if (bothClear) GRIP_GAP else GRIP_GAP * 0.8f)
         if (v0 < 0.2f && v1 < 0.2f) return false
         val w0 = max(0f, v0 - 0.15f); val w1 = max(0f, v1 - 0.15f)
         handsX = (f.wx[LEFT] * w0 + f.wx[RIGHT] * w1) / (w0 + w1)
@@ -196,6 +201,8 @@ class GolfSwingDetector {
     companion object {
         /** Wrists closer than this (body units) count as holding a club together. */
         const val GRIP_GAP = 0.42f
+        /** A wrist this faintly seen still counts towards the grip when it is right next to the other (hidden behind it). */
+        const val HIDDEN_VIS = 0.05f
         /** How long the hands may be lost during a backswing (s). */
         const val LOST_GRACE_SEC = 0.5
         const val ADDRESS_HOLD_SEC = 0.45
