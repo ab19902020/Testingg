@@ -164,6 +164,7 @@ class TrackingBench {
             "still1" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, smoothStill = 0.01f),
             "still2" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, smoothStill = 0.02f),
             "bestJ" to PipelineConfig(),
+            "jAll" to PipelineConfig(jumpTargeted = false),
             "j10" to PipelineConfig(jumpDev = 0.1f),
             "j04" to PipelineConfig(jumpDev = 0.04f),
             "bestP" to off.copy(smoothRoi = true, retryWider = true, keepPresence = 0.4f, autoLevel = true, predictMotion = true, predictFraction = 0.5f, predictGrow = 0.08f),

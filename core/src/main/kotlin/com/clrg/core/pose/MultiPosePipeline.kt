@@ -60,6 +60,11 @@ data class PipelineConfig(
     val guardJumps: Boolean = true,
     /** A track result further than this from its own motion's prediction (fraction of the crop) is re-checked. */
     val jumpDev: Float = 0.06f,
+    /**
+     * Re-check a jump only when it moved the track towards another tracked person (the case that swaps players),
+     * so ordinary fast movement costs no extra model runs.
+     */
+    val jumpTargeted: Boolean = true,
 )
 
 /** Horizontal slice of the upright frame (fractions of width), full height. */
@@ -106,6 +111,8 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         var measured: RotatedRect = roi
         /** How far this frame's result was from where the person's motion predicted (fraction of crop size). */
         var dev = 0f
+        /** Frame this track was last updated (its `measured` is already this frame's). */
+        var seenFrame = -1L
     }
 
     private val tracks = ArrayList<Track>()
@@ -188,7 +195,8 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
             val pcx = tr.measured.cx + tr.vx
             val pcy = tr.measured.cy + tr.vy
             tr.dev = kotlin.math.hypot(measured.cx - pcx, measured.cy - pcy) / measured.side
-            if (config.guardJumps && tr.frames > 2 && tr.dev > config.jumpDev) {
+            if (config.guardJumps && tr.frames > 2 && tr.dev > config.jumpDev &&
+                (!config.jumpTargeted || jumpedTowardsOther(tr, measured, pcx, pcy))) {
                 // a sudden jump: look again where they should be; keep whichever result fits their motion
                 val again = runLandmarks(src, toBuffer, tr.roi.copy(cx = pcx, cy = pcy), clock, config.keepPresence)
                 if (again != null) {
@@ -208,6 +216,7 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
             tr.vy += 0.6f * ((measured.cy - tr.measured.cy) - tr.vy)
             tr.roi = roi
             tr.measured = measured
+            tr.seenFrame = frameIndex
             results.add(RawPose(tr.id, lm, presence, roi, Appearance.compute(src, toBuffer, lm), tr.frames))
         }
 
@@ -319,6 +328,27 @@ class MultiPosePipeline(private val runner: PoseModelRunner, var config: Pipelin
         stats.landmarkRuns++
         if (lmFlag[0] < minPresence) return null
         return LandmarkDecoder.decode(lmRaw, hm, roi)
+    }
+
+    /** Did this result move [tr] mostly towards someone else's position (rather than along its own way)? */
+    private fun jumpedTowardsOther(tr: Track, m: RotatedRect, pcx: Float, pcy: Float): Boolean {
+        val jx = m.cx - pcx
+        val jy = m.cy - pcy
+        val jump = kotlin.math.hypot(jx, jy)
+        if (jump <= 0f) return false
+        for (o in tracks) {
+            if (o === tr) continue
+            // the other person's position this frame (measured already, or expected from their motion)
+            val ox = if (o.seenFrame == frameIndex) o.measured.cx else o.measured.cx + o.vx
+            val oy = if (o.seenFrame == frameIndex) o.measured.cy else o.measured.cy + o.vy
+            val tx = ox - pcx
+            val ty = oy - pcy
+            val dist = kotlin.math.hypot(tx, ty)
+            if (dist <= 0f || dist > (m.side + o.measured.side) * 0.9f) continue
+            // jump direction within about 60 degrees of the direction to the other person
+            if ((jx * tx + jy * ty) / (jump * dist) > 0.5f) return true
+        }
+        return false
     }
 
     private fun dedupe(results: MutableList<RawPose>) {
