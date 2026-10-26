@@ -28,6 +28,7 @@ import com.clrg.core.render.Gfx
 import com.clrg.core.render.Particles
 import com.clrg.core.render.PlayerColors
 import com.clrg.core.render.Prop
+import com.clrg.core.ui.Icon
 import com.clrg.core.ui.Screen
 import com.clrg.core.ui.Ui
 import kotlin.math.PI
@@ -79,15 +80,16 @@ class GolfSetupScreen(app: GameApp) : Screen(app) {
         // course
         val right = Rect(g.width * 0.5f + 15f, 205f, g.width - 40f, 905f)
         Draw.panel(g, right, app.theme.panel, app.theme.panelBorder)
-        g.text("Course (3 holes)", right.cx, right.top + 46f, 38f * app.theme.textScale, Colors.GOLD)
+        g.text("Course", right.cx, right.top + 46f, 38f * app.theme.textScale, Colors.GOLD)
         Courses.all.forEachIndexed { i, c ->
-            val r = Rect(right.left + 30f, right.top + 90f + i * 196f, right.right - 30f, right.top + 270f + i * 196f)
+            val r = Rect(right.left + 30f, right.top + 86f + i * 152f, right.right - 30f, right.top + 224f + i * 152f)
             if (ui.button(g, "golf_course$i", r, "", accent = Colors.GOOD, selected = course == i)) course = i
             val tc = if (course == i) Colors.BLACK else Colors.WHITE
-            g.text(c.title(!app.christmasMode), r.left + 30f, r.top + 50f, 42f, tc, Align.LEFT)
-            g.text(c.tagline, r.left + 30f, r.top + 100f, 28f, if (course == i) Colors.BLACK else app.theme.dim, Align.LEFT, bold = false)
-            g.text("Par ${c.par}  -  " + c.holes.joinToString("  ") { "${it.length} m" }, r.left + 30f, r.top + 145f, 26f, if (course == i) Colors.BLACK else app.theme.dim, Align.LEFT, bold = false)
-            miniHole(g, c, Rect(r.right - 150f, r.top + 12f, r.right - 20f, r.bottom - 12f))
+            g.text(c.title(!app.christmasMode), r.left + 30f, r.top + 38f, 38f, tc, Align.LEFT)
+            g.text("${c.holes.size} holes  -  ${c.tagline}", r.left + 30f, r.top + 80f, 26f, if (course == i) Colors.BLACK else app.theme.dim, Align.LEFT, bold = false)
+            val lens = if (c.holes.size > 3) "${c.holes.sumOf { it.length }} m in all" else c.holes.joinToString("  ") { "${it.length} m" }
+            g.text("Par ${c.par}  -  $lens", r.left + 30f, r.top + 116f, 24f, if (course == i) Colors.BLACK else app.theme.dim, Align.LEFT, bold = false)
+            miniHole(g, c, Rect(r.right - 130f, r.top + 10f, r.right - 20f, r.bottom - 10f))
         }
 
         val ok = entries.isNotEmpty()
@@ -156,6 +158,13 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
     private var landed = false
     private var holeDoneTime = 0f
     private var showCard = 0f
+    /** Seconds into the opening flyover of the current hole (FLY_SEC or more: none running). */
+    private var flyT = 99f
+    private var flyHole = -1
+    /** "BIRDIE!", "PAR" ... shown big for a moment when a ball drops. */
+    private var celebrate: String? = null
+    private var celebrateColor = Colors.GOLD
+    private var celebrateT = 99f
 
     /** True while a camera player (not a computer golfer, not the developer autoplay) is up. */
     private val humanTurn: Boolean get() = !match.player.isCpu && !(app.settings.simulatedInput && app.sim.autoplay)
@@ -188,6 +197,12 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
     private fun advance(dt: Float) {
         swingAnim += dt
         showCard = (showCard - dt).coerceAtLeast(0f)
+        celebrateT += dt
+        // a new hole opens with a flyover from the green back to the tee
+        if (match.phase == GolfMatch.Phase.TURN_START && flyHole != match.holeIndex && match.current == 0 && match.strokesThisHole == 0) {
+            flyHole = match.holeIndex; flyT = 0f
+        }
+        if (flyT < FLY_SEC) flyT += dt
         when (match.phase) {
             GolfMatch.Phase.TURN_START -> turnStart(dt)
             GolfMatch.Phase.AIM -> if (humanTurn) humanAim() else cpuAim(dt)
@@ -196,6 +211,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
                 match.update(dt)
                 if (p != null && match.phase == GolfMatch.Phase.FLIGHT && !landed && match.animTime >= p.flightSec && p.club != Club.PUTTER) {
                     landed = true
+                    extras.landX = p.land.x; extras.landY = p.land.y; extras.landAge = 0f
                     if (p.hitTree) app.audio.play(Sfx.GOLF_TREE, 0.8f)
                     when (match.hole.surface(p.land)) {
                         Surface.WATER -> { app.audio.play(Sfx.GOLF_SPLASH, 0.9f); app.audio.play(Sfx.CROWD_AW, 0.3f) }
@@ -219,6 +235,19 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
                 p?.outcome == Outcome.HOLED || match.message.contains("HOLE IN ONE") || match.message.startsWith("Tapped in") || match.strokes[match.current][match.holeIndex] > 0 -> {
                     val toPar = match.strokes[match.current][match.holeIndex] - match.hole.par
                     val good = toPar <= 0
+                    val strokes = match.strokes[match.current][match.holeIndex]
+                    celebrate = when {
+                        strokes == 1 -> "HOLE IN ONE!"
+                        toPar <= -3 -> "ALBATROSS!"
+                        toPar == -2 -> "EAGLE!"
+                        toPar == -1 -> "BIRDIE!"
+                        toPar == 0 -> "PAR"
+                        toPar == 1 -> "BOGEY"
+                        toPar == 2 -> "DOUBLE BOGEY"
+                        else -> "+$toPar"
+                    }
+                    celebrateColor = when { toPar < 0 -> Colors.GOLD; toPar == 0 -> Colors.WHITE; else -> Colors.ICE }
+                    celebrateT = 0f
                     app.audio.play(Sfx.GOLF_CUP, 0.9f)
                     when {
                         toPar <= -2 || match.message.contains("HOLE IN ONE") -> { app.audio.play(Sfx.GOLF_BIRDIE); app.audio.play(Sfx.CROWD_CHEER, 0.8f) }
@@ -234,7 +263,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
         if (to == GolfMatch.Phase.HOLE_DONE) { holeDoneTime = 0f; app.audio.play(if (app.christmasMode) Sfx.JINGLE else Sfx.UI_OPEN) }
         if (to == GolfMatch.Phase.COURSE_DONE) { app.audio.play(if (app.christmasMode) Sfx.WIN else Sfx.FANFARE); app.audio.play(Sfx.APPLAUSE, 0.8f); app.audio.playMusic(MusicTrack.VICTORY, restart = true); particles.confetti(0f, 1920f, -20f, 120) }
         if (to == GolfMatch.Phase.TURN_START) { step = Step.NEW; stepTime = 0f }
-        if (to == GolfMatch.Phase.AIM) { cpuTime = 0f; cpuShot = null }
+        if (to == GolfMatch.Phase.AIM) { cpuTime = 0f; cpuShot = null; extras.landX = Float.NaN; flyT = FLY_SEC }
     }
 
     private fun nextHole() { match.continueAfterHole() }
@@ -244,7 +273,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
         stepTime += dt
         val pl = match.player
         if (!humanTurn) {
-            if (stepTime > 1.4f) match.beginTurn()
+            if (stepTime > 1.4f && flyT >= FLY_SEC) match.beginTurn()
             return
         }
         val prof = app.roster.byId(pl.profileId)
@@ -254,7 +283,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
             Step.NEW -> {
                 if (trackedProfile == pl.profileId && app.calibrated && slot.isPlaying) {
                     // the same person again (e.g. playing alone): carry straight on
-                    if (stepTime > 1.2f) match.beginTurn()
+                    if (stepTime > 1.2f && flyT >= FLY_SEC) match.beginTurn()
                     return
                 }
                 trackedProfile = null
@@ -319,26 +348,42 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
         updateCamera(dt)
         fillExtras(dt)
         scene.draw(g, Rect(0f, 0f, g.width, g.height), hole, app.time, extras)
-        Common.header(g, ui, "Hole ${hole.number} of ${course.holes.size}  -  Par ${hole.par}  -  ${hole.length} m", app = app)
-        g.text(course.title(!app.christmasMode), g.width - 30f, 70f, 30f, app.theme.dim, Align.RIGHT, bold = false)
-        val mapR = centre(g)
-        infoPanel(g, Rect(20f, 140f, 500f, 400f))
-        cameraInset(g, Rect(20f, 410f, 500f, 680f))
-        swingPanel(g, Rect(20f, 690f, 500f, 1060f))
-        miniMap(g, Rect(g.width - 290f - 250f, 150f, g.width - 290f - 12f, 470f), dt)
-        clubColumn(g, ui, Rect(g.width - 270f, 140f, g.width - 20f, 1060f))
-        // result message over the view
+        Draw.vignette(g, if (app.settings.reducedEffects) 0.15f else 0.28f)
+        val flying = flyT < FLY_SEC && match.phase == GolfMatch.Phase.TURN_START
+        val mapR = Rect(560f, 140f, g.width - 300f, g.height - 40f)
+        if (flying) holeIntro(g, flyT / FLY_SEC)
+        else {
+            if (ui.button(g, "back", Rect(24f, 24f, 116f, 140f), "", accent = Colors.ICE, icon = Icon.PAUSE, size = 34f)) paused = !paused
+            holeCard(g, Rect(132f, 24f, 560f, 140f))
+            playerCard(g, Rect(24f, 156f, 560f, 372f))
+            if (match.phase == GolfMatch.Phase.AIM && humanTurn) {
+                glass(g, Rect(24f, 390f, 520f, g.height - 24f))
+                cameraInset(g, Rect(34f, 400f, 510f, 650f))
+                swingPanel(g, Rect(34f, 660f, 510f, g.height - 34f))
+            } else if (match.phase == GolfMatch.Phase.AIM) {
+                val t = "${match.player.name} is lining up..."
+                val w = g.measureText(t, 32f, false) + 60f
+                g.fillRoundRect(24f, g.height - 100f, 24f + w, g.height - 34f, 33f, 0xCC0B1A36.toInt())
+                g.text(t, 24f + w / 2f, g.height - 67f, 32f, Colors.WHITE, bold = false)
+            }
+            miniMap(g, Rect(g.width - 276f, 24f, g.width - 24f, 330f), dt)
+            clubColumn(g, ui, Rect(g.width - 276f, 346f, g.width - 24f, g.height - 24f))
+        }
+        // result message at the top of the view
         val showMsg = match.phase == GolfMatch.Phase.AIM || match.phase == GolfMatch.Phase.FLIGHT || match.phase == GolfMatch.Phase.RESULT
         if (showMsg && match.message.isNotEmpty() && match.messageTime < 3.2f) {
             val a = (if (match.messageTime > 2.6f) (3.2f - match.messageTime) / 0.6f else 1f).coerceIn(0f, 1f)
             g.save(); g.setAlpha(a)
-            val w = g.measureText(match.message, 48f) + 80f
-            g.fillRoundRect(mapR.cx - w / 2f, mapR.top + 20f, mapR.cx + w / 2f, mapR.top + 100f, 40f, 0xDD0B2A4F.toInt())
-            g.text(match.message, mapR.cx, mapR.top + 60f, 48f, Colors.GOLD, outline = Colors.BLACK, outlineWidth = 5f)
+            val w = minOf(g.measureText(match.message, 46f) + 80f, 1040f)
+            g.fillRoundRect(g.width / 2f - w / 2f, 34f, g.width / 2f + w / 2f, 112f, 39f, 0xDD0B2A4F.toInt())
+            g.strokeRoundRect(g.width / 2f - w / 2f, 34f, g.width / 2f + w / 2f, 112f, 39f, 3f, Colors.withAlpha(match.player.color, 0.8f))
+            g.text(match.message, g.width / 2f, 73f, ui.fit(g, match.message, 46f, w - 60f), Colors.GOLD, outline = Colors.BLACK, outlineWidth = 4f)
             g.restore()
         }
+        celebration(g)
         particles.render(g)
         when {
+            match.phase == GolfMatch.Phase.TURN_START && flying -> Unit
             match.phase == GolfMatch.Phase.TURN_START && humanTurn -> stepUpOverlay(g, mapR)
             match.phase == GolfMatch.Phase.TURN_START -> banner(g, mapR, "${match.player.name}'s turn", match.player.color)
             match.phase == GolfMatch.Phase.HOLE_DONE -> holeDone(g, ui)
@@ -347,6 +392,76 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
         if (showCard > 0f && match.phase == GolfMatch.Phase.AIM) scorecard(g, Rect(g.width / 2f - 640f, 260f, g.width / 2f + 640f, 760f))
         if (match.phase == GolfMatch.Phase.AIM && humanTurn && !app.tracker.slots[0].isPlaying) banner(g, mapR, "Step back in front of the camera", Colors.WARN)
         if (paused) pauseMenu(g, ui)
+    }
+
+    /** Frosted panel behind HUD cards. */
+    private fun glass(g: Gfx, r: Rect, accent: Int = 0x885D8BC9.toInt()) {
+        g.fillRoundRect(r.left + 4f, r.top + 8f, r.right + 4f, r.bottom + 8f, 26f, 0x44000000)
+        g.fillRoundRectGradient(r.left, r.top, r.right, r.bottom, 26f, 0xD0173260.toInt(), 0xD00A1730.toInt())
+        g.strokeRoundRect(r.left, r.top, r.right, r.bottom, 26f, 2.5f, accent)
+    }
+
+    /** Hole number, par and length. */
+    private fun holeCard(g: Gfx, r: Rect) {
+        val h = match.hole
+        glass(g, r)
+        g.text("HOLE ${h.number}", r.left + 26f, r.top + 44f, 46f, Colors.GOLD, Align.LEFT)
+        g.text("of ${course.holes.size}", r.left + 36f + g.measureText("HOLE ${h.number}", 46f), r.top + 50f, 26f, app.theme.dim, Align.LEFT, bold = false)
+        val chip = "PAR ${h.par}"
+        val cw = g.measureText(chip, 30f) + 36f
+        g.fillRoundRect(r.right - cw - 20f, r.top + 22f, r.right - 20f, r.top + 66f, 22f, Colors.GOLD)
+        g.text(chip, r.right - 20f - cw / 2f, r.top + 44f, 30f, Colors.BLACK)
+        g.text("${h.length} m  -  ${course.title(!app.christmasMode)}", r.left + 26f, r.top + 92f, 28f, Colors.WHITE, Align.LEFT, bold = false)
+    }
+
+    /** Opening card while the camera flies the hole. */
+    private fun holeIntro(g: Gfx, k: Float) {
+        val h = match.hole
+        val a = when { k < 0.12f -> k / 0.12f; k > 0.88f -> (1f - k) / 0.12f; else -> 1f }.coerceIn(0f, 1f)
+        g.save(); g.setAlpha(a)
+        val r = Rect(g.width / 2f - 560f, g.height - 350f, g.width / 2f + 560f, g.height - 50f)
+        glass(g, r, Colors.withAlpha(Colors.GOLD, 0.8f))
+        g.text("HOLE ${h.number}", r.cx, r.top + 70f, 92f, Colors.GOLD, outline = Colors.BLACK, outlineWidth = 6f)
+        g.text("Par ${h.par}  -  ${h.length} m  -  ${course.title(!app.christmasMode)}", r.cx, r.top + 140f, 40f, Colors.WHITE)
+        val notes = ArrayList<String>()
+        if (h.water.isNotEmpty()) notes.add("Water")
+        if (h.bunkers.isNotEmpty()) notes.add("${h.bunkers.size} bunker${if (h.bunkers.size > 1) "s" else ""}")
+        if (h.trees.isNotEmpty()) notes.add("Trees")
+        val dogleg = kotlin.math.abs(h.pin.x) > h.length * 0.15f
+        if (dogleg) notes.add(if (h.pin.x > 0) "Dogleg right" else "Dogleg left")
+        if (h.wind.len() > 1.5f) notes.add("Windy")
+        var x = r.cx - (notes.sumOf { (g.measureText(it, 26f, false) + 40f).toDouble() }.toFloat() + 12f * (notes.size - 1)) / 2f
+        for (n in notes) x += app.ui.chip(g, x, r.top + 200f, n, Colors.ICE, 26f) + 12f
+        if (humanTurn) {
+            val t = when (step) {
+                Step.CONFIRM -> "${match.player.name}: raise a hand to start"
+                else -> "${match.player.name}: step up to the camera"
+            }
+            g.text(t, r.cx, r.bottom - 26f, 28f, match.player.color, bold = false)
+        }
+        g.restore()
+    }
+
+    /** "BIRDIE!" and friends, popping up in the middle when a ball drops. */
+    private fun celebration(g: Gfx) {
+        val text = celebrate ?: return
+        val t = celebrateT
+        if (t > 2.6f) return
+        val pop = if (t < 0.35f) com.clrg.core.math.easeOutBack((t / 0.35f).coerceIn(0f, 1f)) else 1f
+        val a = if (t > 2.1f) (2.6f - t) / 0.5f else 1f
+        val big = text.endsWith("!")
+        val size = if (big) 120f else 84f
+        g.save(); g.setAlpha(a.coerceIn(0f, 1f))
+        g.translate(g.width / 2f, 330f); g.scale(pop.coerceAtLeast(0.01f)); g.translate(-g.width / 2f, -330f)
+        val w = g.measureText(text, size) + 120f
+        if (big) g.glow(g.width / 2f, 330f, w * 0.7f, Colors.withAlpha(celebrateColor, 0.35f))
+        g.fillRoundRect(g.width / 2f - w / 2f, 330f - size * 0.75f, g.width / 2f + w / 2f, 330f + size * 0.75f, size * 0.75f, 0xCC0B1A36.toInt())
+        g.text(text, g.width / 2f, 330f, size, celebrateColor, outline = Colors.BLACK, outlineWidth = size * 0.08f)
+        if (big) for (i in 0 until 6) {
+            val ang = app.time.toFloat() * 1.5f + i * 1.047f
+            Draw.star(g, g.width / 2f + kotlin.math.cos(ang) * (w * 0.55f), 330f + kotlin.math.sin(ang) * size * 0.9f, 18f, Colors.GOLD, ang)
+        }
+        g.restore()
     }
 
     /** Where the 3D camera wants to be for what is happening now. */
@@ -373,7 +488,10 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
                     rate = 1.6f
                 }
             }
-            else -> { scene.overview(h, app.time); rate = 1.4f }
+            else -> {
+                if (flyT < FLY_SEC) scene.flyover(h, flyT / FLY_SEC) else scene.overview(h, app.time)
+                rate = 1.4f
+            }
         }
         scene.update(dt, rate)
     }
@@ -383,6 +501,8 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
         val pl = match.player
         x.ballColor = pl.color
         x.golferColor = pl.color
+        x.tracerColor = pl.color
+        x.landAge += dt
         x.leftHanded = pl.hand == com.clrg.core.tracking.Hand.LEFT
         x.club = match.club
         x.showAim = false; x.golfer = false; x.putting = false
@@ -452,35 +572,45 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
         }
     }
 
-    private fun infoPanel(g: Gfx, r: Rect) {
-        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 24f, 0xCC0B1E3A.toInt())
-        g.strokeRoundRect(r.left, r.top, r.right, r.bottom, 24f, 3f, app.theme.panelBorder)
+    /** Whose turn, the stroke, the score, distance to the pin, the lie and the wind. */
+    private fun playerCard(g: Gfx, r: Rect) {
         val pl = match.player
-        g.text(pl.name + if (pl.isCpu) " (computer)" else "", r.cx, r.top + 42f, 44f, pl.color, outline = Colors.BLACK, outlineWidth = 4f)
-        val strokeNo = match.strokesThisHole + if (match.phase == GolfMatch.Phase.AIM) 1 else 0
-        g.text("Stroke ${strokeNo.coerceAtLeast(1)}   -   Round ${GolfMatch.toParText(match.toPar(match.current))}", r.cx, r.top + 92f, 30f, Colors.WHITE, bold = false)
+        glass(g, r, Colors.withAlpha(pl.color, 0.8f))
+        g.fillRoundRect(r.left, r.top, r.left + 14f, r.bottom, 7f, pl.color)
+        g.text(pl.name + if (pl.isCpu) " (computer)" else "", r.left + 34f, r.top + 40f, ui0fit(g, pl.name, 42f, r.width - 200f), pl.color, Align.LEFT, outline = Colors.BLACK, outlineWidth = 3f)
+        val strokeNo = (match.strokesThisHole + if (match.phase == GolfMatch.Phase.AIM) 1 else 0).coerceAtLeast(1)
+        g.text("Stroke $strokeNo   -   Round ${GolfMatch.toParText(match.toPar(match.current))}", r.left + 34f, r.top + 84f, 28f, Colors.WHITE, Align.LEFT, bold = false)
         val playing = match.phase == GolfMatch.Phase.AIM || match.phase == GolfMatch.Phase.FLIGHT || match.phase == GolfMatch.Phase.RESULT
         if (playing) {
-            g.text("To the pin: ${GolfMatch.fmt(match.distanceToPin())}", r.left + 30f, r.top + 140f, 32f, Colors.WHITE, Align.LEFT, bold = false)
-            g.text("Lie: ${match.lie.label}", r.left + 30f, r.top + 182f, 32f, if (match.lie == Surface.SAND || match.lie == Surface.TREES) Colors.WARN else Colors.WHITE, Align.LEFT, bold = false)
+            g.text(GolfMatch.fmt(match.distanceToPin()), r.left + 34f, r.top + 146f, 58f, Colors.WHITE, Align.LEFT)
+            g.text("to the pin", r.left + 44f + g.measureText(GolfMatch.fmt(match.distanceToPin()), 58f), r.top + 154f, 26f, app.theme.dim, Align.LEFT, bold = false)
+            val lieCol = when (match.lie) { Surface.SAND, Surface.TREES -> Colors.WARN; Surface.GREEN, Surface.FAIRWAY, Surface.TEE -> Colors.GOOD; else -> Colors.ICE }
+            g.fillCircle(r.left + 44f, r.top + 192f, 9f, lieCol)
+            g.text("Lie: ${match.lie.label}", r.left + 62f, r.top + 192f, 28f, Colors.WHITE, Align.LEFT, bold = false)
         }
         // wind, as it blows across the view
         val w = match.hole.wind
         val m = w.len()
-        val ang = atan2(w.x, w.y) - scene.cam.yaw // relative to where the camera looks
-        val ax = r.right - 70f; val ay = r.bottom - 70f
-        g.fillCircle(ax, ay, 46f, 0x55000000)
-        val dx = sin(ang) * 34f; val dy = -cos(ang) * 34f
-        g.line(ax - dx, ay - dy, ax + dx, ay + dy, 6f, Colors.ICE)
+        val ang = atan2(w.x, w.y) - scene.cam.yaw
+        val ax = r.right - 74f; val ay = r.top + 120f
+        g.fillCircle(ax, ay, 52f, 0x66000000)
+        g.strokeCircle(ax, ay, 52f, 2f, 0x669AD9FF)
+        val dx = sin(ang) * 36f; val dy = -cos(ang) * 36f
+        g.line(ax - dx, ay - dy, ax + dx, ay + dy, 7f, Colors.ICE)
         val hd = atan2(dy, dx)
-        g.line(ax + dx, ay + dy, ax + dx - cos(hd - 0.5f) * 16f, ay + dy - sin(hd - 0.5f) * 16f, 6f, Colors.ICE)
-        g.line(ax + dx, ay + dy, ax + dx - cos(hd + 0.5f) * 16f, ay + dy - sin(hd + 0.5f) * 16f, 6f, Colors.ICE)
-        g.text("Wind %.1f m/s".format(m), r.left + 30f, r.bottom - 34f, 30f, Colors.ICE, Align.LEFT, bold = false)
+        g.line(ax + dx, ay + dy, ax + dx - cos(hd - 0.5f) * 18f, ay + dy - sin(hd - 0.5f) * 18f, 7f, Colors.ICE)
+        g.line(ax + dx, ay + dy, ax + dx - cos(hd + 0.5f) * 18f, ay + dy - sin(hd + 0.5f) * 18f, 7f, Colors.ICE)
+        g.text("%.1f m/s".format(m), ax, ay + 76f, 24f, Colors.ICE, bold = false)
+    }
+
+    private fun ui0fit(g: Gfx, s: String, size: Float, maxW: Float): Float {
+        val w = g.measureText(s, size)
+        return if (w <= maxW || w <= 0f) size else size * maxW / w
     }
 
     /** The camera's picture of the player with the hands marked: green when they hold the "club" together. */
     private fun cameraInset(g: Gfx, r: Rect) {
-        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 24f, 0xCC0B1E3A.toInt())
+        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 18f, 0x66000000)
         if (!humanTurn || match.phase == GolfMatch.Phase.TURN_START) {
             g.text(if (match.player.isCpu) "${match.player.name} is playing" else "Your turn is coming", r.cx, r.cy, 30f, app.theme.dim, bold = false)
             return
@@ -509,8 +639,6 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
 
     /** What to do now: the grip guide, then the address, then the live power of the swing. */
     private fun swingPanel(g: Gfx, r: Rect) {
-        g.fillRoundRect(r.left, r.top, r.right, r.bottom, 24f, 0xCC0B1E3A.toInt())
-        g.strokeRoundRect(r.left, r.top, r.right, r.bottom, 24f, 3f, app.theme.panelBorder)
         if (match.phase != GolfMatch.Phase.AIM) return
         if (!humanTurn) { g.text("${match.player.name} is lining up...", r.cx, r.cy, 34f, Colors.WHITE, bold = false); return }
         val det = app.controls[0].golf
@@ -560,7 +688,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
 
     /** The whole hole from above, with the ball and where it is aimed. */
     private fun miniMap(g: Gfx, r: Rect, dt: Float) {
-        g.fillRoundRect(r.left - 6f, r.top - 6f, r.right + 6f, r.bottom + 6f, 16f, 0xAA0B1E3A.toInt())
+        glass(g, Rect(r.left - 6f, r.top - 6f, r.right + 6f, r.bottom + 6f))
         val h = match.hole
         view.frameHole(r, h, dt)
         view.drawHole(g, h, app.time, false)
@@ -598,29 +726,29 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
 
     private fun clubColumn(g: Gfx, ui: Ui, r: Rect) {
         val canChoose = match.phase == GolfMatch.Phase.AIM && humanTurn
-        g.text("Clubs", r.cx, r.top + 22f, 30f, app.theme.dim)
+        val rowH = 76f
         Club.values().forEachIndexed { i, c ->
-            val b = Rect(r.left, r.top + 50f + i * 106f, r.right, r.top + 144f + i * 106f)
-            val dist = if (c == Club.PUTTER) "on the green" else "${(c.carry * GolfPhysics.lieFactor(match.lie, c)).toInt()} m"
-            if (ui.button(g, "club_${c.name}", b, c.label, dist, accent = Colors.GOLD, selected = match.club == c, enabled = canChoose, size = 34f)) {
+            val b = Rect(r.left, r.top + i * rowH, r.right, r.top + i * rowH + rowH - 8f)
+            val dist = if (c == Club.PUTTER) "green" else "${(c.carry * GolfPhysics.lieFactor(match.lie, c)).toInt()} m"
+            if (ui.button(g, "club_${c.name}", b, c.label, dist, accent = Colors.GOLD, selected = match.club == c, enabled = canChoose, size = 32f)) {
                 match.selectClub(c); app.audio.play(Sfx.SELECT, 0.5f)
             }
         }
         // aim: hold a hand on an arrow to keep turning; a tap turns a little
-        val ay = r.top + 50f + 6 * 106f + 10f
-        val half = (r.width - 12f) / 2f
-        val aimL = Rect(r.left, ay, r.left + half, ay + 100f)
-        val aimR = Rect(r.right - half, ay, r.right, ay + 100f)
+        val ay = r.top + 6 * rowH + 6f
+        val half = (r.width - 10f) / 2f
+        val aimL = Rect(r.left, ay, r.left + half, ay + 82f)
+        val aimR = Rect(r.right - half, ay, r.right, ay + 82f)
         val fine = match.club == Club.PUTTER
         val stepRad = ((if (fine) 0.5 else 1.0) * PI / 180.0).toFloat()
-        if (ui.button(g, "aimL", aimL, "< Aim", accent = Colors.ICE, enabled = canChoose, size = 32f)) match.nudgeAim(-stepRad)
-        if (ui.button(g, "aimR", aimR, "Aim >", accent = Colors.ICE, enabled = canChoose, size = 32f)) match.nudgeAim(stepRad)
+        if (ui.button(g, "aimL", aimL, "", accent = Colors.ICE, enabled = canChoose, size = 28f, icon = Icon.BACK)) match.nudgeAim(-stepRad)
+        if (ui.button(g, "aimR", aimR, "", accent = Colors.ICE, enabled = canChoose, size = 28f, icon = Icon.PLAY)) match.nudgeAim(stepRad)
         if (canChoose) {
             val rate = ((if (fine) 3.0 else 8.0) * PI / 180.0).toFloat() / 60f
             if (ui.cursors.any { it.active && it.hoverId == "aimL" }) match.nudgeAim(-rate)
             if (ui.cursors.any { it.active && it.hoverId == "aimR" }) match.nudgeAim(rate)
         }
-        if (ui.button(g, "golf_card", Rect(r.left, ay + 112f, r.right, ay + 200f), "Scorecard", accent = Colors.ICE, size = 32f)) showCard = 5f
+        if (ui.button(g, "golf_card", Rect(r.left, ay + 92f, r.right, ay + 166f), "Scorecard", accent = Colors.ICE, size = 28f, icon = Icon.TROPHY)) showCard = 5f
     }
 
     private fun banner(g: Gfx, r: Rect, text: String, color: Int) {
@@ -712,5 +840,7 @@ class GolfScreen(app: GameApp, private val course: Course, private val lineup: L
     companion object {
         /** Seconds from the start of the computer's swing animation to impact. */
         const val CPU_IMPACT = 1.0f
+        /** Length of a hole's opening flyover (s). */
+        const val FLY_SEC = 4.5f
     }
 }

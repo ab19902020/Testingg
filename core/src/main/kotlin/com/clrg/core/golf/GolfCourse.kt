@@ -45,6 +45,9 @@ class Hole(
 ) {
     val tee = Pt(0f, 0f)
     val yMin = -18f
+
+    /** The same hole with a different number (for courses made of other courses' holes). */
+    fun withNumber(n: Int) = Hole(n, par, pin, greenR, slope, fairway, fairwayWidth, bunkers, water, trees, xMin, xMax, yMax, wind)
     /** Straight-line length from tee to pin (m). */
     val length: Int get() = tee.dist(pin).toInt()
 
@@ -102,6 +105,7 @@ class Course(val name: String, val tagline: String, val holes: List<Hole>) {
         "Candy Cane Links" -> "Meadow Links"
         "Frozen Lake Club" -> "Lakeside Club"
         "North Pole Peaks" -> "Highland Peaks"
+        "Sleigh Ride Tour" -> "Championship Tour"
         else -> name
     }
 }
@@ -171,5 +175,11 @@ object Courses {
         ),
     )
 
-    val all = listOf(candyCane, frozenLake, northPole)
+    /** All nine holes in a row: the full round. */
+    val grandTour = Course(
+        "Sleigh Ride Tour", "All nine holes - the full round",
+        (candyCane.holes + frozenLake.holes + northPole.holes).mapIndexed { i, h -> h.withNumber(i + 1) },
+    )
+
+    val all = listOf(candyCane, frozenLake, northPole, grandTour)
 }

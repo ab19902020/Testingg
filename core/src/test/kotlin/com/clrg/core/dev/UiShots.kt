@@ -94,7 +94,11 @@ class UiShots {
         app.key(Key.BACK); frames(5)
         tap("golf")
         shot("golf_setup")
-        app.key(Key.BACK); frames(5)
+        tap("golf_course3")
+        tap("golf_go")
+        shot("golf_fly1", 50)
+        shot("golf_fly2", 80)
+        app.popToRoot(); frames(5)
         for (id in listOf("players", "help", "solo", "tournament")) {
             tap(id); shot("screen_$id"); app.key(Key.BACK); frames(5)
         }

@@ -58,8 +58,12 @@ class GolfScene3D {
         var leftHanded = false
         var golferColor = Colors.CANDY
         /** Recent ball positions in flight (x, y, h triples), drawn as a fading trail. */
-        val trail = FloatArray(3 * 30)
+        val trail = FloatArray(3 * 90)
         var trailN = 0
+        /** Colour of the shot tracer. */
+        var tracerColor = Colors.GOLD
+        /** Where the ball last came down, and seconds since (a ring pulses out there); NaN when none. */
+        var landX = Float.NaN; var landY = 0f; var landAge = 9f
     }
 
     fun snap() { snapNext = true }
@@ -115,6 +119,22 @@ class GolfScene3D {
     }
 
     /** High above the tee, the whole hole laid out ahead. */
+    /**
+     * Opening flyover of a hole, [k] 0..1: from high above the green, sweeping back along the fairway to just
+     * behind the tee.
+     */
+    fun flyover(h: Hole, k: Float) {
+        val e = k * k * (3f - 2f * k)
+        val mid = h.fairway[h.fairway.size / 2]
+        val sx = h.pin.x + 34f; val sy = h.pin.y + 48f; val sz = 58f
+        val mx = mid.x + 22f; val my = mid.y; val mz = 45f
+        val tx = h.tee.x; val ty = h.tee.y - 14f; val tz = 7f
+        fun bez(a: Float, b: Float, c: Float) = (1 - e) * (1 - e) * a + 2 * (1 - e) * e * b + e * e * c
+        val lx = bez(h.pin.x, (mid.x + h.pin.x) / 2f, mid.x); val ly = bez(h.pin.y, (mid.y + h.pin.y) / 2f, mid.y)
+        set(bez(sx, mx, tx), bez(sy, my, ty), bez(sz, mz, tz), lx, ly, 0f, 55f)
+        snapNext = true
+    }
+
     fun overview(h: Hole, t: Double) {
         val mid = h.fairway[h.fairway.size / 2]
         val sway = sin(t * 0.25).toFloat() * 8f
@@ -236,7 +256,21 @@ class GolfScene3D {
             val topCol = if (summer) (if (layer == 0) 0xFF8FB496.toInt() else 0xFFB4CDB6.toInt()) else if (layer == 0) 0xFFF2F7FF.toInt() else 0xFFE3EEFA.toInt()
             g.fillPolygonGradient(screen, n + 3, hz - amp * 1.1f, hz, topCol, col)
         }
-        if (summer) return
+        if (summer) {
+            // clouds fixed in the sky: they turn with the view like the mountains
+            for (i in 0 until 7) {
+                val az = i * 0.9f + 0.4f
+                var da = az - cam.yaw
+                while (da > PI.toFloat()) da -= 2f * PI.toFloat()
+                while (da < -PI.toFloat()) da += 2f * PI.toFloat()
+                if (kotlin.math.abs(da) > 1.2f) continue
+                val sx = cam.cx + cam.focal * kotlin.math.tan(da) + (time.toFloat() * 3f) % 60f
+                val sy = hz - (90f + 70f * ((i * 37) % 5) / 4f) * (cam.focal / 900f).coerceIn(0.7f, 1.5f)
+                if (sy < r.top - 40f) continue
+                com.clrg.core.render.SportsDraw.cloud(g, sx, sy, (90f + 40f * (i % 3)) * (cam.focal / 900f).coerceIn(0.7f, 1.5f), 0xF2FFFFFF.toInt())
+            }
+            return
+        }
         // light falling snow
         val rng = Rng(5)
         for (i in 0 until 40) {
@@ -280,14 +314,29 @@ class GolfScene3D {
         quad(g, -4.5f, -3.5f, 4.5f, -3.5f, 4.5f, 4.5f, -4.5f, 4.5f, 0xFF86D68A.toInt())
         // water: icy rim, water, ripples
         for (b in h.water) {
-            ellipse(g, b.x, b.y, b.rx + 1.8f, b.ry + 1.8f, 0xFFF2F8FF.toInt())
+            ellipse(g, b.x, b.y, b.rx + 1.8f, b.ry + 1.8f, if (summer) 0xFF7DAF6A.toInt() else 0xFFF2F8FF.toInt())
             ellipse(g, b.x, b.y, b.rx, b.ry, 0xFF2E78C2.toInt())
             ellipse(g, b.x - b.rx * 0.2f, b.y + b.ry * 0.25f, b.rx * 0.45f, b.ry * 0.3f, 0xFF4A93D8.toInt(), 16)
+            // sunlight glinting on little ripples that drift across
+            val wr = Rng((b.x * 13 + b.y * 7).toLong())
+            for (i in 0 until 14) {
+                val u = wr.nextFloat() * 2f - 1f; val v = wr.nextFloat() * 2f - 1f
+                if (u * u + v * v > 0.7f) continue
+                val drift = ((time * 0.3 + wr.nextFloat()) % 1.0).toFloat()
+                val px = b.x + u * b.rx + drift * 1.5f; val py = b.y + v * b.ry
+                if (!cam.project(px, py, 0.02f)) continue
+                val ax = cam.px; val ay = cam.py
+                if (!cam.project(px + 0.9f, py, 0.02f)) continue
+                val tw = 0.5f + 0.5f * sin(time.toFloat() * 3f + i)
+                g.line(ax, ay, cam.px, cam.py, max(1.5f, 0.06f * cam.focal / cam.pd), Colors.withAlpha(Colors.WHITE, 0.25f + 0.45f * tw))
+            }
         }
         // bunkers: lip and sand
         for (b in h.bunkers) {
             ellipse(g, b.x, b.y, b.rx + 0.8f, b.ry + 0.8f, 0xFFC4A262.toInt(), 20)
             ellipse(g, b.x, b.y, b.rx, b.ry, 0xFFF0DDA2.toInt(), 20)
+            // raked lines in the sand
+            for (j in 1..3) ellipseOutline(g, b.x, b.y, b.rx * (1f - j * 0.22f), b.ry * (1f - j * 0.22f), 0x33A07A3A)
         }
         // green: fringe, putting surface, cup
         ellipse(g, h.pin.x, h.pin.y, h.greenR + 2.6f, h.greenR + 2.6f, 0xFF52B95A.toInt(), 36)
@@ -297,6 +346,24 @@ class GolfScene3D {
         ellipse(g, h.pin.x, h.pin.y, 0.22f, 0.22f, 0xFF1A1A1A.toInt(), 12)
         // the aim guide on the ground
         if (x.showAim && !x.ballX.isNaN()) aimGuide(g, x)
+        // where the last shot came down: a ring pulsing out
+        if (!x.landX.isNaN() && x.landAge < 2.5f) {
+            val k = (x.landAge / 1.2f).coerceIn(0f, 1f)
+            ringOnGround(g, x.landX, x.landY, 0.6f + 3.5f * k, Colors.withAlpha(x.tracerColor, 1f - k), 6f * (1f - k) + 1.5f)
+            ringOnGround(g, x.landX, x.landY, 0.45f, Colors.withAlpha(Colors.WHITE, 0.9f * (1f - x.landAge / 2.5f)), 4f)
+        }
+    }
+
+    private fun ellipseOutline(g: Gfx, x: Float, y: Float, rx: Float, ry: Float, color: Int) {
+        val n = 24
+        var have = false
+        var px = 0f; var py = 0f
+        for (i in 0..n) {
+            val a = i * 2.0 * PI / n
+            if (!cam.project(x + (cos(a) * rx).toFloat(), y + (sin(a) * ry).toFloat(), 0.01f)) { have = false; continue }
+            if (have) g.line(px, py, cam.px, cam.py, max(1f, 0.05f * cam.focal / cam.pd), color)
+            px = cam.px; py = cam.py; have = true
+        }
     }
 
     /** A strip of ground along a fairway segment from fraction [u0] to [u1], [hw] wide on each side. */
@@ -464,6 +531,18 @@ class GolfScene3D {
             return
         }
         g.fillRect(bx - w * 0.07f, by - hpx * 0.18f, bx + w * 0.07f, by, fogged(0xFF5D4037.toInt(), dist))
+        if (summer && o.tint % 3 != 0) {
+            // a leafy round tree: trunk, then clumps of canopy lit from above
+            g.fillRect(bx - w * 0.08f, by - hpx * 0.45f, bx + w * 0.08f, by, fogged(0xFF6D4C41.toInt(), dist))
+            val leafDark = fogged(if (o.tint % 2 == 0) 0xFF2F6B3A.toInt() else 0xFF3A7A3F.toInt(), dist)
+            val leafLight = fogged(if (o.tint % 2 == 0) 0xFF5A9E4E.toInt() else 0xFF6AAE52.toInt(), dist)
+            val cy0 = by - hpx * 0.62f
+            g.fillCircle(bx - w * 0.38f, cy0 + hpx * 0.06f, w * 0.55f, leafDark)
+            g.fillCircle(bx + w * 0.4f, cy0 + hpx * 0.05f, w * 0.52f, leafDark)
+            g.fillCircleRadial(bx, cy0 - hpx * 0.08f, w * 0.72f, bx - w * 0.25f, cy0 - hpx * 0.25f, w * 1.1f, leafLight, leafDark)
+            g.fillCircle(bx - w * 0.2f, cy0 - hpx * 0.22f, w * 0.36f, Colors.lerp(leafLight, 0xFFFFFFFF.toInt(), 0.08f))
+            return
+        }
         for (tier in 0..2) {
             val tb = by - hpx * (0.12f + tier * 0.25f)
             val tt = tb - hpx * 0.42f
@@ -513,7 +592,9 @@ class GolfScene3D {
             if (!cam.project(x.trail[a * 3], x.trail[a * 3 + 1], x.trail[a * 3 + 2])) continue
             val ax = cam.px; val ay = cam.py
             if (!cam.project(x.trail[i * 3], x.trail[i * 3 + 1], x.trail[i * 3 + 2])) continue
-            g.line(ax, ay, cam.px, cam.py, 3f + 3f * i / x.trailN, Colors.withAlpha(Colors.WHITE, 0.15f + 0.5f * i / x.trailN))
+            val f = i / x.trailN.toFloat()
+            g.line(ax, ay, cam.px, cam.py, 7f + 7f * f, Colors.withAlpha(x.tracerColor, 0.12f + 0.35f * f))
+            g.line(ax, ay, cam.px, cam.py, 2.5f + 2.5f * f, Colors.withAlpha(Colors.WHITE, 0.25f + 0.6f * f))
         }
         if (cam.project(x.ballX, x.ballY, 0f)) {
             val sr = max(3f, 0.12f * cam.focal / cam.pd)
