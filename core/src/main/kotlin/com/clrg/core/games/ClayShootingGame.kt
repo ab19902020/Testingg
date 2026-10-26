@@ -285,7 +285,8 @@ class ClayShootingGame(env: GameEnv) : MiniGame(env) {
         val sx = s[0] + screenW / 2f; val sy = s[1] + 540f
         env.sfx(Sfx.SHATTER, 0.9f, (s[0] / 960f).coerceIn(-1f, 1f))
         if (c.gold) env.sfx(Sfx.SPARKLE, 0.6f, (s[0] / 960f).coerceIn(-1f, 1f))
-        env.particles.burst(sx, sy, if (c.gold) Colors.GOLD else 0xFFFF7043.toInt(), 26, speed = 380f, size = 8f, gravity = 500f)
+        env.particles.shatter(sx, sy, if (c.gold) Colors.GOLD else 0xFFFF6E40.toInt(), 16, size = 12f, speed = 420f, dust = 0x88FFE0CC.toInt())
+        env.particles.burst(sx, sy, if (c.gold) Colors.GOLD else 0xFFFF7043.toInt(), 14, speed = 380f, size = 6f, gravity = 500f)
         env.particles.impact(sx, sy, if (c.gold) Colors.GOLD else 0xFFFFAB91.toInt(), if (c.gold) 0.9f else 0.55f)
         env.particles.burst(sx, sy, 0xCCFFFFFF.toInt(), 8, speed = 120f, kind = Particles.Kind.PUFF, size = 22f, gravity = 0f)
         env.popups.add(if (c.gold) "+3 GOLD!" else "+1", sx, sy - 40f, env.color(k), if (c.gold) 56f else 46f)

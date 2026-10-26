@@ -180,7 +180,7 @@ class ShootingGalleryGame(env: GameEnv) : MiniGame(env) {
         points[k] += tg.kind.points; hits[k]++
         val sx = tg.x(at) + screenW / 2f; val sy = tg.y(at) + 540f
         when (tg.kind) {
-            Kind.BOTTLE -> { env.sfx(Sfx.GLASS, 0.9f, (sx / 960f - 1f).coerceIn(-1f, 1f)); env.particles.burst(sx, sy, tg.color, 22, speed = 360f, size = 8f) }
+            Kind.BOTTLE -> { env.sfx(Sfx.GLASS, 0.9f, (sx / 960f - 1f).coerceIn(-1f, 1f)); env.particles.shatter(sx, sy, tg.color, 16, size = 11f, speed = 380f, dust = 0x66FFFFFF) }
             Kind.BALLOON -> { env.sfx(Sfx.BALLOON_POP, 0.9f, (sx / 960f - 1f).coerceIn(-1f, 1f)); env.particles.burst(sx, sy, tg.color, 16, speed = 300f, kind = Particles.Kind.CONFETTI, size = 10f) }
             Kind.STAR -> { env.sfx(Sfx.SPARKLE, 1f); env.sfx(Sfx.APPLAUSE, 0.4f); env.particles.burst(sx, sy, Colors.GOLD, 30, kind = Particles.Kind.STAR, size = 14f) }
             Kind.DUCK -> { env.sfx(Sfx.TIN_HIT, 0.8f, (sx / 960f - 1f).coerceIn(-1f, 1f)); env.particles.burst(sx, sy, Colors.GOLD, 12, speed = 260f, size = 7f) }

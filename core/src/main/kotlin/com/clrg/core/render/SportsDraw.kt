@@ -180,32 +180,51 @@ object SportsDraw {
      */
     fun backdrop(g: Gfx, time: Double, effects: Boolean = true) {
         val w = g.width; val h = g.height
-        g.gradientRect(0f, 0f, w, h * 0.62f, 0xFF0B2350.toInt(), 0xFF2B5C9E.toInt())
-        // stands
-        val standTop = h * 0.5f
-        g.gradientRect(0f, standTop, w, h * 0.74f, 0xFF1C2638.toInt(), 0xFF101722.toInt())
+        // night sky and the far stand (cached), the crowd in soft focus (cached frames), then the pitch (cached)
+        g.layer("menu.sports.sky", 0f, 0f, w, h * 0.52f, res = 0.5f) { lg ->
+            lg.gradientRect(0f, 0f, w, h * 0.52f, 0xFF061633.toInt(), 0xFF22477F.toInt())
+            for (i in 0 until 90) lg.fillCircle(Draw.hash01(i * 7 + 1) * w, Draw.hash01(i * 13 + 2) * h * 0.4f, 0.7f + Draw.hash01(i) * 1.3f, 0x88FFFFFF.toInt())
+            lg.fillRectRadial(0f, h * 0.25f, w, h * 0.52f, w / 2f, h * 0.55f, w * 0.6f, 0x33FFC890, 0x00FFC890)
+            // the roof of the stand opposite
+            lg.gradientRect(0f, h * 0.44f, w, h * 0.52f, 0xFF27324A.toInt(), 0xFF141B2A.toInt())
+            for (i in 0 until 24) lg.fillOval((i + 0.5f) * w / 24f - 12f, h * 0.505f, (i + 0.5f) * w / 24f + 12f, h * 0.515f, 0xFFFFF3D6.toInt())
+        }
+        Scenery.crowd(g, "menu.sports", 0f, h * 0.5f, w, h * 0.74f, if (effects) time else 0.0, rows = 4, shade = 0.5f, blur = 2.5f)
         if (effects) {
-            var x = 10f; var i = 0
-            while (x < w) {
-                val row = i % 4
-                val y = standTop + 22f + row * 34f
-                val on = sin(time * 1.7 + i * 1.3).toFloat() > 0.6f
-                g.fillCircle(x, y, 3.5f, if (on) 0xCCFFF59D.toInt() else 0x33FFFFFF)
-                x += 17f + (i % 3) * 5f; i++
+            // camera flashes in the crowd
+            g.save(); g.setBlend(Blend.ADD)
+            val rng = (time * 3).toLong()
+            for (i in 0 until 5) {
+                val hsh = Draw.hash01((rng * 31 + i * 7).toInt())
+                if (hsh > 0.55f) g.glow(Draw.hash01((rng * 17 + i * 3).toInt()) * w, h * 0.52f + Draw.hash01((rng * 13 + i).toInt()) * h * 0.2f, 28f, 0x88FFFFFF.toInt())
             }
+            g.restore()
         }
-        // floodlight towers with beams
+        g.layer("menu.sports.pitch", 0f, h * 0.1f, w, h, grain = 0.15f) { lg ->
+            // floodlight towers
+            for (fx in floatArrayOf(w * 0.08f, w * 0.92f)) {
+                lg.line(fx, h * 0.18f, fx, h * 0.74f, 12f, 0xFF1C252C.toInt())
+                lg.line(fx - 3f, h * 0.18f, fx - 3f, h * 0.74f, 3f, 0x33FFFFFF)
+                lg.fillRoundRect(fx - 64f, h * 0.12f, fx + 64f, h * 0.2f, 8f, 0xFF37474F.toInt())
+                for (j in 0 until 4) lg.fillCircleRadial(fx - 42f + j * 28f, h * 0.16f, 11f, fx - 44f + j * 28f, h * 0.155f, 14f, Colors.WHITE, 0xFFFFE9A8.toInt())
+            }
+            // the pitch with mown stripes and lines
+            lg.gradientRect(0f, h * 0.74f, w, h, 0xFF2E7D32.toInt(), 0xFF1B5E20.toInt())
+            for (i in 0 until 12) if (i % 2 == 0) lg.fillRect(i * w / 12f, h * 0.74f, (i + 1) * w / 12f, h, 0x10FFFFFF)
+            lg.fillRect(0f, h * 0.74f, w, h * 0.745f, 0x55000000)
+            lg.line(0f, h * 0.78f, w, h * 0.78f, 4f, 0x66FFFFFF)
+            lg.save(); lg.translate(w / 2f, h * 0.9f); lg.scale(1f, 0.35f); lg.strokeCircle(0f, 0f, 260f, 10f, 0x55FFFFFF); lg.restore()
+            lg.fillRectRadial(0f, h * 0.74f, w, h, w / 2f, h * 0.85f, w * 0.55f, 0x22FFF6D8, 0x00FFF6D8)
+        }
+        // the floodlights' glare and beams
+        g.save(); g.setBlend(Blend.ADD)
         for (fx in floatArrayOf(w * 0.08f, w * 0.92f)) {
-            g.line(fx, h * 0.18f, fx, h * 0.74f, 10f, 0xFF263238.toInt())
-            g.fillRoundRect(fx - 60f, h * 0.12f, fx + 60f, h * 0.2f, 8f, 0xFF37474F.toInt())
-            for (j in 0 until 4) g.fillCircle(fx - 42f + j * 28f, h * 0.16f, 11f, 0xFFFFFDE7.toInt())
-            g.glow(fx, h * 0.16f, 240f, 0x55FFF9C4)
+            g.glow(fx, h * 0.16f, 300f, 0x44FFF6D8)
+            g.glow(fx, h * 0.16f, 90f, 0x88FFF9E8.toInt())
+            val q = floatArrayOf(fx - 60f, h * 0.18f, fx + 60f, h * 0.18f, w / 2f + (fx - w / 2f) * 0.2f + 300f, h, w / 2f + (fx - w / 2f) * 0.2f - 300f, h)
+            g.fillPolygonGradient(q, 4, h * 0.18f, h, 0x14FFF6D8, 0x00FFF6D8)
         }
-        // pitch with mown stripes and lines
-        g.gradientRect(0f, h * 0.74f, w, h, 0xFF2E7D32.toInt(), 0xFF1B5E20.toInt())
-        for (i in 0 until 12) if (i % 2 == 0) g.fillRect(i * w / 12f, h * 0.74f, (i + 1) * w / 12f, h, 0x10FFFFFF)
-        g.line(0f, h * 0.78f, w, h * 0.78f, 4f, 0x66FFFFFF)
-        g.strokeCircle(w / 2f, h * 0.9f, 90f, 4f, 0x55FFFFFF)
+        g.restore()
         Draw.vignette(g, 0.5f)
     }
 

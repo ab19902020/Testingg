@@ -11,7 +11,7 @@ import kotlin.math.sin
  * "reduced effects" accessibility setting lowers the count and disables screen flashes.
  */
 class Particles(private val maxParticles: Int = 400) {
-    enum class Kind { SPARK, CONFETTI, PUFF, STAR, RING, STREAK, FLASH }
+    enum class Kind { SPARK, CONFETTI, PUFF, STAR, RING, STREAK, FLASH, SHARD }
 
     private class P(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float, var maxLife: Float,
                     var size: Float, var color: Int, var kind: Kind, var rot: Float, var vr: Float, var gravity: Float)
@@ -62,6 +62,31 @@ class Particles(private val maxParticles: Int = 400) {
         }
     }
 
+    /**
+     * Something brittle breaking (a clay, a bottle, ice): spinning shards that tumble and fall, a puff of dust and a
+     * short flash. [color] is the material, [size] the shard size.
+     */
+    fun shatter(x: Float, y: Float, color: Int, n: Int = 14, size: Float = 14f, speed: Float = 420f, dust: Int = 0x99FFFFFF.toInt()) {
+        val count = if (reduced) n / 2 else n
+        repeat(count) {
+            if (list.size >= maxParticles) list.removeAt(0)
+            val a = rng.range(0f, 6.2832f)
+            val s = speed * rng.range(0.3f, 1f)
+            val life = rng.range(0.6f, 1.1f)
+            list.add(P(x, y, cos(a) * s, sin(a) * s - speed * 0.35f, life, life, size * rng.range(0.5f, 1.2f), Colors.lerp(color, Colors.darker(color, 0.6f), rng.range(0f, 0.6f)), Kind.SHARD, rng.range(0f, 6f), rng.range(-14f, 14f), 900f))
+        }
+        if (!reduced) repeat(6) {
+            if (list.size >= maxParticles) list.removeAt(0)
+            val a = rng.range(0f, 6.2832f)
+            val life = rng.range(0.5f, 0.9f)
+            list.add(P(x, y, cos(a) * 70f, sin(a) * 50f - 30f, life, life, size * rng.range(1.4f, 2.2f), dust, Kind.PUFF, 0f, 0f, -20f))
+        }
+        if (!reduced) {
+            if (list.size >= maxParticles) list.removeAt(0)
+            list.add(P(x, y, 0f, 0f, 0.12f, 0.12f, size * 7f, Colors.lerp(color, Colors.WHITE, 0.6f), Kind.FLASH, 0f, 0f, 0f))
+        }
+    }
+
     fun confetti(x0: Float, x1: Float, y: Float, n: Int = 80) {
         val colors = PlayerColors.all
         val count = if (reduced) n / 4 else n
@@ -87,11 +112,32 @@ class Particles(private val maxParticles: Int = 400) {
         }
     }
 
+    private val shardPts = FloatArray(8)
+
+    private fun emits(k: Kind) = k == Kind.SPARK || k == Kind.STAR || k == Kind.STREAK || k == Kind.FLASH || k == Kind.RING
+
+    /** Draws everything: dust, shards and confetti first, then the glowing kinds adding light on top. */
     fun render(g: Gfx) {
-        for (p in list) {
+        for (p in list) if (!emits(p.kind)) draw(g, p)
+        g.save(); g.setBlend(Blend.ADD)
+        for (p in list) if (emits(p.kind)) draw(g, p)
+        g.restore()
+    }
+
+    private fun draw(g: Gfx, p: P) {
             val a = clamp01(p.life / p.maxLife * 1.5f)
             val c = Colors.withAlpha(p.color, a)
             when (p.kind) {
+                Kind.SHARD -> {
+                    // a tumbling, flat-shaded fragment: catches the light as it turns
+                    val s = p.size; val tu = sin(p.rot * 1.7f)
+                    val ca = cos(p.rot); val sa = sin(p.rot)
+                    shardPts[0] = p.x + ca * s; shardPts[1] = p.y + sa * s * tu
+                    shardPts[2] = p.x - sa * s * 0.6f; shardPts[3] = p.y + ca * s * 0.5f
+                    shardPts[4] = p.x - ca * s * 0.7f; shardPts[5] = p.y - sa * s * 0.6f * tu
+                    shardPts[6] = p.x + sa * s * 0.3f; shardPts[7] = p.y - ca * s * 0.7f
+                    g.fillPolygon(shardPts, 4, Colors.lerp(c, Colors.withAlpha(Colors.WHITE, a), (0.5f + 0.5f * tu) * 0.35f))
+                }
                 Kind.SPARK -> {
                     if (!reduced) g.glow(p.x, p.y, p.size * 2.6f, Colors.withAlpha(p.color, a * 0.45f))
                     g.fillCircle(p.x, p.y, p.size * (0.4f + 0.6f * a), Colors.lerp(c, Colors.withAlpha(Colors.WHITE, a), 0.35f))
@@ -104,7 +150,9 @@ class Particles(private val maxParticles: Int = 400) {
                 Kind.CONFETTI -> {
                     g.save(); g.translate(p.x, p.y); g.rotate(p.rot)
                     val flip = kotlin.math.abs(sin(p.rot * 2))
-                    g.fillRect(-p.size / 2, -p.size / 4 * (0.4f + 0.6f * flip), p.size / 2, p.size / 4, Colors.lerp(Colors.darker(c, 0.7f), c, flip))
+                    // a strip of foil: two-sided, with a glint when it faces the light
+                    g.fillRect(-p.size / 2, -p.size / 4 * (0.4f + 0.6f * flip), p.size / 2, p.size / 4, Colors.lerp(Colors.darker(c, 0.6f), c, flip))
+                    if (flip > 0.85f) g.fillRect(-p.size / 2, -p.size / 4 * 0.4f, p.size / 2, -p.size / 4 * 0.1f, Colors.withAlpha(Colors.WHITE, 0.5f * a))
                     g.restore()
                 }
                 Kind.STREAK -> {
@@ -123,7 +171,6 @@ class Particles(private val maxParticles: Int = 400) {
                     if (!reduced) g.glow(p.x, p.y, rr * 1.1f, Colors.withAlpha(p.color, (1f - k) * 0.25f))
                 }
             }
-        }
     }
 }
 

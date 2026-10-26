@@ -170,12 +170,18 @@ object Draw {
     /** The menu backdrop: aurora night sky, moon, layered pine forest, snow hills, snowfall and fairy lights. */
     fun festiveBackdrop(g: Gfx, t: Double, effects: Boolean = true) {
         val r = Rect(0f, 0f, g.width, g.height)
-        nightSky(g, r, t)
+        Scenery.nightSky(g, "menu.xmas", r, t, twinkle = effects)
         aurora(g, r, t, if (effects) 1f else 0.6f)
-        moon(g, g.width * 0.86f, 150f, 58f)
-        pineRow(g, -40f, g.width, g.height * 0.76f, 0xFF12302A.toInt(), 95f, 3)
-        pineRow(g, 0f, g.width, g.height * 0.81f, 0xFF1B4434.toInt(), 125f, 1)
-        snowHills(g, r, g.height * 0.86f)
+        // the moon, two depths of forest (the far one softly out of focus) and the snow (cached)
+        g.layer("menu.xmas.far", 0f, 60f, g.width, g.height * 0.8f, res = 0.6f, blur = 2.5f) { lg ->
+            moon(lg, g.width * 0.86f, 150f, 58f)
+            pineRow(lg, -40f, g.width, g.height * 0.76f, 0xFF12302A.toInt(), 95f, 3)
+        }
+        g.layer("menu.xmas.near", 0f, g.height * 0.6f, g.width, g.height, grain = 0.12f) { lg ->
+            pineRow(lg, 0f, g.width, g.height * 0.81f, 0xFF1B4434.toInt(), 125f, 1)
+            snowHills(lg, r, g.height * 0.86f)
+            for (i in 0 until 70) lg.fillCircle(hash01(i * 37 + 5) * g.width, g.height * 0.88f + hash01(i * 41) * g.height * 0.12f, 1f + hash01(i) * 1.5f, 0x99FFFFFF.toInt())
+        }
         if (effects) snowfall(g, r, t)
         stringLights(g, 0f, g.width, 8f, t)
         vignette(g, 0.55f)

@@ -69,6 +69,7 @@ class CostGfx(override val width: Float = 1920f, override val height: Float = 10
             layerBuildOps += sub.ops
             made[key] = version
         }
-        op(isHeavy = true)
+        // a big picture fills a lot of screen; a small one (a tree, a cloud) is a cheap textured quad
+        op(isHeavy = (r - l) * (b - t) > 200_000f)
     }
 }
