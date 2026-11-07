@@ -1,3 +1,9 @@
+/* Fonts are bundled so the game works offline (and inside the Android app). */
+@font-face { font-family: 'Bungee'; src: url('vendor/fonts/bungee-latin-400-normal.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('vendor/fonts/nunito-latin-600-normal.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('vendor/fonts/nunito-latin-800-normal.woff2') format('woff2'); font-weight: 800; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('vendor/fonts/nunito-latin-900-normal.woff2') format('woff2'); font-weight: 900; font-display: swap; }
+
 /* Castle Chaos — game-show UI over a full-screen 3D canvas.
    Layout: canvas fills the screen; menus are centred paper panels; HUD hugs the safe-area edges. */
 :root {

@@ -719,6 +719,21 @@ function ordinal(n) {
   return s[(v - 20) % 10] || s[v] || s[0];
 }
 
+// Android back button (called by the app): leave a screen or round, or tell the app to close.
+window.handleBack = () => {
+  const g = window.game;
+  if (!g) return 'exit';
+  if (g.state === 'menu') {
+    if (!g.ui.practice.hidden || !g.ui.how.hidden) {
+      g.showScreen('menu');
+      return 'handled';
+    }
+    return 'exit';
+  }
+  g.toMenu();
+  return 'handled';
+};
+
 try {
   window.game = new Game();
 } catch (err) {

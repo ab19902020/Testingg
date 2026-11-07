@@ -232,3 +232,14 @@ export function stopMusic() {
   if (musicTimer) clearInterval(musicTimer);
   musicTimer = null;
 }
+
+// Pause sound when the page (or the Android app) goes to the background.
+function suspendAll() {
+  if (ctx && ctx.state === 'running') ctx.suspend();
+}
+function resumeAll() {
+  if (ctx && ctx.state === 'suspended') ctx.resume();
+}
+document.addEventListener('visibilitychange', () => (document.hidden ? suspendAll() : resumeAll()));
+window.addEventListener('app-pause', suspendAll);
+window.addEventListener('app-resume', resumeAll);
