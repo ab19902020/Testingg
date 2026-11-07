@@ -3,6 +3,7 @@ import { Round, V } from './base.js';
 import { mat, particles } from '../fx.js';
 import { sfx } from '../audio.js';
 import * as S from '../scenery.js';
+import { repeat } from '../textures.js';
 
 // BOULDER DASH: run up the castle slope while giant boulders roll down. Duck behind the bunkers!
 const RAMP_LEN = 48;
@@ -43,7 +44,7 @@ export class BoulderDash extends Round {
       (Math.random() < 0.5 ? S.cherryTree : S.pineTree)(this.group, side * (9 + Math.random() * 20), 4 + Math.random() * 20, 1.1);
     }
     const w = this.width / 2;
-    this.floor(-w - 1, w + 1, 12, 0, 0xc9a46b);
+    this.floor(-w - 1, w + 1, 12, 0, 0xc9a46b, 0, 1, { tex: 'dirt', texScale: 3 });
     this.world.addRamp(-w, w, 0, -RAMP_LEN, 0, RAMP_H);
     // the visible slope
     const len = Math.hypot(RAMP_LEN, RAMP_H);
@@ -56,15 +57,16 @@ export class BoulderDash extends Round {
     ramp.receiveShadow = true;
     this.group.add(ramp);
     // the hill top with the castle on it
-    this.floor(-120, 120, -RAMP_LEN, -260, 0x6cc24a, RAMP_H, RAMP_H + 1);
-    this.solid(0, RAMP_H + 0.01, -RAMP_LEN - 8, this.width + 2, 0.02, 16, 0xc9a46b, { noCollide: true, cast: false });
+    this.floor(-120, 120, -RAMP_LEN, -260, 0x6cc24a, RAMP_H, RAMP_H + 1, { tex: 'grass', texScale: 7, texTint: 0xd8f0c0 });
+    this.solid(0, RAMP_H + 0.01, -RAMP_LEN - 8, this.width + 2, 0.02, 16, 0xc9a46b, { noCollide: true, cast: false, tex: 'dirt', texScale: 3 });
     // embankments either side of the slope
     for (const sx of [-1, 1]) {
       for (let z = 0; z > -RAMP_LEN; z -= 4) {
         const top = this.h(z - 4) + 1.6;
         this.solid(sx * (w + 0.4), top / 2 - 0.5, z - 2, 0.8, top + 1, 4.02, 0xd7263d);
       }
-      const bank = new THREE.Mesh(new THREE.BoxGeometry(30, 0.5, len), mat(0x5fae45, { flat: true }));
+      const bank = new THREE.Mesh(new THREE.BoxGeometry(30, 0.5, len), mat(0xd8f0c0, { map: repeat('grass', 4, 7) }));
+      bank.receiveShadow = true;
       bank.rotation.x = ang;
       bank.position.set(sx * (w + 15.8), RAMP_H / 2 - 0.4, -RAMP_LEN / 2);
       this.group.add(bank);
@@ -79,7 +81,7 @@ export class BoulderDash extends Round {
         const top = this.h(z - 0.6) + 1.5;
         const bottom = this.h(z + 0.6) - 0.3;
         const { mesh } = this.solid(xx, (top + bottom) / 2, z, 2.2, top - bottom, 1.2, 0x8a8f99);
-        mesh.material = mat(0x8a8f99, { flat: true });
+        mesh.material = mat(0xffffff, { rough: 0.95, map: repeat('stone', 1.5, 1) });
         this.solid(xx, top + 0.08, z, 2.3, 0.16, 1.3, 0xd7263d, { noCollide: true });
         this.bunkers.push({ x: xx, z, hx: 1.1, hz: 0.6, top });
       }
@@ -87,7 +89,7 @@ export class BoulderDash extends Round {
     this.boulders = [];
     this.spawnT = 1.2;
     this.boulderGeo = new THREE.IcosahedronGeometry(1, 1);
-    this.boulderMat = mat(0x8b7d6b, { flat: true });
+    this.boulderMat = mat(0xb5a68f, { flat: true, rough: 0.95, map: repeat('stone', 2, 2) });
   }
 
   spawnBoulder() {

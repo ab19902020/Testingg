@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { PhysicsWorld, separateBodies } from './physics.js';
-import { Contestant, makeLineup } from './character.js';
+import { Contestant, makeLineup, dustFilter } from './character.js';
+import { wind } from './scenery.js';
 import { input, isTouch, setupTouch } from './input.js';
 import { initAudio, sfx, playMusic, stopMusic, setMuted, isMuted } from './audio.js';
 import { particles, bakeStatic } from './fx.js';
+import { Sky } from './sky.js';
 import * as S from './scenery.js';
 import { KnockKnock } from './rounds/knockknock.js';
 import { SkippingStones } from './rounds/stones.js';
@@ -40,30 +42,42 @@ const LINES = {
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
+// Camera views the player can switch between with the camera button.
+// height/back are metres above and behind the contestant; ahead is how far in front the camera looks.
+const VIEWS = [
+  { name: 'Overhead', height: 13.5, back: 8.5, ahead: 4.5 },
+  { name: 'Top-down', height: 21, back: 4, ahead: 2.5 },
+  { name: 'Close', height: 0, back: 0, ahead: 0 }, // uses each event's own close-up chase camera
+];
+
 class Game {
   constructor() {
     this.canvas = document.getElementById('game');
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 1.6 : 2));
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 1.75 : 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xcfe9ff, 90, 280);
-    this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 600);
+    this.scene.fog = new THREE.Fog(0xcfe6f7, 110, 380);
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.1, 900);
     this.camera.position.set(0, 8, 14);
-    this.hemi = new THREE.HemisphereLight(0xe8f4ff, 0x6a8f4a, 1.1);
+    this.sky = new Sky(this.scene, this.renderer);
+    this.hemi = new THREE.HemisphereLight(0xdcefff, 0x5d8a3c, 0.75);
     this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xfff3dd, 2.1);
+    this.sun = new THREE.DirectionalLight(0xfff1d8, 3.1);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(isTouch ? 1024 : 2048, isTouch ? 1024 : 2048);
+    this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera;
-    sc.left = sc.bottom = -26;
-    sc.right = sc.top = 26;
+    sc.left = sc.bottom = -30;
+    sc.right = sc.top = 30;
     sc.near = 1;
-    sc.far = 120;
-    this.sun.shadow.bias = -0.0008;
+    sc.far = 160;
+    this.sun.shadow.bias = -0.0005;
+    this.sun.shadow.normalBias = 0.03;
+    this.sun.shadow.radius = 3;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
     this.world = new PhysicsWorld();
@@ -80,6 +94,11 @@ class Game {
     this.focus = null;
     this.shakeT = 0;
     this.camLook = new THREE.Vector3();
+    this.viewIdx = 0;
+    try {
+      const v = parseInt(localStorage.getItem('cc_view') || '0', 10);
+      if (v >= 0 && v < VIEWS.length) this.viewIdx = v;
+    } catch (e) { /* storage blocked */ }
     this.playerName = 'You';
     try {
       this.playerName = localStorage.getItem('cc_name') || 'You';
@@ -88,9 +107,10 @@ class Game {
     this.ui = {};
     for (const id of ['menu', 'practice', 'how', 'card', 'cardRound', 'cardName', 'cardTag', 'cardTip', 'cardKeep', 'count', 'hud', 'hudRound', 'hudTimer', 'hudQual',
       'caption', 'banner', 'results', 'resTitle', 'resSub', 'resList', 'resButtons', 'spectate', 'specName', 'specNext', 'nameInput', 'touch', 'quit',
-      'btnJump', 'btnDive', 'btnFire', 'practiceList', 'muteBtn', 'skipHint', 'loading']) {
+      'btnJump', 'btnDive', 'btnFire', 'practiceList', 'muteBtn', 'skipHint', 'loading', 'camBtn']) {
       this.ui[id] = document.getElementById(id);
     }
+    dustFilter.near = (c) => this.near(c, 22);
     this.bindUI();
     this.onResize();
     window.addEventListener('resize', () => this.onResize());
@@ -120,6 +140,8 @@ class Game {
     });
     click(u.quit, () => this.toMenu());
     click(u.specNext, () => this.nextSpectate());
+    click(u.camBtn, () => this.cycleView());
+    u.camBtn.textContent = 'Cam: ' + VIEWS[this.viewIdx].name;
     PRACTICE.forEach((R) => {
       const b = document.createElement('button');
       b.className = 'btn';
@@ -136,6 +158,7 @@ class Game {
     u.touch.hidden = true;
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape' && this.state !== 'menu') this.toMenu();
+      if (e.code === 'KeyC' && this.state !== 'menu') this.cycleView();
       if (e.code === 'Tab' && this.ui.spectate && !this.ui.spectate.hidden) {
         e.preventDefault();
         this.nextSpectate();
@@ -162,6 +185,7 @@ class Game {
   setHud(on) {
     this.ui.hud.hidden = !on;
     this.ui.quit.hidden = !on;
+    this.ui.camBtn.hidden = !on;
     this.ui.touch.hidden = !(on && isTouch);
   }
 
@@ -217,16 +241,30 @@ class Game {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     // pull the camera back a bit on tall portrait screens
-    this.camera.fov = w < h ? 75 : 60;
+    this.camera.fov = w < h ? 70 : 55;
+    this.portrait = w < h;
     this.camera.updateProjectionMatrix();
   }
 
   setSky(sunset) {
     document.body.classList.toggle('sunset', !!sunset);
-    this.scene.fog.color.set(sunset ? 0xffc89a : 0xcfe9ff);
-    this.sun.color.set(sunset ? 0xffc690 : 0xfff3dd);
-    this.sun.intensity = sunset ? 1.7 : 2.1;
-    this.hemi.color.set(sunset ? 0xffd9c0 : 0xe8f4ff);
+    this.sky.set(sunset ? 'sunset' : 'day');
+    this.scene.fog.color.set(this.sky.mood.fog);
+    this.sunDir = new THREE.Vector3(...this.sky.mood.sunDir).normalize();
+    this.sun.color.set(sunset ? 0xffc08a : 0xfff1d8);
+    this.sun.intensity = sunset ? 2.6 : 3.1;
+    this.hemi.color.set(sunset ? 0xffcfb0 : 0xdcefff);
+    this.hemi.intensity = sunset ? 0.45 : 0.5;
+    this.renderer.toneMappingExposure = sunset ? 0.95 : 1.0;
+  }
+
+  cycleView() {
+    this.viewIdx = (this.viewIdx + 1) % VIEWS.length;
+    try {
+      localStorage.setItem('cc_view', String(this.viewIdx));
+    } catch (e) { /* storage blocked */ }
+    this.ui.camBtn.textContent = 'Cam: ' + VIEWS[this.viewIdx].name;
+    this.caption('Camera: ' + VIEWS[this.viewIdx].name, '#fff', 1.2);
   }
 
   // ---------------------------------------------------------------- scenes
@@ -399,6 +437,14 @@ class Game {
       this.bigBanner('QUALIFIED!', 'good', 2.2);
       this.commentary('qualified');
       particles.confetti(c.body.pos.clone().setY(c.body.pos.y + 2), 50);
+      // fireworks over the finish
+      const fz = this.round.finishZ - 6;
+      const fy = (this.round.finishY || 0) + 12;
+      [0, 250, 500, 800, 1100].forEach((ms, i) => setTimeout(() => {
+        const cols = [[0xff3b3b, 0xffd23f], [0x4cc9f0, 0xffffff], [0x2bb673, 0xffd23f], [0xf15bb5, 0xffffff], [0xffd23f, 0xff8c1a]][i];
+        particles.burst(new THREE.Vector3((Math.random() - 0.5) * 14, fy + Math.random() * 4, fz - Math.random() * 6), cols, 40, 9, 0.18, { up: 0.5, gravity: 3, life: 1.6, spin: 4 });
+        sfx('pop', 0.4);
+      }, ms));
     } else if (this.near(c, 12)) {
       particles.confetti(c.body.pos.clone().setY(c.body.pos.y + 2), 16);
     }
@@ -526,6 +572,8 @@ class Game {
     else this.updateGame(dt);
     particles.update(dt);
     this.world.endFrame();
+    this.sky.update(dt, this.camera);
+    wind.time.value += dt;
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -535,8 +583,7 @@ class Game {
     const a = this.menuT * 0.08;
     this.camera.position.set(Math.sin(a) * 13, 4.2 + Math.sin(this.menuT * 0.3) * 0.6, 12 + Math.cos(a) * 5);
     this.camera.lookAt(0, 3.2, -6);
-    this.sun.position.set(20, 40, 25);
-    this.sun.target.position.set(0, 0, 0);
+    this.followSun(new THREE.Vector3(0, 0, 0));
   }
 
   updateGame(dt) {
@@ -680,16 +727,28 @@ class Game {
     }
     let target;
     if (round.isKart) {
-      const k = round.updateCamera(cam, dt, this.focus);
+      const k = round.updateCamera(cam, dt, this.focus, VIEWS[this.viewIdx].name);
       target = new THREE.Vector3(k.x, 0, k.z);
     } else {
       const f = this.focus || this.racers[0];
       target = f ? f.body.pos.clone() : new THREE.Vector3();
       if (f && f.respawning) target.copy(f.checkpoint);
-      const want = target.clone().add(round.camOffset);
-      want.x = target.x * 0.75;
-      const look = target.clone().add(round.camLook);
-      look.x = target.x * 0.85;
+      const v = VIEWS[this.viewIdx];
+      let want;
+      let look;
+      if (v.height) {
+        const tall = this.portrait ? 1.25 : 1;
+        const sc = round.viewScale || 1;
+        want = target.clone().add(new THREE.Vector3(0, v.height * tall * sc, v.back * tall * sc));
+        look = target.clone().add(new THREE.Vector3(0, 0.5, -v.ahead * sc));
+        want.x = target.x * 0.9;
+        look.x = target.x * 0.95;
+      } else {
+        want = target.clone().add(round.camOffset);
+        want.x = target.x * 0.75;
+        look = target.clone().add(round.camLook);
+        look.x = target.x * 0.85;
+      }
       const a = 1 - Math.exp(-5 * dt);
       cam.position.lerp(want, a);
       this.camLook.lerp(look, a);
@@ -705,7 +764,8 @@ class Game {
   }
 
   followSun(target) {
-    this.sun.position.set(target.x + 18, target.y + 40, target.z + 22);
+    const d = this.sunDir || new THREE.Vector3(0.45, 0.62, 0.64).normalize();
+    this.sun.position.set(target.x + d.x * 70, target.y + Math.max(d.y, 0.45) * 70, target.z + d.z * 70);
     this.sun.target.position.copy(target);
   }
 }

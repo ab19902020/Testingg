@@ -4,11 +4,11 @@ export { mergeGeometries };
 
 // Shared materials (one per colour) keep draw-call setup cheap.
 const matCache = new Map();
-export function mat(color, { rough = 0.8, metal = 0, emissive = 0, flat = false } = {}) {
-  const key = `${color}|${rough}|${metal}|${emissive}|${flat}`;
+export function mat(color, { rough = 0.8, metal = 0, emissive = 0, flat = false, map = null, env = 1 } = {}) {
+  const key = `${color}|${rough}|${metal}|${emissive}|${flat}|${map ? map.uuid : ''}|${env}`;
   let m = matCache.get(key);
   if (!m) {
-    m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, emissive, flatShading: flat });
+    m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, emissive, flatShading: flat, map, envMapIntensity: env });
     matCache.set(key, m);
   }
   return m;

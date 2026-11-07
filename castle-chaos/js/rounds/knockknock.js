@@ -3,6 +3,7 @@ import { Round, V } from './base.js';
 import { mat, particles, textTexture } from '../fx.js';
 import { sfx } from '../audio.js';
 import { COLORS } from '../scenery.js';
+import { tex, repeat } from '../textures.js';
 
 // KNOCK KNOCK: burst through paper doors. Some are solid wood (BOING!) and some hide a mud pit.
 const DOOR_XS = [-5.5, -3.3, -1.1, 1.1, 3.3, 5.5];
@@ -42,11 +43,12 @@ export class KnockKnock extends Round {
     this.camLook = V(0, 1.3, -5);
     this.decorate();
     const w = this.width / 2;
-    this.floor(-w, w, 8, this.finishZ - 12, 0xd9c49a);
+    this.floor(-w, w, 8, this.finishZ - 12, 0xd9c49a, 0, 1, { tex: 'dirt', texScale: 3 });
     // painted lane stripes
     for (let z = 6; z > this.finishZ - 10; z -= 3) this.solid(0, 0.005, z, 0.15, 0.01, 1.4, 0xffffff, { noCollide: true, cast: false });
     for (const sx of [-1, 1]) {
-      this.solid(sx * (w + 0.25), 0.7, (8 + this.finishZ - 12) / 2, 0.5, 1.4, 20 - this.finishZ, 0xd7263d);
+      this.solid(sx * (w + 0.25), 0.7, (8 + this.finishZ - 12) / 2, 0.5, 1.4, 20 - this.finishZ, 0xd7263d, { rough: 0.5 });
+      this.solid(sx * (w + 0.25), 1.43, (8 + this.finishZ - 12) / 2, 0.62, 0.08, 20 - this.finishZ, 0xffc93c, { noCollide: true, rough: 0.3, metal: 0.7 });
     }
     const paperTex = makePaperTexture();
     this.paperMat = new THREE.MeshStandardMaterial({ map: paperTex, roughness: 0.9 });
@@ -63,6 +65,18 @@ export class KnockKnock extends Round {
   buildWall(z, types, wi) {
     const w = this.width / 2;
     const white = 0xf6f2e6;
+    // every wall has its own materials so it can fade out when it's between you and the camera
+    const fade = (m) => {
+      m.transparent = true;
+      return m;
+    };
+    const mats = {
+      plaster: fade(new THREE.MeshStandardMaterial({ map: tex('plaster'), roughness: 0.85 })),
+      red: fade(new THREE.MeshStandardMaterial({ color: 0xd7263d, roughness: 0.5 })),
+      roof: fade(new THREE.MeshStandardMaterial({ map: repeat('roof', 6, 1), roughness: 0.55 })),
+      paper: fade(this.paperMat.clone()),
+      wood: fade(new THREE.MeshStandardMaterial({ map: tex('wood'), roughness: 0.7 })),
+    };
     // posts between doors
     const edges = [-w];
     for (const x of DOOR_XS) edges.push(x - DOOR_W / 2, x + DOOR_W / 2);
@@ -70,29 +84,30 @@ export class KnockKnock extends Round {
     for (let i = 0; i < edges.length; i += 2) {
       const a = edges[i];
       const b = edges[i + 1];
-      this.solid((a + b) / 2, 1.7, z, b - a, 3.4, 0.5, white);
-      this.solid((a + b) / 2, 1.7, z + 0.26, b - a + 0.02, 3.4, 0.04, 0xd7263d, { noCollide: true, cast: false });
+      this.solid((a + b) / 2, 1.7, z, b - a, 3.4, 0.5, white, { material: mats.plaster });
+      this.solid((a + b) / 2, 1.7, z + 0.26, b - a + 0.02, 3.4, 0.04, 0xd7263d, { noCollide: true, cast: false, material: mats.red });
     }
-    this.solid(0, DOOR_H + 0.45, z, this.width, 0.9, 0.5, white);
-    this.solid(0, 3.5, z, this.width + 0.4, 0.25, 0.8, 0x2d3a4a);
-    const wall = { z, doors: [], index: wi };
+    this.solid(0, DOOR_H + 0.45, z, this.width, 0.9, 0.5, white, { material: mats.plaster });
+    this.solid(0, 3.5, z, this.width + 0.4, 0.25, 0.8, 0x2d3a4a, { material: mats.roof });
+    this.solid(0, 3.68, z, this.width + 0.6, 0.12, 1.0, 0x2d3a4a, { material: mats.roof, noCollide: true });
+    const wall = { z, doors: [], index: wi, mats, opacity: 1 };
     // corridors behind the doors, so you can't tell from outside which one hides the mud
     const fx = [-w + 0.1];
     for (let i = 0; i < DOOR_XS.length - 1; i++) fx.push((DOOR_XS[i] + DOOR_XS[i + 1]) / 2);
     fx.push(w - 0.1);
-    for (const x of fx) this.solid(x, 0.75, z - 0.25 - PIT_LEN / 2, 0.16, 1.5, PIT_LEN, white);
+    for (const x of fx) this.solid(x, 0.75, z - 0.25 - PIT_LEN / 2, 0.16, 1.5, PIT_LEN, white, { material: mats.plaster });
     DOOR_XS.forEach((x, di) => {
       const type = types[di];
       const g = new THREE.Group();
       g.position.set(x, 0, z);
       g.userData.dynamic = true;
       this.group.add(g);
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, DOOR_H, 0.12), this.paperMat);
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, DOOR_H, 0.12), mats.paper);
       panel.position.y = DOOR_H / 2;
       panel.castShadow = true;
       g.add(panel);
       for (const sx of [-1, 1]) {
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(0.1, DOOR_H, 0.16), mat(COLORS.wood));
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(0.1, DOOR_H, 0.16), mats.wood);
         frame.position.set(sx * DOOR_W / 2, DOOR_H / 2, 0);
         g.add(frame);
       }
@@ -199,6 +214,19 @@ export class KnockKnock extends Round {
         continue;
       }
       c.body.pos.y = Math.max(-1.3, c.body.pos.y - dt * 1.1);
+    }
+    // fade the wall you've just come through so it doesn't hide you
+    const f = this.game.focus?.body?.pos;
+    for (const wall of this.walls) {
+      const behind = f && f.z < wall.z + 0.4 && f.z > wall.z - PIT_LEN - 1.5;
+      const want = behind ? 0.22 : 1;
+      if (Math.abs(wall.opacity - want) > 0.001) {
+        wall.opacity += (want - wall.opacity) * Math.min(1, dt * 8);
+        for (const m of Object.values(wall.mats)) {
+          m.opacity = wall.opacity;
+          m.depthWrite = wall.opacity > 0.95;
+        }
+      }
     }
     for (const wall of this.walls) {
       for (const d of wall.doors) {

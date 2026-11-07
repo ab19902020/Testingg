@@ -3,6 +3,8 @@ import { Round, V } from './base.js';
 import { mat, particles } from '../fx.js';
 import { sfx } from '../audio.js';
 import { water, crowdStand } from '../scenery.js';
+import * as S2 from '../scenery.js';
+import { repeat } from '../textures.js';
 
 // SKIPPING STONES: hop across the river. Some stones are fakes that sink as soon as you land.
 const ROWS = 12;
@@ -32,15 +34,18 @@ export class SkippingStones extends Round {
     const lastRowZ = BANK_EDGE - 2.6 - (ROWS - 1) * GAP;
     const farBank = lastRowZ - 2.4;
     this.finishZ = farBank - 3.5;
+    this.grassY = 0;
+    this.grassBlocked = (x, z) => z < BANK_EDGE + 0.4 && z > farBank - 0.4 && Math.abs(x) < 31;
     this.decorate({ castleZ: this.finishZ - 40, groundY: -3, crowds: false, skipZ: [BANK_EDGE + 1, farBank - 1] });
     const w = this.width / 2;
     // land on both banks and either side of the river (the grass sits lower so the water shows)
-    this.floor(-120, 120, 40, BANK_EDGE, 0x6cc24a, 0, 4);
-    this.floor(-120, 120, farBank, -330, 0x6cc24a, 0, 4);
-    this.floor(-120, -30, BANK_EDGE, farBank, 0x6cc24a, 0, 4);
-    this.floor(30, 120, BANK_EDGE, farBank, 0x6cc24a, 0, 4);
-    this.solid(0, 0.01, (12 + BANK_EDGE) / 2, this.width + 2, 0.02, 12 - BANK_EDGE, 0xc9a46b, { noCollide: true, cast: false });
-    this.solid(0, 0.01, (farBank + this.finishZ - 14) / 2, this.width + 2, 0.02, farBank - this.finishZ + 14, 0xc9a46b, { noCollide: true, cast: false });
+    const grassy = { tex: 'grass', texScale: 7, texTint: 0xd8f0c0 };
+    this.floor(-120, 120, 40, BANK_EDGE, 0x6cc24a, 0, 4, grassy);
+    this.floor(-120, 120, farBank, -330, 0x6cc24a, 0, 4, grassy);
+    this.floor(-120, -30, BANK_EDGE, farBank, 0x6cc24a, 0, 4, grassy);
+    this.floor(30, 120, BANK_EDGE, farBank, 0x6cc24a, 0, 4, grassy);
+    this.solid(0, 0.01, (12 + BANK_EDGE) / 2, this.width + 2, 0.02, 12 - BANK_EDGE, 0xc9a46b, { noCollide: true, cast: false, tex: 'dirt', texScale: 3 });
+    this.solid(0, 0.01, (farBank + this.finishZ - 14) / 2, this.width + 2, 0.02, farBank - this.finishZ + 14, 0xc9a46b, { noCollide: true, cast: false, tex: 'dirt', texScale: 3 });
     this.crowds.push(crowdStand(this.group, -w - 5, 6, 12, 1));
     this.crowds.push(crowdStand(this.group, w + 5, 6, 12, -1));
     this.crowds.push(crowdStand(this.group, -w - 5, farBank - 8, 12, 1));
@@ -49,7 +54,7 @@ export class SkippingStones extends Round {
     const river = water(this.group, 60, riverLen + 2, 0, this.waterY, (BANK_EDGE + farBank) / 2);
     this.updaters.push((t) => river.update(t));
     // river bed so it doesn't look like a void
-    this.solid(0, this.waterY - 1.6, (BANK_EDGE + farBank) / 2, 60, 0.2, riverLen + 2, 0x1d5f7a, { noCollide: true, cast: false });
+    this.solid(0, this.waterY - 1.6, (BANK_EDGE + farBank) / 2, 60, 0.2, riverLen + 2, 0x1d5f7a, { noCollide: true, cast: false, tex: 'sand', texScale: 5, texTint: 0x6a8a90 });
     // reeds on the banks
     for (let i = 0; i < 30; i++) {
       const z = Math.random() < 0.5 ? BANK_EDGE - 0.2 : farBank + 0.2;
@@ -59,12 +64,26 @@ export class SkippingStones extends Round {
     }
     this.stones = [];
     this.rows = [];
-    this.stoneGeo = new THREE.CylinderGeometry(R * 0.9, R, 0.5, 14);
-    this.crackMat = mat(0x5f5a52, { flat: true });
+    // lumpy river rocks rather than perfect cylinders
+    this.stoneGeo = new THREE.CylinderGeometry(R * 0.88, R * 1.02, 0.5, 12, 2);
+    {
+      const p = this.stoneGeo.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const y = p.getY(i);
+        const a = Math.atan2(p.getZ(i), p.getX(i));
+        const k = 1 + Math.sin(a * 3 + 1) * 0.05 + Math.cos(a * 5) * 0.04;
+        p.setX(i, p.getX(i) * k);
+        p.setZ(i, p.getZ(i) * k);
+        if (y > 0.2) p.setY(i, y + Math.sin(a * 2) * 0.03);
+      }
+      this.stoneGeo.computeVertexNormals();
+    }
+    this.crackMat = mat(0x6e5a48, { flat: true, rough: 0.95, map: repeat('stone', 3, 0.8) });
     for (let r = 0; r < ROWS; r++) {
       const z = BANK_EDGE - 2.6 - r * GAP;
       if (r === ISLAND_ROW) {
-        const island = this.floor(-w, w, z + 1.2, z - 1.2, 0x9cbf5a, 0);
+        const island = this.floor(-w, w, z + 1.2, z - 1.2, 0x9cbf5a, 0, 1, { tex: 'grass', texScale: 3, texTint: 0xd8f0c0 });
+        for (const lx of [-w + 0.6, w - 0.6]) S2.lantern(this.group, lx, z);
         island.col.row = r;
         island.col.island = true;
         this.rows.push({ z, island: true, stones: [] });
@@ -90,7 +109,7 @@ export class SkippingStones extends Round {
 
   makeStone(x, z, fake, row) {
     const g = 0.55 + Math.random() * 0.1;
-    const mesh = new THREE.Mesh(this.stoneGeo, mat(new THREE.Color(g, g, g * 1.04).getHex(), { flat: true }));
+    const mesh = new THREE.Mesh(this.stoneGeo, mat(new THREE.Color(g * 0.42, g * 0.41, g * 0.4).getHex(), { flat: true, rough: 0.8 }));
     mesh.position.set(x, -0.25, z);
     mesh.userData.dynamic = true;
     mesh.castShadow = true;

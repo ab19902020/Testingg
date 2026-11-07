@@ -180,6 +180,16 @@ h3 { margin: 6px 0 2px; font: 800 0.8rem var(--body); letter-spacing: 0.12em; te
   border: 3px solid var(--ink); border-radius: 4px; cursor: pointer;
 }
 
+.cam-btn {
+  position: fixed; top: calc(56px + var(--safe-t)); right: max(16px, var(--safe-r)); z-index: 12;
+  font: 0.75rem var(--display); color: #fff; background: rgba(26, 20, 35, 0.6);
+  border: 3px solid var(--ink); border-radius: 4px; padding: 6px 10px; cursor: pointer;
+}
+.vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(20, 10, 30, 0.38) 100%);
+}
+
 .count {
   position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 14;
   font: 8rem var(--display); color: var(--gold);

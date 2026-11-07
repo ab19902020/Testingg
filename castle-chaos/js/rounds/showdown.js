@@ -36,8 +36,13 @@ export class ShowDown extends Round {
     S.mountains(this.group);
     S.castle(this.group, 0, Z_FAR - 34, 2);
     S.forest(this.group, { xMin: -X_LIM - 4, xMax: X_LIM + 4, zFrom: Z_NEAR + 8, zTo: Z_FAR - 10, gap: 8 });
+    S.grassField(this.group, [
+      { x0: -X_LIM - 40, x1: -X_LIM - 3, z0: Z_FAR - 30, z1: Z_NEAR + 30 },
+      { x0: X_LIM + 3, x1: X_LIM + 40, z0: Z_FAR - 30, z1: Z_NEAR + 30 },
+      { x0: -X_LIM, x1: X_LIM, z0: Z_NEAR + 5, z1: Z_NEAR + 30 },
+    ], { count: 2000, flowers: 300 });
     // tarmac arena with lines and a red barrier
-    this.solid(0, -0.05, (Z_NEAR + Z_FAR) / 2, X_LIM * 2 + 4, 0.1, Z_NEAR - Z_FAR + 8, 0x4a4d55, { noCollide: true, cast: false });
+    this.solid(0, -0.05, (Z_NEAR + Z_FAR) / 2, X_LIM * 2 + 4, 0.1, Z_NEAR - Z_FAR + 8, 0x4a4d55, { noCollide: true, cast: false, tex: 'tarmac', texScale: 6 });
     for (let z = Z_NEAR; z > Z_FAR; z -= 5) this.solid(0, 0.01, z, X_LIM * 2, 0.02, 0.15, 0xe9e9e9, { noCollide: true, cast: false });
     const bar = 0xd7263d;
     for (const sx of [-1, 1]) this.solid(sx * (X_LIM + 1.3), 0.5, (Z_NEAR + Z_FAR) / 2, 0.6, 1, Z_NEAR - Z_FAR + 6, bar, { noCollide: true });
@@ -479,12 +484,15 @@ export class ShowDown extends Round {
   }
 
   // ---------- camera ----------
-  updateCamera(cam, dt, focus) {
+  updateCamera(cam, dt, focus, view = 'Overhead') {
     const k = focus?.kart || this.karts.find((o) => o.role === 'contestant' && !o.out) || this.lord;
-    const fx = Math.sin(k.heading);
-    const fz = Math.cos(k.heading);
-    const want = new THREE.Vector3(k.x - fx * 9, 6, k.z - fz * 9);
-    const look = new THREE.Vector3(k.x + fx * 7, 1, k.z + fz * 7);
+    // smooth the heading so the camera doesn't whip round on every steer
+    this.camHeading = this.camHeading === undefined ? k.heading : this.camHeading + wrapAngle(k.heading - this.camHeading) * Math.min(1, dt * 3);
+    const fx = Math.sin(this.camHeading);
+    const fz = Math.cos(this.camHeading);
+    const [back, up, ahead] = view === 'Top-down' ? [5, 24, 3] : view === 'Close' ? [9, 6, 7] : [11, 12, 6];
+    const want = new THREE.Vector3(k.x - fx * back, up, k.z - fz * back);
+    const look = new THREE.Vector3(k.x + fx * ahead, 1, k.z + fz * ahead);
     if (this.over && this.lord) {
       want.set(this.lord.x + 6, 5, this.lord.z + 9);
       look.set(this.lord.x, 1.5, this.lord.z);

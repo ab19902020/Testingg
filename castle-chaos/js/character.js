@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GRAVITY } from './physics.js';
 import { sfx } from './audio.js';
 import { particles, painted, mergeGeometries } from './fx.js';
+import { tex } from './textures.js';
 
 // Movement feel
 export const RUN_SPEED = 7.2;
@@ -28,8 +29,32 @@ function geoms() {
   G.bib = new THREE.PlaneGeometry(0.42, 0.4);
   G.marker = new THREE.ConeGeometry(0.22, 0.4, 4);
   G.mouth = new THREE.TorusGeometry(0.07, 0.018, 6, 10, Math.PI);
+  G.torso = new THREE.CapsuleGeometry(0.37, 0.42, 8, 20);
+  G.head = new THREE.SphereGeometry(0.28, 24, 18);
+  G.helmet = new THREE.SphereGeometry(0.31, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  G.brim = new THREE.CylinderGeometry(0.32, 0.32, 0.06, 24);
+  G.stripe = new THREE.TorusGeometry(0.29, 0.035, 6, 24);
+  G.sclera = new THREE.SphereGeometry(0.07, 12, 10);
+  G.pupil = new THREE.SphereGeometry(0.038, 10, 8);
+  G.glint = new THREE.SphereGeometry(0.014, 6, 4);
+  G.cheek = new THREE.SphereGeometry(0.05, 8, 6);
+  G.belt = new THREE.TorusGeometry(0.37, 0.05, 6, 24);
+  G.hand = new THREE.SphereGeometry(0.1, 12, 8);
+  G.leg = new THREE.CapsuleGeometry(0.115, 0.24, 6, 12);
+  G.shoe = new THREE.CapsuleGeometry(0.1, 0.14, 4, 10);
+  G.shoe.rotateX(Math.PI / 2);
+  G.shadow = new THREE.PlaneGeometry(1.2, 1.2);
+  G.shadow.rotateX(-Math.PI / 2);
+  G.ring = new THREE.PlaneGeometry(1.7, 1.7);
+  G.ring.rotateX(-Math.PI / 2);
   return G;
 }
+
+const SHADOW_MAT = new THREE.MeshBasicMaterial({ map: tex('shadow'), transparent: true, depthWrite: false, toneMapped: false });
+const RING_MAT = new THREE.MeshBasicMaterial({ map: tex('ring'), transparent: true, depthWrite: false, toneMapped: false });
+
+/** The game sets this so only contestants near the camera kick up dust. */
+export const dustFilter = { near: () => true };
 
 function bibTexture(num, color) {
   const c = document.createElement('canvas');
@@ -89,7 +114,8 @@ export class Contestant {
     root.add(pose);
     const skin = SKIN[this.number % SKIN.length];
     const dark = 0x161616;
-    const vmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
+    // glossy, toy-like plastic: low roughness plus the environment reflections
+    const vmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, envMapIntensity: 0.55 });
     this.vmat = vmat;
     const part = (parent, geos, x, y, z, shadow = false) => {
       const m = new THREE.Mesh(mergeGeometries(geos, false), vmat);
@@ -99,18 +125,28 @@ export class Contestant {
       return m;
     };
     // torso + bib
-    part(pose, [painted(g.torso, this.suit, 0, 0.88, 0)], 0, 0, 0, true);
-    const bib = new THREE.Mesh(g.bib, new THREE.MeshLambertMaterial({ map: bibTexture(this.number, this.helmetColor) }));
-    bib.position.set(0, 0.9, 0.365);
+    part(pose, [
+      painted(g.torso, this.suit, 0, 0.88, 0),
+      painted(g.belt, 0x222222, 0, 0.62, 0, Math.PI / 2),
+    ], 0, 0, 0, true);
+    const bib = new THREE.Mesh(g.bib, new THREE.MeshStandardMaterial({ map: bibTexture(this.number, this.helmetColor), roughness: 0.7 }));
+    bib.position.set(0, 0.92, 0.372);
     pose.add(bib);
     // head, helmet, face in one mesh
     const head = part(pose, [
       painted(g.head, skin),
       painted(g.helmet, this.helmetColor, 0, 0.02, 0, -0.18),
       painted(g.brim, this.helmetColor, 0, 0.03, 0.02, -0.18, 0, 0, 1, 1, 1.05),
-      painted(g.eye, dark, -0.095, -0.03, 0.245),
-      painted(g.eye, dark, 0.095, -0.03, 0.245),
-      painted(g.mouth, dark, 0, -0.12, 0.24, 0, 0, Math.PI),
+      painted(g.stripe, this.suit, 0, 0.1, 0.01, Math.PI / 2 - 0.18, 0, 0, 1, 1, 1),
+      painted(g.sclera, 0xffffff, -0.1, -0.02, 0.22, 0, 0, 0, 1, 1.2, 0.8),
+      painted(g.sclera, 0xffffff, 0.1, -0.02, 0.22, 0, 0, 0, 1, 1.2, 0.8),
+      painted(g.pupil, dark, -0.1, -0.02, 0.27),
+      painted(g.pupil, dark, 0.1, -0.02, 0.27),
+      painted(g.glint, 0xffffff, -0.088, 0.0, 0.302),
+      painted(g.glint, 0xffffff, 0.112, 0.0, 0.302),
+      painted(g.cheek, 0xff8a8a, -0.17, -0.1, 0.2, 0, 0, 0, 1, 0.6, 0.5),
+      painted(g.cheek, 0xff8a8a, 0.17, -0.1, 0.2, 0, 0, 0, 1, 0.6, 0.5),
+      painted(g.mouth, dark, 0, -0.13, 0.25, 0, 0, Math.PI),
     ], 0, 1.56, 0, true);
     this.head = head;
     const limb = (geos, x, y) => {
@@ -120,14 +156,23 @@ export class Contestant {
       pose.add(piv);
       return piv;
     };
-    const arm = () => [painted(g.arm, this.suit, 0, -0.22, 0), painted(g.eye, skin, 0, -0.45, 0, 0, 0, 0, 2.1, 2.1, 2.1)];
-    const leg = () => [painted(g.leg, this.suit, 0, -0.2, 0), painted(g.shoe, dark, 0, -0.38, 0.05)];
+    const arm = () => [painted(g.arm, this.suit, 0, -0.22, 0), painted(g.hand, 0xffffff, 0, -0.46, 0)];
+    const leg = () => [painted(g.leg, this.suit, 0, -0.2, 0), painted(g.shoe, 0x1c1c22, 0, -0.39, 0.06)];
     this.armL = limb(arm(), -0.43, 1.18);
     this.armR = limb(arm(), 0.43, 1.18);
     this.legL = limb(leg(), -0.16, 0.42);
     this.legR = limb(leg(), 0.16, 0.42);
+    // soft contact shadow so you can always tell where someone will land
+    const sh = new THREE.Mesh(g.shadow, SHADOW_MAT);
+    sh.renderOrder = 1;
+    root.add(sh);
+    this.blob = sh;
     if (this.isPlayer) {
-      const mk = new THREE.Mesh(g.marker, new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+      const ring = new THREE.Mesh(g.ring, RING_MAT);
+      ring.renderOrder = 2;
+      root.add(ring);
+      this.ring = ring;
+      const mk = new THREE.Mesh(g.marker, new THREE.MeshBasicMaterial({ color: 0xffd23f, toneMapped: false }));
       mk.rotation.x = Math.PI;
       mk.position.y = 2.35;
       root.add(mk);
@@ -141,7 +186,7 @@ export class Contestant {
   dispose(scene) {
     scene.remove(this.root);
     this.root.traverse((o) => {
-      if (o.geometry && o.geometry !== G.bib && o.geometry !== G.marker) o.geometry.dispose();
+      if (o.geometry && ![G.bib, G.marker, G.shadow, G.ring].includes(o.geometry)) o.geometry.dispose();
     });
   }
 
@@ -258,6 +303,18 @@ export class Contestant {
     if (!b.grounded) this.airTime += dt;
     world.step(b, dt);
     if (b.grounded) this.airTime = 0;
+    this.groundY = b.grounded ? b.pos.y : world.groundAt(b.pos.x, b.pos.z, b.pos.y + 0.05);
+    // kick up dust when running
+    const hs = Math.hypot(b.vel.x, b.vel.z);
+    if (b.grounded && hs > 4 && b.groundKind !== 'noDust') {
+      this.dustT = (this.dustT || 0) - dt;
+      if (this.dustT <= 0) {
+        this.dustT = 0.11 + Math.random() * 0.06;
+        if (dustFilter.near(this)) {
+          particles.burst(new THREE.Vector3(b.pos.x, b.pos.y + 0.08, b.pos.z), [0xe6d3ad, 0xd2bb8e, 0xf2e6cc], 2, 0.9, 0.14, { up: 0.6, gravity: 1.5, life: 0.55, spin: 2 });
+        }
+      }
+    }
     this.animate(dt);
   }
 
@@ -321,6 +378,24 @@ export class Contestant {
     if (this.marker) {
       this.marker.position.y = 2.35 + Math.sin(performance.now() / 250) * 0.08;
       this.marker.rotation.y += dt * 2;
+    }
+    // contact shadow (and the player's ring) sit on the ground below, shrinking with height
+    const gy = this.groundY ?? b.pos.y;
+    const hgt = Math.max(0, b.pos.y - gy);
+    const show = gy > -50 && hgt < 12 && this.root.visible;
+    this.blob.visible = show && !this.kart;
+    if (show) {
+      this.blob.position.y = gy - b.pos.y + 0.04;
+      const k = Math.max(0.35, 1 - hgt * 0.12);
+      this.blob.scale.set(k, 1, k);
+      this.blob.material.opacity = 1;
+    }
+    if (this.ring) {
+      this.ring.visible = show && !this.kart;
+      this.ring.position.y = gy - b.pos.y + 0.05;
+      this.ring.rotation.y = -this.facing + performance.now() / 900;
+      const p = 1 + Math.sin(performance.now() / 200) * 0.06;
+      this.ring.scale.set(p, 1, p);
     }
   }
 }

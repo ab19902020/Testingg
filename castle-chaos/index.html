@@ -9,7 +9,7 @@
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three/three.module.min.js",
-  "three/addons/utils/BufferGeometryUtils.js": "./vendor/three/utils/BufferGeometryUtils.js"
+  "three/addons/": "./vendor/three/addons/"
 } }
 </script>
 </head>
@@ -56,6 +56,7 @@
           <li><b>Drag</b> on the left side to run</li>
           <li><b>JUMP</b> and <b>DIVE</b> buttons on the right</li>
           <li>Final: drag to drive, hold <b>FIRE</b></li>
+          <li><b>Cam</b> button switches the view</li>
         </ul>
       </div>
       <div>
@@ -64,6 +65,7 @@
           <li><b>WASD</b> or arrows to run</li>
           <li><b>Space</b> jump, <b>Shift</b> dive</li>
           <li>Final: <b>Space</b> or <b>F</b> to fire</li>
+          <li><b>C</b> switches the camera</li>
           <li><b>Esc</b> quits to the menu</li>
         </ul>
       </div>
@@ -97,6 +99,8 @@
   <div id="hudQual" class="hud-qual"></div>
 </div>
 <button id="quit" class="quit" hidden aria-label="Quit to menu">✕</button>
+<button id="camBtn" class="cam-btn" hidden>Cam: Overhead</button>
+<div class="vignette" aria-hidden="true"></div>
 <div id="caption" class="caption"></div>
 <div id="banner" class="banner"></div>
 <div id="spectate" class="spectate" hidden>Watching <b id="specName"></b> <button id="specNext" class="btn small">Next ▸</button></div>

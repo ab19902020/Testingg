@@ -30,6 +30,7 @@ If the clock runs out in a race, whoever is closest to the finish takes the plac
 | Drive (final) | Drag: up is throttle, left and right steer | W/S throttle, A/D steer |
 | Fire (final) | Hold **FIRE** | Space or F |
 | Quit to menu | ✕ button | Esc |
+| Switch camera (Overhead, Top-down, Close) | **Cam** button | C |
 | Watch someone else | **Next ▸** | Tab |
 
 Your water cannon aims itself at whatever is in front of you. The paper ring is on the front of each kart, so it can only be burst by a shot coming at the front.
@@ -75,7 +76,9 @@ Three.js and the fonts are bundled in `vendor/`, so it needs no internet connect
 | `js/input.js` | Keyboard and floating touch joystick |
 | `js/audio.js` | Sound effects and taiko-style music, made with the Web Audio API |
 | `js/fx.js` | Particles, text textures, and the mesh merging that keeps it fast on phones |
-| `js/scenery.js` | Castle, torii gates, cherry trees, banners, crowds, water, mountains |
+| `js/sky.js` | Sky dome, sun glow, drifting clouds and the reflections that give everything its glossy look |
+| `js/textures.js` | Grass, dirt, sand, wood, stone, plaster, roof-tile and tarmac textures, drawn in code |
+| `js/scenery.js` | Castle, torii gates, cherry trees, grass and flowers, bunting, banners, crowds, the water shader, mountains |
 | `js/rounds/base.js` | Shared round logic: building helpers, respawns, checkpoints, bot steering |
 | `js/rounds/*.js` | One file per event, each with its own obstacles and bot AI |
 | `vendor/` | Bundled Three.js (MIT) and the Bungee and Nunito fonts (SIL Open Font License) |
@@ -83,6 +86,7 @@ Three.js and the fonts are bundled in `vendor/`, so it needs no internet connect
 
 ## Tuning
 
+- Camera views: `VIEWS` at the top of `js/main.js`.
 - Event order and how many go through: `SHOW` at the top of `js/main.js`.
 - Running speed, jump height and dive: top of `js/character.js`.
 - Each event's length, timer and difficulty: the constants at the top of its file in `js/rounds/`.

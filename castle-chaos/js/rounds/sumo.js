@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Round, V } from './base.js';
-import { mat, particles } from '../fx.js';
+import { mat, particles, painted, mergeGeometries } from '../fx.js';
 import { sfx } from '../audio.js';
 import { COLORS } from '../scenery.js';
 
@@ -32,7 +32,7 @@ export class SumoGong extends Round {
     this.camLook = V(0, 0.8, -6);
     this.decorate({ castleZ: GONG_Z - 40, castleScale: 1.3 });
     const w = FIELD_W / 2;
-    this.floor(-w, w, 10, GONG_Z - 10, COLORS.sand);
+    this.floor(-w, w, 10, GONG_Z - 10, COLORS.sand, 0, 1, { tex: 'sand', texScale: 4, texTint: 0xd6bf8c });
     for (const sx of [-1, 1]) this.solid(sx * (w + 0.3), 0.4, GONG_Z / 2 + 1, 0.6, 0.8, -GONG_Z + 22, 0xd7263d);
     // straw rope lines painted across the sand
     for (const r of ROWS) {
@@ -221,47 +221,40 @@ export class SumoGong extends Round {
 }
 
 function makeSumo() {
+  // two meshes per wrestler (body and arms), vertex-coloured, so a field of sumos stays cheap to draw
   const n = new THREE.Group();
-  const skin = mat(0xf0c8a0);
-  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.95, 18, 14), skin);
-  belly.scale.set(1.15, 1, 1);
-  belly.position.y = 1.25;
-  belly.castShadow = true;
-  n.add(belly);
-  const mawashi = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 0.92, 0.45, 18), mat(0x1d2d6b));
-  mawashi.position.y = 0.7;
-  n.add(mawashi);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 14, 10), skin);
-  head.position.y = 2.35;
-  n.add(head);
-  const knot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), mat(0x111111));
-  knot.position.set(0, 2.75, -0.05);
-  n.add(knot);
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.41, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.4), mat(0x111111));
-  hair.position.y = 2.37;
-  n.add(hair);
-  for (const sx of [-0.13, 0.13]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), mat(0x111111));
-    eye.position.set(sx, 2.4, 0.37);
-    n.add(eye);
-    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.04), mat(0x111111));
-    brow.position.set(sx, 2.5, 0.37);
-    brow.rotation.z = sx > 0 ? 0.35 : -0.35;
-    n.add(brow);
-  }
-  for (const sx of [-0.45, 0.45]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.24, 0.6, 10), skin);
-    leg.position.set(sx, 0.3, 0);
-    n.add(leg);
-  }
+  const skin = 0xf0c8a0;
+  const ink = 0x111111;
+  const body = mergeGeometries([
+    painted(new THREE.SphereGeometry(0.95, 22, 16), skin, 0, 1.25, 0, 0, 0, 0, 1.15, 1, 1),
+    painted(new THREE.CylinderGeometry(1.0, 0.92, 0.45, 22), 0x1d2d6b, 0, 0.7, 0),
+    painted(new THREE.TorusGeometry(0.98, 0.06, 6, 22), 0xffc93c, 0, 0.9, 0, Math.PI / 2),
+    painted(new THREE.SphereGeometry(0.4, 16, 12), skin, 0, 2.35, 0),
+    painted(new THREE.SphereGeometry(0.16, 10, 8), ink, 0, 2.75, -0.05),
+    painted(new THREE.SphereGeometry(0.41, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.4), ink, 0, 2.37, 0),
+    painted(new THREE.SphereGeometry(0.06, 8, 6), 0xffffff, -0.13, 2.4, 0.35),
+    painted(new THREE.SphereGeometry(0.06, 8, 6), 0xffffff, 0.13, 2.4, 0.35),
+    painted(new THREE.SphereGeometry(0.035, 6, 4), ink, -0.13, 2.4, 0.4),
+    painted(new THREE.SphereGeometry(0.035, 6, 4), ink, 0.13, 2.4, 0.4),
+    painted(new THREE.BoxGeometry(0.18, 0.045, 0.04), ink, -0.13, 2.5, 0.37, 0, 0, -0.35),
+    painted(new THREE.BoxGeometry(0.18, 0.045, 0.04), ink, 0.13, 2.5, 0.37, 0, 0, 0.35),
+    painted(new THREE.TorusGeometry(0.08, 0.02, 6, 10, Math.PI), ink, 0, 2.22, 0.37),
+    painted(new THREE.CylinderGeometry(0.26, 0.24, 0.6, 12), skin, -0.45, 0.3, 0),
+    painted(new THREE.CylinderGeometry(0.26, 0.24, 0.6, 12), skin, 0.45, 0.3, 0),
+  ], false);
+  const vm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, envMapIntensity: 0.6 });
+  const bm = new THREE.Mesh(body, vm);
+  bm.castShadow = true;
+  n.add(bm);
   const arms = new THREE.Group();
   arms.position.y = 1.7;
   n.add(arms);
-  for (const sx of [-1.05, 1.05]) {
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.7, 4, 8), skin);
-    arm.position.set(sx, -0.45, 0);
-    arms.add(arm);
-  }
+  const am = new THREE.Mesh(mergeGeometries([
+    painted(new THREE.CapsuleGeometry(0.2, 0.7, 4, 10), skin, -1.05, -0.45, 0),
+    painted(new THREE.CapsuleGeometry(0.2, 0.7, 4, 10), skin, 1.05, -0.45, 0),
+  ], false), vm);
+  am.castShadow = true;
+  arms.add(am);
   arms.rotation.x = -1.2;
   n.userData.arms = arms;
   return n;

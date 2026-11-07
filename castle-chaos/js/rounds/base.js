@@ -33,6 +33,8 @@ export class Round {
   // ---------- building helpers ----------
   /** Box mesh with a matching collider. y is the centre. */
   solid(x, y, z, sx, sy, sz, color, opts = {}) {
+    // opts.tex tiles a procedural texture over the top face (opts.texScale metres per tile)
+    if (opts.tex && !opts.material) opts = { ...opts, material: S.texMat(opts.tex, opts.texTint ?? 0xffffff, sx, sz, { texScale: opts.texScale || 4, rough: opts.rough ?? 0.9 }) };
     const mesh = S.box(this.group, sx, sy, sz, color, x, y, z, { cast: opts.cast ?? true, ...opts });
     const col = opts.noCollide ? null : this.world.addBox(x, y, z, sx, sy, sz, opts.col || {});
     if (col) col.mesh = mesh;
@@ -64,8 +66,21 @@ export class Round {
       if (skip(z)) continue;
       this.banners.push(S.banner(this.group, -w - 1.6, z));
       this.banners.push(S.banner(this.group, w + 1.6, z));
+      if (z - 6 > this.finishZ && !skip(z - 6)) {
+        S.bunting(this.group, -w - 1.6, z, -w - 1.6, z - 6, 3.7, 0.5);
+        S.bunting(this.group, w + 1.6, z, w + 1.6, z - 6, 3.7, 0.5);
+      }
     }
-    S.torii(this.group, 0, this.startY || 0, this.startZ + 1.5, this.width + 1, 'START', '#d7263d');
+    // grass tufts and flowers beside the course
+    const gy = this.grassY ?? groundY;
+    const zA = this.startZ + 25;
+    const zB = castleZ + 15;
+    S.grassField(this.group, [
+      { x0: -w - 34, x1: -w - 1.2, z0: zB, z1: zA, y: gy },
+      { x0: w + 1.2, x1: w + 34, z0: zB, z1: zA, y: gy },
+      { x0: -w - 1, x1: w + 1, z0: this.startZ + 9, z1: zA, y: gy },
+    ], { count: 2200, flowers: 320, blocked: (x, z) => skip(z) || (this.grassBlocked && this.grassBlocked(x, z)) });
+    S.startLine(this.group, this.startY || 0, this.startZ + 0.3, this.width);
     this.goal = S.torii(this.group, 0, this.finishY || 0, this.finishZ, this.width + 1, 'GOAL');
   }
 
