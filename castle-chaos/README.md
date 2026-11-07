@@ -2,7 +2,7 @@
 
 A 3D knockout game show in the style of *Takeshi's Castle*, played like *Fall Guys*: 20 contestants race through four elimination events, and the survivors face a go-kart water-cannon battle at the castle gates.
 
-Built with [Three.js](https://threejs.org/) (r160). It runs in any modern browser on phones and computers. There's no build step and no asset files: every model, texture, sound and the music are made in code.
+Built with [Three.js](https://threejs.org/) (r160). It runs as an Android app (APK) and in any modern browser. There's no build step and no asset files: every model, texture, sound and the music are made in code.
 
 This folder is a standalone game. It doesn't use anything else in this repository.
 
@@ -34,7 +34,24 @@ If the clock runs out in a race, whoever is closest to the finish takes the plac
 
 Your water cannon aims itself at whatever is in front of you. The paper ring is on the front of each kart, so it can only be burst by a shot coming at the front.
 
-## Running it
+## Android APK
+
+The game ships as a native Android app (`../castle-chaos-android`). It runs the game full screen in landscape, plays fully offline, keeps the screen awake, and the Back button returns to the menu.
+
+**Getting the APK:** every push that changes the game or the app runs the **Castle Chaos APK** GitHub workflow. It builds the APK and publishes it as a release. On your phone, open the repository's **Releases** page, download `CastleChaos.apk` from the newest release and open it. Android will ask you to allow "Install unknown apps" for your browser or Files app the first time.
+
+**Signing:** with no secrets set, the APK is signed with a debug key. Each build gets a different one, so to install a newer build you uninstall the old one first. To get updates that install over the top (and to publish on Google Play), make your own key once and add it as repository secrets:
+
+```bash
+keytool -genkeypair -v -keystore castle-chaos.jks -alias castlechaos -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 castle-chaos.jks   # paste the output into the ANDROID_KEYSTORE_BASE64 secret
+```
+
+Then add `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`castlechaos`) and `ANDROID_KEY_PASSWORD`. Keep the `.jks` file safe and never commit it.
+
+**Building it yourself:** with the Android SDK installed, run `./gradlew assembleRelease` in `castle-chaos-android`. The build copies this folder into the APK, so there's only one copy of the game to edit.
+
+## Running it in a browser
 
 The game uses ES modules, so open it through a web server, not by double-clicking `index.html`:
 
@@ -44,9 +61,7 @@ python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
-To play on your phone, host the folder anywhere that serves static files. For example, turn on **GitHub Pages** for this repository and open `https://<your-user>.github.io/<repo>/castle-chaos/`.
-
-Three.js loads from the jsDelivr CDN (see the import map in `index.html`), so the first load needs an internet connection.
+Three.js and the fonts are bundled in `vendor/`, so it needs no internet connection.
 
 ## Files
 
@@ -63,6 +78,8 @@ Three.js loads from the jsDelivr CDN (see the import map in `index.html`), so th
 | `js/scenery.js` | Castle, torii gates, cherry trees, banners, crowds, water, mountains |
 | `js/rounds/base.js` | Shared round logic: building helpers, respawns, checkpoints, bot steering |
 | `js/rounds/*.js` | One file per event, each with its own obstacles and bot AI |
+| `vendor/` | Bundled Three.js (MIT) and the Bungee and Nunito fonts (SIL Open Font License) |
+| `../castle-chaos-android/` | The Android app that wraps the game |
 
 ## Tuning
 
