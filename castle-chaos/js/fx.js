@@ -189,3 +189,45 @@ export function painted(geo, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0,
   g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
   return g;
 }
+
+// ---------------------------------------------------------------------------
+// Cherry-blossom petals drifting through the air around the camera's target.
+// ---------------------------------------------------------------------------
+export class Petals {
+  constructor(scene, count = 140) {
+    const geo = new THREE.PlaneGeometry(0.16, 0.11);
+    const m = new THREE.MeshBasicMaterial({ color: 0xffb3cf, side: THREE.DoubleSide, transparent: true, opacity: 0.9, toneMapped: false, fog: true });
+    this.mesh = new THREE.InstancedMesh(geo, m, count);
+    this.mesh.frustumCulled = false;
+    const cols = [0xffb3cf, 0xffd1e0, 0xff9cbf, 0xffffff].map((c) => new THREE.Color(c));
+    this.items = [];
+    for (let i = 0; i < count; i++) {
+      this.items.push({ p: new THREE.Vector3(), r: new THREE.Euler(Math.random() * 6, Math.random() * 6, 0), s: 0.7 + Math.random() * 0.8, ph: Math.random() * 6, spin: 1 + Math.random() * 2, ready: false });
+      this.mesh.setColorAt(i, cols[i % cols.length]);
+    }
+    this.m4 = new THREE.Matrix4();
+    this.q = new THREE.Quaternion();
+    this.sc = new THREE.Vector3();
+    scene.add(this.mesh);
+  }
+  update(dt, center, t) {
+    for (let i = 0; i < this.items.length; i++) {
+      const it = this.items[i];
+      const d = it.p.distanceToSquared(center);
+      if (!it.ready || it.p.y < center.y - 1 || d > 30 * 30) {
+        it.p.set(center.x + (Math.random() - 0.5) * 44, center.y + 3 + Math.random() * 12, center.z + (Math.random() - 0.5) * 44 - 6);
+        it.ready = true;
+      }
+      it.p.x += (0.7 + Math.sin(t * 0.7 + it.ph) * 0.6) * dt;
+      it.p.y -= (0.45 + Math.sin(t * 2 + it.ph) * 0.2) * dt;
+      it.p.z += Math.cos(t * 0.9 + it.ph) * 0.4 * dt;
+      it.r.x += it.spin * dt;
+      it.r.y += it.spin * 0.6 * dt;
+      this.q.setFromEuler(it.r);
+      this.sc.setScalar(it.s);
+      this.m4.compose(it.p, this.q, this.sc);
+      this.mesh.setMatrixAt(i, this.m4);
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+}

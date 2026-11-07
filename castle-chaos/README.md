@@ -8,13 +8,18 @@ This folder is a standalone game. It doesn't use anything else in this repositor
 
 ## The show
 
-| # | Event | What happens | Who goes through |
-|---|---|---|---|
-| 1 | **Knock Knock** | 8 walls of paper doors. Some doors are solid wood (you bounce off), some hide a mud pit (you're sent back). | 15 of 20 |
-| 2 | **Skipping Stones** | Hop across the river. Fake stones sink when you land on them and come back cracked. Halfway there's an island checkpoint. | 10 of 15 |
-| 3 | **Boulder Dash** | Run up the castle slope while boulders roll down. Hide behind the bunkers. | 7 of 10 |
-| 4 | **Sumo Gong** | Get past four lines of sumo wrestlers and bang the gong. If one grabs you, he throws you back down the field. | 4 of 7 |
-| 5 | **Show Down** | Grand final in go-karts. Burst the 3-layer paper ring on Lord Kazan's golden kart. If a guard bursts your ring, you're out. | 1 champion |
+Every show picks **five events at random** from the seven below, then ends with the Show Down. 20 contestants start; 16, 12, 9, 6 and then 4 go through.
+
+| Event | What happens |
+|---|---|
+| **Knock Knock** | 8 walls of paper doors. Some doors are solid wood (you bounce off), some hide a mud pit (you're sent back). |
+| **Skipping Stones** | Hop across the river. Fake stones sink when you land on them and come back cracked. Halfway there's an island checkpoint. |
+| **Boulder Dash** | Run up the castle slope while boulders roll down. A dark shadow shows where each one is heading; hide behind the bunkers. After a hit you're safe for 2 seconds. |
+| **Sumo Gong** | Get past four lines of sumo wrestlers and bang the gong. If one grabs you, he throws you back down the field. |
+| **Bridge Ball** | Cross a wobbly rope bridge while cannons fire balls across it. A glowing cannon is about to fire: jump the ball or wait. |
+| **Mushroom Trip** | Hop across giant mushrooms in the river. Some bob up and down, some slide sideways, and the blue ones bounce you sky high. |
+| **Honeycomb Maze** | Find your way through a new random maze every time. Sticky honey patches slow you down. |
+| **Show Down** (final) | Go-karts. Burst the 3-layer paper ring on Lord Kazan's golden kart. If a guard bursts your ring, you're out. |
 
 If the clock runs out in a race, whoever is closest to the finish takes the places that are left. If you're knocked out, you can keep watching the rest of the show.
 

@@ -179,6 +179,8 @@ export class PhysicsWorld {
           b.groundKind = c.kind;
           continue;
         }
+        // feet level with the top: just brushing the edge of a neighbouring surface, don't push back
+        if (p.y >= top - 0.05) continue;
       }
       // bump head
       if (v.y > 0 && p.y + b.h - bot < 0.4 && p.y < bot) {

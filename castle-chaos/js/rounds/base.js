@@ -84,6 +84,78 @@ export class Round {
     this.goal = S.torii(this.group, 0, this.finishY || 0, this.finishZ, this.width + 1, 'GOAL');
   }
 
+  /**
+   * A river course: banks either side, water in between, set lower so the water shows.
+   * Used by Skipping Stones, Bridge Ball and Mushroom Trip.
+   */
+  riverCourse(bankEdge, farBank, { castleZ = this.finishZ - 40 } = {}) {
+    this.waterY = -0.7;
+    this.killY = -0.5;
+    this.grassY = 0;
+    this.grassBlocked = (x, z) => z < bankEdge + 0.4 && z > farBank - 0.4 && Math.abs(x) < 31;
+    this.decorate({ castleZ, groundY: -3, crowds: false, skipZ: [bankEdge + 1, farBank - 1] });
+    const w = this.width / 2;
+    const grassy = { tex: 'grass', texScale: 7, texTint: 0xd8f0c0 };
+    this.floor(-120, 120, 40, bankEdge, 0x6cc24a, 0, 4, grassy);
+    this.floor(-120, 120, farBank, -330, 0x6cc24a, 0, 4, grassy);
+    this.floor(-120, -30, bankEdge, farBank, 0x6cc24a, 0, 4, grassy);
+    this.floor(30, 120, bankEdge, farBank, 0x6cc24a, 0, 4, grassy);
+    this.solid(0, 0.01, (12 + bankEdge) / 2, this.width + 2, 0.02, 12 - bankEdge, 0xc9a46b, { noCollide: true, cast: false, tex: 'dirt', texScale: 3 });
+    this.solid(0, 0.01, (farBank + this.finishZ - 14) / 2, this.width + 2, 0.02, farBank - this.finishZ + 14, 0xc9a46b, { noCollide: true, cast: false, tex: 'dirt', texScale: 3 });
+    this.crowds.push(S.crowdStand(this.group, -w - 5, 6, 12, 1));
+    this.crowds.push(S.crowdStand(this.group, w + 5, 6, 12, -1));
+    this.crowds.push(S.crowdStand(this.group, -w - 5, farBank - 8, 12, 1));
+    this.crowds.push(S.crowdStand(this.group, w + 5, farBank - 8, 12, -1));
+    const riverLen = bankEdge - farBank;
+    S.water(this.group, 60, riverLen + 2, 0, this.waterY, (bankEdge + farBank) / 2);
+    this.solid(0, this.waterY - 1.6, (bankEdge + farBank) / 2, 60, 0.2, riverLen + 2, 0x1d5f7a, { noCollide: true, cast: false, tex: 'sand', texScale: 5, texTint: 0x6a8a90 });
+    // reeds and rocks along the banks
+    for (let i = 0; i < 40; i++) {
+      const z = Math.random() < 0.5 ? bankEdge - 0.2 : farBank + 0.2;
+      const x = (Math.random() < 0.5 ? -1 : 1) * (w + 1 + Math.random() * 25);
+      const reed = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.6 + Math.random() * 0.8, 4), mat(0x4f7d2a));
+      reed.position.set(x, this.waterY + 0.3, z);
+      this.group.add(reed);
+    }
+    // foam where the banks meet the water
+    for (let x = -28; x <= 28; x += 3.5) {
+      this.foam(x, bankEdge - 0.3, 1.6);
+      this.foam(x, farBank + 0.3, 1.6);
+    }
+  }
+
+  /** Register a ring of foam on the water around something standing in it. */
+  foam(x, z, r) {
+    (this.foams || (this.foams = [])).push({ x, z, r, ph: Math.random() * 6, follow: null });
+    return this.foams[this.foams.length - 1];
+  }
+
+  updateFoam() {
+    if (!this.foams || !this.foams.length) return;
+    if (!this.foamMesh) {
+      const geo = new THREE.RingGeometry(0.85, 1, 28);
+      geo.rotateX(-Math.PI / 2);
+      const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false });
+      this.foamMesh = new THREE.InstancedMesh(geo, m, this.foams.length);
+      this.foamMesh.userData.dynamic = true;
+      this.foamMesh.frustumCulled = false;
+      this.foamMesh.renderOrder = 2;
+      this.group.add(this.foamMesh);
+      this._m4 = new THREE.Matrix4();
+    }
+    const y = (this.waterY ?? 0) + 0.04;
+    for (let i = 0; i < this.foams.length; i++) {
+      const f = this.foams[i];
+      const x = f.follow ? f.follow.x : f.x;
+      const z = f.follow ? f.follow.z : f.z;
+      const hidden = f.follow && f.follow.hidden;
+      const s = hidden ? 0.0001 : f.r * (1.05 + Math.sin(this.t * 2 + f.ph) * 0.08);
+      this._m4.makeScale(s, 1, s).setPosition(x, y, z);
+      this.foamMesh.setMatrixAt(i, this._m4);
+    }
+    this.foamMesh.instanceMatrix.needsUpdate = true;
+  }
+
   // ---------- life cycle ----------
   build() {}
   startPositions(n) {
@@ -101,6 +173,7 @@ export class Round {
   /** Called every frame before contestants move. */
   update(dt) {
     this.t += dt;
+    this.updateFoam();
     for (const u of this.updaters) u(this.t, dt);
     for (const c of this.crowds) c.update(this.t, dt);
     for (let i = this.pending.length - 1; i >= 0; i--) {

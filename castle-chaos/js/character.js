@@ -203,6 +203,8 @@ export class Contestant {
     this.spin = 0;
     this.root.position.copy(v);
     this.root.visible = true;
+    this.pose.visible = true;
+    this.safeT = 0;
   }
 
   /** Knock the contestant flying. */

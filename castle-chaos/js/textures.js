@@ -35,6 +35,7 @@ function make(name, w, h, draw, { srgb = true } = {}) {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
+  t.userData.cached = true;
   cache.set(name, t);
   return t;
 }
@@ -208,6 +209,7 @@ export function repeat(name, rx, ry = rx) {
   const t = tex(name).clone();
   t.repeat.set(rx, ry);
   t.needsUpdate = true;
+  t.userData.cached = true;
   cache.set(key, t);
   return t;
 }

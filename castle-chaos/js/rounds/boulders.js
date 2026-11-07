@@ -89,6 +89,9 @@ export class BoulderDash extends Round {
     this.boulders = [];
     this.spawnT = 1.2;
     this.boulderGeo = new THREE.IcosahedronGeometry(1, 1);
+    this.warnGeo = new THREE.PlaneGeometry(1, 1);
+    this.warnGeo.rotateX(-Math.PI / 2);
+    this.warnMat = new THREE.MeshBasicMaterial({ map: S.tex('shadow'), transparent: true, depthWrite: false, opacity: 0.9, toneMapped: false });
     this.boulderMat = mat(0xb5a68f, { flat: true, rough: 0.95, map: repeat('stone', 2, 2) });
   }
 
@@ -98,26 +101,31 @@ export class BoulderDash extends Round {
     mesh.scale.setScalar(r);
     mesh.castShadow = true;
     this.group.add(mesh);
+    // a dark warning shadow slides down the slope ahead of each boulder
+    const warn = new THREE.Mesh(this.warnGeo, this.warnMat);
+    warn.renderOrder = 1;
+    this.group.add(warn);
     const x = (Math.random() - 0.5) * (this.width - 2 * r - 0.4);
     const z = -RAMP_LEN - 1;
-    this.boulders.push({ x, z, y: this.h(z) + r, r, vz: 2 + Math.random() * 2, vx: (Math.random() - 0.5) * 1.2, mesh, rumble: 0 });
+    this.boulders.push({ x, z, y: this.h(z) + r, r, vz: 1.5 + Math.random() * 1.5, vx: (Math.random() - 0.5) * 0.8, mesh, warn, dustT: 0 });
   }
 
   update(dt) {
     super.update(dt);
+    this.update2(dt);
     if (this.game.racing) {
       this.spawnT -= dt;
-      const pace = Math.min(1, this.t / 40);
+      const pace = Math.min(1, this.t / 60);
       if (this.spawnT <= 0) {
         this.spawnBoulder();
-        if (Math.random() < 0.25 + pace * 0.3) this.spawnBoulder();
-        this.spawnT = 1.0 - pace * 0.35 + Math.random() * 0.5;
+        if (Math.random() < 0.1 + pace * 0.2) this.spawnBoulder();
+        this.spawnT = 1.6 - pace * 0.4 + Math.random() * 0.6;
       }
     }
     const w = this.width / 2;
     for (let i = this.boulders.length - 1; i >= 0; i--) {
       const b = this.boulders[i];
-      if (b.z < 0) b.vz = Math.min(15, b.vz + 6 * dt);
+      if (b.z < 0) b.vz = Math.min(10, b.vz + 4 * dt);
       else b.vz *= 1 - dt * 0.5;
       b.x += b.vx * dt;
       b.z += b.vz * dt;
@@ -129,6 +137,15 @@ export class BoulderDash extends Round {
       b.mesh.position.set(b.x, b.y, b.z);
       b.mesh.rotation.x += (b.vz / b.r) * dt;
       b.mesh.rotation.z -= (b.vx / b.r) * dt;
+      // shadow on the slope just in front, so you can see where it's heading
+      const wz = b.z + b.r * 0.6;
+      b.warn.position.set(b.x, this.h(wz) + 0.03, wz);
+      b.warn.scale.set(b.r * 1.3, 1, b.r * 1.9);
+      b.dustT -= dt;
+      if (b.dustT <= 0 && this.game.nearPos(b.x, b.z, 25)) {
+        b.dustT = 0.08;
+        particles.burst(new THREE.Vector3(b.x, this.h(b.z) + 0.1, b.z - b.r * 0.6), [0xd9c49a, 0xc9a46b], 2, 1.5, 0.2, { up: 0.5, gravity: 2, life: 0.6 });
+      }
       let smashed = b.z > 14;
       for (const k of this.bunkers) {
         if (Math.abs(b.x - k.x) < k.hx + b.r * 0.8 && Math.abs(b.z - k.z) < k.hz + b.r * 0.8) {
@@ -142,6 +159,7 @@ export class BoulderDash extends Round {
           if (this.game.nearPos(b.x, b.z)) sfx('smash', 0.8);
         }
         this.group.remove(b.mesh);
+        this.group.remove(b.warn);
         this.boulders.splice(i, 1);
       }
     }
@@ -155,8 +173,10 @@ export class BoulderDash extends Round {
       const dy = p.y + 0.8 - b.y;
       const dz = p.z - b.z;
       const rr = b.r + 0.45;
-      if (dx * dx + dy * dy + dz * dz < rr * rr && c.stun <= 0.3) {
-        c.knock(Math.sign(dx || 1) * (2 + Math.random() * 3), 7, b.vz + 6, 1.2);
+      if (dx * dx + dy * dy + dz * dz < rr * rr && c.stun <= 0.3 && !(c.safeT > 0)) {
+        // knocked back a little way, then a moment of protection so you can't get hit twice
+        c.knock(Math.sign(dx || 1) * (2 + Math.random() * 2), 6, 5 + b.vz * 0.3, 0.7);
+        c.safeT = 2;
         if (this.game.near(c)) sfx('thud');
         if (c.isPlayer) {
           this.game.commentary('boulder');
@@ -170,6 +190,17 @@ export class BoulderDash extends Round {
 
   respawnFor(c) {
     return new THREE.Vector3((Math.random() - 0.5) * 8, 0.5, 2);
+  }
+
+  update2(dt) {
+    // protection timer and blink after a hit
+    for (const c of this.game.racers) {
+      if (c.safeT > 0) {
+        c.safeT -= dt;
+        c.pose.visible = c.safeT <= 0 || Math.floor(c.safeT * 10) % 2 === 0;
+        if (c.safeT <= 0) c.pose.visible = true;
+      }
+    }
   }
 
   // ---------- bots ----------

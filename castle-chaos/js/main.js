@@ -4,7 +4,7 @@ import { Contestant, makeLineup, dustFilter } from './character.js';
 import { wind } from './scenery.js';
 import { input, isTouch, setupTouch } from './input.js';
 import { initAudio, sfx, playMusic, stopMusic, setMuted, isMuted } from './audio.js';
-import { particles, bakeStatic } from './fx.js';
+import { particles, bakeStatic, Petals } from './fx.js';
 import { Sky } from './sky.js';
 import * as S from './scenery.js';
 import { KnockKnock } from './rounds/knockknock.js';
@@ -12,20 +12,22 @@ import { SkippingStones } from './rounds/stones.js';
 import { BoulderDash } from './rounds/boulders.js';
 import { SumoGong } from './rounds/sumo.js';
 import { ShowDown, LORD_NAME } from './rounds/showdown.js';
+import { BridgeBall } from './rounds/bridge.js';
+import { MushroomTrip } from './rounds/mushrooms.js';
+import { HoneycombMaze } from './rounds/maze.js';
 
 // ---------------------------------------------------------------------------
-// The show: 20 contestants, four elimination races, then the go-kart Show Down.
+// The show: 20 contestants, five elimination events picked at random, then the Show Down.
 // ---------------------------------------------------------------------------
 const FIELD = 20;
-const SHOW = [
-  { R: KnockKnock, keep: 15 },
-  { R: SkippingStones, keep: 10 },
-  { R: BoulderDash, keep: 7 },
-  { R: SumoGong, keep: 4 },
-  { R: ShowDown },
-];
-const PRACTICE = [KnockKnock, SkippingStones, BoulderDash, SumoGong, ShowDown];
-const PRACTICE_KEEP = { knock: 15, stones: 12, boulders: 12, sumo: 12 };
+const RACES = [KnockKnock, SkippingStones, BoulderDash, SumoGong, BridgeBall, MushroomTrip, HoneycombMaze];
+const KEEP = [16, 12, 9, 6, 4];
+function makeShow() {
+  const pool = RACES.slice().sort(() => Math.random() - 0.5).slice(0, KEEP.length);
+  return [...pool.map((R, i) => ({ R, keep: KEEP[i] })), { R: ShowDown }];
+}
+const PRACTICE = [...RACES, ShowDown];
+const PRACTICE_KEEP = { knock: 15, stones: 12, boulders: 12, sumo: 12, bridge: 12, mushrooms: 12, maze: 12 };
 
 const LINES = {
   fall: ['Whoops! Off the edge!', 'Gravity wins again!'],
@@ -84,6 +86,7 @@ class Game {
     this.levelGroup = new THREE.Group();
     this.scene.add(this.levelGroup);
     particles.attach(this.scene);
+    this.petals = new Petals(this.scene, isTouch ? 110 : 160);
 
     this.contestants = [];
     this.racers = [];
@@ -273,8 +276,13 @@ class Game {
     this.round = null;
     this.world.clear();
     particles.clear();
+    // free one-off geometry and textures (signs, mushroom caps...) but keep the shared cached ones
     this.levelGroup.traverse((o) => {
       if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const m of mats) {
+        if (m.map && !m.map.userData.cached) m.map.dispose();
+      }
     });
     this.levelGroup.clear();
   }
@@ -333,7 +341,7 @@ class Game {
     this.practice = !!practiceRound;
     this.show = practiceRound
       ? [{ R: practiceRound, keep: PRACTICE_KEEP[practiceRound.info.id] }]
-      : SHOW;
+      : makeShow();
     this.roundIdx = 0;
     this.showScreen(null);
     this.loadRound();
@@ -574,6 +582,7 @@ class Game {
     this.world.endFrame();
     this.sky.update(dt, this.camera);
     wind.time.value += dt;
+    this.petals.update(dt, this.state === 'menu' ? new THREE.Vector3(0, 1, 2) : this.camLook, wind.time.value);
     this.renderer.render(this.scene, this.camera);
   }
 

@@ -25,8 +25,6 @@ export class SkippingStones extends Round {
   build() {
     this.width = 12;
     this.startZ = 2;
-    this.waterY = -0.7;
-    this.killY = -0.5;
     this.timeLimit = 110;
     this.camOffset = V(0, 7, 8.8);
     this.camLook = V(0, 0, -6);
@@ -34,34 +32,8 @@ export class SkippingStones extends Round {
     const lastRowZ = BANK_EDGE - 2.6 - (ROWS - 1) * GAP;
     const farBank = lastRowZ - 2.4;
     this.finishZ = farBank - 3.5;
-    this.grassY = 0;
-    this.grassBlocked = (x, z) => z < BANK_EDGE + 0.4 && z > farBank - 0.4 && Math.abs(x) < 31;
-    this.decorate({ castleZ: this.finishZ - 40, groundY: -3, crowds: false, skipZ: [BANK_EDGE + 1, farBank - 1] });
+    this.riverCourse(BANK_EDGE, farBank);
     const w = this.width / 2;
-    // land on both banks and either side of the river (the grass sits lower so the water shows)
-    const grassy = { tex: 'grass', texScale: 7, texTint: 0xd8f0c0 };
-    this.floor(-120, 120, 40, BANK_EDGE, 0x6cc24a, 0, 4, grassy);
-    this.floor(-120, 120, farBank, -330, 0x6cc24a, 0, 4, grassy);
-    this.floor(-120, -30, BANK_EDGE, farBank, 0x6cc24a, 0, 4, grassy);
-    this.floor(30, 120, BANK_EDGE, farBank, 0x6cc24a, 0, 4, grassy);
-    this.solid(0, 0.01, (12 + BANK_EDGE) / 2, this.width + 2, 0.02, 12 - BANK_EDGE, 0xc9a46b, { noCollide: true, cast: false, tex: 'dirt', texScale: 3 });
-    this.solid(0, 0.01, (farBank + this.finishZ - 14) / 2, this.width + 2, 0.02, farBank - this.finishZ + 14, 0xc9a46b, { noCollide: true, cast: false, tex: 'dirt', texScale: 3 });
-    this.crowds.push(crowdStand(this.group, -w - 5, 6, 12, 1));
-    this.crowds.push(crowdStand(this.group, w + 5, 6, 12, -1));
-    this.crowds.push(crowdStand(this.group, -w - 5, farBank - 8, 12, 1));
-    this.crowds.push(crowdStand(this.group, w + 5, farBank - 8, 12, -1));
-    const riverLen = BANK_EDGE - farBank;
-    const river = water(this.group, 60, riverLen + 2, 0, this.waterY, (BANK_EDGE + farBank) / 2);
-    this.updaters.push((t) => river.update(t));
-    // river bed so it doesn't look like a void
-    this.solid(0, this.waterY - 1.6, (BANK_EDGE + farBank) / 2, 60, 0.2, riverLen + 2, 0x1d5f7a, { noCollide: true, cast: false, tex: 'sand', texScale: 5, texTint: 0x6a8a90 });
-    // reeds on the banks
-    for (let i = 0; i < 30; i++) {
-      const z = Math.random() < 0.5 ? BANK_EDGE - 0.2 : farBank + 0.2;
-      const reed = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.6 + Math.random() * 0.8, 4), mat(0x4f7d2a));
-      reed.position.set((Math.random() - 0.5) * 30, this.waterY + 0.3, z);
-      if (Math.abs(reed.position.x) > w + 0.5) this.group.add(reed);
-    }
     this.stones = [];
     this.rows = [];
     // lumpy river rocks rather than perfect cylinders
@@ -122,6 +94,8 @@ export class SkippingStones extends Round {
     col.stone = stone;
     col.row = row;
     stone.col = col;
+    stone.foamRef = { x, z, hidden: false };
+    this.foam(x, z, R + 0.15).follow = stone.foamRef;
     this.stones.push(stone);
     return stone;
   }
@@ -134,6 +108,7 @@ export class SkippingStones extends Round {
         s.mesh.position.x = s.x + Math.sin(s.t * 70) * 0.06;
         if (s.t > 0.32) {
           s.state = 'sinking';
+          s.foamRef.hidden = true;
           s.t = 0;
           s.col.enabled = false;
           s.knownFake = true;
@@ -157,6 +132,7 @@ export class SkippingStones extends Round {
         s.mesh.rotation.z = 0.6 * (1 - k);
         if (k >= 1) {
           s.state = 'up';
+          s.foamRef.hidden = false;
           s.col.enabled = true;
         }
       }
