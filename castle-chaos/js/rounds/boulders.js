@@ -96,7 +96,7 @@ export class BoulderDash extends Round {
   }
 
   spawnBoulder() {
-    const r = 0.85 + Math.random() * 0.6;
+    const r = 0.7 + Math.random() * 0.45;
     const mesh = new THREE.Mesh(this.boulderGeo, this.boulderMat);
     mesh.scale.setScalar(r);
     mesh.castShadow = true;
@@ -146,13 +146,31 @@ export class BoulderDash extends Round {
         b.dustT = 0.08;
         particles.burst(new THREE.Vector3(b.x, this.h(b.z) + 0.1, b.z - b.r * 0.6), [0xd9c49a, 0xc9a46b], 2, 1.5, 0.2, { up: 0.5, gravity: 2, life: 0.6 });
       }
-      let smashed = b.z > 14;
+      const smashed = b.z > 14;
+      // glance off the bunkers and keep rolling (people hiding behind them stay safe)
       for (const k of this.bunkers) {
-        if (Math.abs(b.x - k.x) < k.hx + b.r * 0.8 && Math.abs(b.z - k.z) < k.hz + b.r * 0.8) {
-          smashed = true;
-          break;
+        const reach = k.hx + b.r * 0.55;
+        if (Math.abs(b.x - k.x) < reach && Math.abs(b.z - k.z) < k.hz + b.r * 0.55) {
+          if (b.lastK !== k) {
+            b.lastK = k;
+            // go round whichever side has more room
+            const room = (sx) => {
+              const x = k.x + sx * (reach + 0.2);
+              if (Math.abs(x) > w - b.r) return -1;
+              let free = 9;
+              for (const o of this.bunkers) if (o !== k && Math.abs(o.z - k.z) < 1 && Math.abs(o.x - x) < o.hx + b.r) free = 0;
+              return free + (Math.sign(b.x - k.x) === sx ? 1 : 0);
+            };
+            b.dodge = room(1) >= room(-1) ? 1 : -1;
+            b.vz = Math.max(2.5, b.vz * 0.8);
+            if (this.game.nearPos(b.x, b.z, 20)) sfx('thud', 0.35);
+            particles.burst(new THREE.Vector3(b.x, b.y, b.z - b.r * 0.6), [0x8b7d6b, 0xa89880], 6, 3, 0.15);
+          }
+          b.x += b.dodge * 6 * dt;
+          b.vx = b.dodge * 3;
         }
       }
+      b.vx *= 1 - dt * 0.6;
       if (smashed) {
         if (b.z < 14) {
           particles.burst(new THREE.Vector3(b.x, b.y, b.z), [0x8b7d6b, 0x6e6152, 0xa89880], 22, 6, 0.25);

@@ -10,8 +10,8 @@ import { repeat } from '../textures.js';
 const ROWS = 12;
 const GAP = 3.0;
 const ISLAND_ROW = 5;
-const COL_X = [-4.2, -1.4, 1.4, 4.2];
-const R = 0.85;
+const COL_X = [-4.5, -1.5, 1.5, 4.5];
+const R = 1.2;
 const BANK_EDGE = -2;
 
 export class SkippingStones extends Round {
@@ -106,7 +106,7 @@ export class SkippingStones extends Round {
       if (s.state === 'shaking') {
         s.t += dt;
         s.mesh.position.x = s.x + Math.sin(s.t * 70) * 0.06;
-        if (s.t > 0.32) {
+        if (s.t > 0.55) {
           s.state = 'sinking';
           s.foamRef.hidden = true;
           s.t = 0;

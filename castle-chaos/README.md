@@ -13,8 +13,8 @@ Every show picks **five events at random** from the seven below, then ends with 
 | Event | What happens |
 |---|---|
 | **Knock Knock** | 8 walls of paper doors. Some doors are solid wood (you bounce off), some hide a mud pit (you're sent back). |
-| **Skipping Stones** | Hop across the river. Fake stones sink when you land on them and come back cracked. Halfway there's an island checkpoint. |
-| **Boulder Dash** | Run up the castle slope while boulders roll down. A dark shadow shows where each one is heading; hide behind the bunkers. After a hit you're safe for 2 seconds. |
+| **Skipping Stones** | Hop across the river on big stepping stones. Fake ones wobble for a moment, then sink, and come back cracked. Halfway there's an island checkpoint. |
+| **Boulder Dash** | Run up the castle slope while boulders roll down. Boulders glance off the bunkers and keep rolling, and a dark shadow shows where each one is heading. Hide behind a bunker. After a hit you're safe for 2 seconds. |
 | **Sumo Gong** | Get past four lines of sumo wrestlers and bang the gong. If one grabs you, he throws you back down the field. |
 | **Bridge Ball** | Cross a wobbly rope bridge while cannons fire balls across it. A glowing cannon is about to fire: jump the ball or wait. |
 | **Mushroom Trip** | Hop across giant mushrooms in the river. Some bob up and down, some slide sideways, and the blue ones bounce you sky high. |

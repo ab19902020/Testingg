@@ -7,7 +7,7 @@ import { tex } from './textures.js';
 // Movement feel
 export const RUN_SPEED = 7.2;
 const ACCEL_GROUND = 55;
-const ACCEL_AIR = 16;
+const ACCEL_AIR = 24;
 const JUMP_V = 8.8;
 const DIVE_H = 10.5;
 const COYOTE = 0.12;

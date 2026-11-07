@@ -223,6 +223,10 @@ class Game {
 
   shake(v) {
     this.shakeT = Math.max(this.shakeT, v);
+    // a little buzz on phones when you get hit
+    try {
+      navigator.vibrate?.(Math.round(20 + v * 60));
+    } catch (e) { /* not supported */ }
   }
 
   near(c, dist = 20) {
@@ -748,8 +752,11 @@ class Game {
       if (v.height) {
         const tall = this.portrait ? 1.25 : 1;
         const sc = round.viewScale || 1;
+        // on short landscape phone screens, look a little less far ahead so you sit
+        // nearer the middle of the screen, clear of the touch buttons
+        const wide = !this.portrait && window.innerHeight < 500 ? 0.45 : 1;
         want = target.clone().add(new THREE.Vector3(0, v.height * tall * sc, v.back * tall * sc));
-        look = target.clone().add(new THREE.Vector3(0, 0.5, -v.ahead * sc));
+        look = target.clone().add(new THREE.Vector3(0, 0.5, -v.ahead * sc * wide));
         want.x = target.x * 0.9;
         look.x = target.x * 0.95;
       } else {

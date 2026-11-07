@@ -427,7 +427,7 @@ export function startLine(parent, y, z, width) {
   const sq = new THREE.PlaneGeometry(0.5, 0.5);
   sq.rotateX(-Math.PI / 2);
   for (let i = 0; i < n; i++) {
-    for (let r = 0; r < 2; r++) parts.push(painted(sq, (i + r) % 2 ? 0x111111 : 0xffffff, -width / 2 + 0.25 + i * 0.5, y + 0.02, z - r * 0.5));
+    for (let r = 0; r < 2; r++) parts.push(painted(sq, (i + r) % 2 ? 0x111111 : 0xffffff, -width / 2 + 0.25 + i * 0.5, y + 0.04, z - r * 0.5));
   }
   parent.add(new THREE.Mesh(mergeGeometries(parts, false), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 })));
   for (const sx of [-1, 1]) {

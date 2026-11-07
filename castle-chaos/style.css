@@ -200,9 +200,10 @@ h3 { margin: 6px 0 2px; font: 800 0.8rem var(--body); letter-spacing: 0.12em; te
 @keyframes countPop { 0% { transform: scale(2.2); opacity: 0; } 25% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.9; } }
 
 .caption {
-  position: fixed; left: 50%; top: calc(64px + var(--safe-t));
+  position: fixed; left: 50%; top: calc(96px + var(--safe-t));
   transform: translate(-50%, -20px); opacity: 0;
-  width: max-content; max-width: calc(100% - 32px);
+  width: max-content; max-width: max(260px, min(640px, calc(100% - 220px)));
+  text-wrap: balance;
   text-align: center; pointer-events: none; z-index: 11;
   font: 1.15rem/1.2 var(--display);
   text-shadow: 0 2px 0 var(--ink), 2px 0 0 var(--ink), -2px 0 0 var(--ink), 0 -2px 0 var(--ink);
@@ -273,6 +274,7 @@ h3 { margin: 6px 0 2px; font: 800 0.8rem var(--body); letter-spacing: 0.12em; te
 .tbtn.fire { width: 100px; height: 100px; right: calc(22px + var(--safe-r)); bottom: calc(26px + var(--safe-b)); background: #2a9fdb; }
 
 @media (max-height: 520px) {
+  .caption { font-size: 0.95rem; top: calc(84px + var(--safe-t)); }
   .logo { font-size: 2.4rem; }
   .lede { display: none; }
   .panel { padding: 14px 16px; gap: 8px; }
