@@ -1,0 +1,202 @@
+import * as THREE from 'three';
+import { mat, particles } from '../fx.js';
+import { sfx } from '../audio.js';
+import * as S from '../scenery.js';
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+/**
+ * Shared base for every event. A round builds its course, moves its obstacles,
+ * checks hazards for each contestant and drives the bots.
+ */
+export class Round {
+  constructor(game) {
+    this.game = game;
+    this.world = game.world;
+    this.group = new THREE.Group();
+    game.levelGroup.add(this.group);
+    this.t = 0;
+    this.updaters = [];
+    this.crowds = [];
+    this.banners = [];
+    this.killY = -4;
+    this.camOffset = V(0, 6.2, 9.5);
+    this.camLook = V(0, 1, -6);
+    this.timeLimit = 120;
+    this.width = 12;
+    this.startZ = 0;
+    this.finishZ = -50;
+    this.respawnWidth = 8;
+    this.pending = []; // delayed respawns
+  }
+
+  // ---------- building helpers ----------
+  /** Box mesh with a matching collider. y is the centre. */
+  solid(x, y, z, sx, sy, sz, color, opts = {}) {
+    const mesh = S.box(this.group, sx, sy, sz, color, x, y, z, { cast: opts.cast ?? true, ...opts });
+    const col = opts.noCollide ? null : this.world.addBox(x, y, z, sx, sy, sz, opts.col || {});
+    if (col) col.mesh = mesh;
+    return { mesh, col };
+  }
+
+  /** Walkable floor whose top is at `top`. */
+  floor(x0, x1, z0, z1, color, top = 0, thick = 1, opts = {}) {
+    const zA = Math.min(z0, z1);
+    const zB = Math.max(z0, z1);
+    return this.solid((x0 + x1) / 2, top - thick / 2, (zA + zB) / 2, x1 - x0, thick, zB - zA, color, { cast: false, ...opts });
+  }
+
+  /** Grass, mountains, trees, castle, crowds and flags around a straight course. */
+  decorate({ castleZ = this.finishZ - 45, castleY = 0, castleScale = 1.4, crowds = true, treeGap = 7, groundY = 0, skipZ = null } = {}) {
+    S.ground(this.group, 400, S.COLORS.grass, groundY);
+    S.mountains(this.group);
+    S.castle(this.group, 0, castleZ, castleScale).position.y = castleY;
+    const w = this.width / 2;
+    const skip = (z) => skipZ && z < skipZ[0] && z > skipZ[1];
+    S.forest(this.group, { xMin: -w - 6, xMax: w + 6, zFrom: this.startZ + 12, zTo: castleZ + 10, gap: treeGap, skip });
+    if (crowds) {
+      const len = Math.min(26, Math.abs(this.finishZ - this.startZ) * 0.45);
+      const mid = (this.startZ + this.finishZ) / 2;
+      this.crowds.push(S.crowdStand(this.group, -w - 4.5, mid, len, 1));
+      this.crowds.push(S.crowdStand(this.group, w + 4.5, mid, len, -1));
+    }
+    for (let z = this.startZ + 2; z > this.finishZ; z -= 6) {
+      if (skip(z)) continue;
+      this.banners.push(S.banner(this.group, -w - 1.6, z));
+      this.banners.push(S.banner(this.group, w + 1.6, z));
+    }
+    S.torii(this.group, 0, this.startY || 0, this.startZ + 1.5, this.width + 1, 'START', '#d7263d');
+    this.goal = S.torii(this.group, 0, this.finishY || 0, this.finishZ, this.width + 1, 'GOAL');
+  }
+
+  // ---------- life cycle ----------
+  build() {}
+  startPositions(n) {
+    const out = [];
+    const cols = Math.min(n, Math.max(4, Math.floor(this.width / 1.3)));
+    for (let i = 0; i < n; i++) {
+      const row = Math.floor(i / cols);
+      const col = i % cols;
+      const x = (col - (cols - 1) / 2) * ((this.width - 2) / Math.max(1, cols - 1));
+      out.push(V(x + (Math.random() - 0.5) * 0.2, this.startY || 0, this.startZ + 1 + row * 1.3));
+    }
+    return out.sort(() => Math.random() - 0.5);
+  }
+
+  /** Called every frame before contestants move. */
+  update(dt) {
+    this.t += dt;
+    for (const u of this.updaters) u(this.t, dt);
+    for (const c of this.crowds) c.update(this.t, dt);
+    for (let i = this.pending.length - 1; i >= 0; i--) {
+      const p = this.pending[i];
+      p.t -= dt;
+      if (p.t <= 0) {
+        this.pending.splice(i, 1);
+        if (p.c.active && !p.c.finished) p.c.respawn(this.respawnFor(p.c));
+        p.c.respawning = false;
+      }
+    }
+  }
+
+  /** Hazards and finish line for one contestant. Rounds call super. */
+  check(c) {
+    if (c.respawning) return;
+    if (c.body.pos.y < this.killY) this.sendBack(c, 'fall');
+    else if (!c.finished && this.crossedFinish(c)) this.game.qualify(c);
+  }
+
+  crossedFinish(c) {
+    return c.body.pos.z < this.finishZ && c.body.grounded;
+  }
+
+  respawnFor(c) {
+    const p = c.checkpoint.clone();
+    p.x += (Math.random() - 0.5) * this.respawnWidth;
+    p.y += 0.5;
+    return p;
+  }
+
+  /** Send a contestant back to their checkpoint after a short delay. */
+  sendBack(c, why = 'fall', delay = 1.3) {
+    if (c.respawning) return;
+    c.respawning = true;
+    c.frozen = true;
+    c.celebrate = false;
+    const p = c.body.pos.clone();
+    if (why === 'water') {
+      particles.burst(p.clone().setY(this.waterY ?? p.y), [0xffffff, 0x9fd8ff], 26, 5, 0.14, { up: 1.4 });
+      c.root.visible = false;
+      if (this.game.near(c)) sfx('splash');
+    } else if (why === 'mud') {
+      particles.burst(p.clone().setY(p.y + 0.3), [0x5b3a1e, 0x7a5230], 30, 5, 0.14, { up: 1.2 });
+      if (this.game.near(c)) sfx('mud');
+    } else {
+      c.root.visible = false;
+    }
+    if (c.isPlayer) {
+      this.game.commentary(why);
+      sfx('ooh', 0.7);
+    }
+    this.pending.push({ c, t: delay });
+  }
+
+  setCheckpoint(c, x, y, z) {
+    c.checkpoint.set(x, y, z);
+  }
+
+  cheer(v = 1) {
+    for (const c of this.crowds) c.cheer(v);
+  }
+
+  /** Default bot: run to the finish, sidestepping nothing. */
+  think(c) {
+    this.steer(c, c.ai.lane ?? 0, this.finishZ - 4);
+  }
+
+  // ---------- bot helpers ----------
+  steer(c, x, z, slow = 1) {
+    const dx = x - c.body.pos.x;
+    const dz = z - c.body.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.05) {
+      c.control.x = c.control.z = 0;
+      return d;
+    }
+    const s = Math.min(1, d / 0.6) * slow;
+    c.control.x = (dx / d) * s;
+    c.control.z = (dz / d) * s;
+    return d;
+  }
+
+  /** Bots occasionally get stuck against walls or each other. Wiggle free. */
+  unstick(c, dt) {
+    const ai = c.ai;
+    ai.stuckT = (ai.stuckT || 0) + dt;
+    if (ai.stuckT > 0.8) {
+      const moved = ai.lastZ === undefined ? 1 : Math.abs(c.body.pos.z - ai.lastZ) + Math.abs(c.body.pos.x - ai.lastX);
+      ai.lastZ = c.body.pos.z;
+      ai.lastX = c.body.pos.x;
+      ai.stuckT = 0;
+      if (moved < 0.4 && !c.frozen && c.stun <= 0) {
+        ai.wiggle = 0.5;
+        ai.wiggleDir = Math.random() < 0.5 ? -1 : 1;
+        return true;
+      }
+    }
+    if (ai.wiggle > 0) {
+      ai.wiggle -= dt;
+      c.control.x = ai.wiggleDir;
+      c.control.z = 0.3;
+      if (Math.random() < 0.05) c.control.jump = true;
+    }
+    return ai.wiggle > 0;
+  }
+
+  dispose() {
+    this.world.clear();
+  }
+}
+
+export { V };
+export { mat };

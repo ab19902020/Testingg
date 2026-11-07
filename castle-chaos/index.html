@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#7cc6f2">
+<title>Castle Chaos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800;900&display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<!--GAME-UI-START-->
+<div id="sky"></div>
+<canvas id="game"></canvas>
+<div id="loading" class="loading">Building the castle…</div>
+
+<section id="menu" class="screen" hidden>
+  <div class="panel title-panel">
+    <div class="rays" aria-hidden="true"></div>
+    <p class="eyebrow">The knockout game show</p>
+    <h1 class="logo"><span>Castle</span><span>Chaos</span></h1>
+    <p class="lede">20 contestants. 4 brutal events. One go-kart showdown at the castle gates.</p>
+    <label class="field" for="nameInput">Your name
+      <input id="nameInput" maxlength="14" placeholder="Contestant" autocomplete="off">
+    </label>
+    <button id="playBtn" class="btn primary big">Play the show</button>
+    <div class="row">
+      <button id="practiceBtn" class="btn">Practice an event</button>
+      <button id="howBtn" class="btn">How to play</button>
+    </div>
+    <button id="muteBtn" class="link">Sound: on</button>
+  </div>
+</section>
+
+<section id="practice" class="screen" hidden>
+  <div class="panel">
+    <h2>Practice an event</h2>
+    <div id="practiceList" class="list"></div>
+    <button class="btn" data-back>Back</button>
+  </div>
+</section>
+
+<section id="how" class="screen" hidden>
+  <div class="panel how">
+    <h2>How to play</h2>
+    <p>Each round, only the first contestants over the line go through. Everyone else is out. Survive four events to reach the Show Down, then burst the paper ring on Lord Kazan's golden kart to win.</p>
+    <div class="cols">
+      <div>
+        <h3>Phone</h3>
+        <ul>
+          <li><b>Drag</b> on the left side to run</li>
+          <li><b>JUMP</b> and <b>DIVE</b> buttons on the right</li>
+          <li>Final: drag to drive, hold <b>FIRE</b></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Keyboard</h3>
+        <ul>
+          <li><b>WASD</b> or arrows to run</li>
+          <li><b>Space</b> jump, <b>Shift</b> dive</li>
+          <li>Final: <b>Space</b> or <b>F</b> to fire</li>
+          <li><b>Esc</b> quits to the menu</li>
+        </ul>
+      </div>
+    </div>
+    <h3>The events</h3>
+    <ol class="events">
+      <li><b>Knock Knock</b>: paper doors, solid doors and mud.</li>
+      <li><b>Skipping Stones</b>: fake stones sink.</li>
+      <li><b>Boulder Dash</b>: dodge the boulders, hide behind bunkers.</li>
+      <li><b>Sumo Gong</b>: get past the sumos and bang the gong.</li>
+      <li><b>Show Down</b>: water-cannon go-kart battle.</li>
+    </ol>
+    <button class="btn" data-back>Back</button>
+  </div>
+</section>
+
+<section id="card" class="card" hidden>
+  <p id="cardRound" class="eyebrow">Round 1</p>
+  <h2 id="cardName">Knock Knock</h2>
+  <p id="cardTag"></p>
+  <p id="cardKeep" class="keep"></p>
+  <p id="cardTip" class="tip"></p>
+  <p id="skipHint" class="hint"></p>
+</section>
+
+<div id="count" class="count" hidden>3</div>
+
+<div id="hud" class="hud" hidden>
+  <div id="hudRound" class="hud-round"></div>
+  <div id="hudTimer" class="hud-timer">0:00</div>
+  <div id="hudQual" class="hud-qual"></div>
+</div>
+<button id="quit" class="quit" hidden aria-label="Quit to menu">✕</button>
+<div id="caption" class="caption"></div>
+<div id="banner" class="banner"></div>
+<div id="spectate" class="spectate" hidden>Watching <b id="specName"></b> <button id="specNext" class="btn small">Next ▸</button></div>
+
+<section id="results" class="screen" hidden>
+  <div class="panel results">
+    <h2 id="resTitle">Results</h2>
+    <p id="resSub"></p>
+    <ol id="resList" class="res-list"></ol>
+    <div id="resButtons" class="row wrap"></div>
+  </div>
+</section>
+
+<div id="touch" class="touch" hidden>
+  <div id="stickZone" class="stick-zone"></div>
+  <div id="stickBase" class="stick-base" hidden><div id="stickKnob" class="stick-knob"></div></div>
+  <button id="btnDive" class="tbtn dive">DIVE</button>
+  <button id="btnJump" class="tbtn jump">JUMP</button>
+  <button id="btnFire" class="tbtn fire" hidden>FIRE</button>
+</div>
+<!--GAME-UI-END-->
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
