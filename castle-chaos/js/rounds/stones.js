@@ -139,6 +139,14 @@ export class SkippingStones extends Round {
     }
   }
 
+  onNet(kind, i) {
+    const s = this.stones[i];
+    if (kind === 'sink' && s && s.state === 'up') {
+      s.state = 'shaking';
+      s.t = 0;
+    }
+  }
+
   check(c) {
     if (c.respawning) return;
     const b = c.body;
@@ -146,8 +154,7 @@ export class SkippingStones extends Round {
     if (g && g.stone) {
       const s = g.stone;
       if (s.fake && s.state === 'up') {
-        s.state = 'shaking';
-        s.t = 0;
+        this.emit('sink', this.stones.indexOf(s));
       } else if (!s.fake) {
         s.standT += 1 / 60;
         if (s.standT > 0.6) s.knownReal = true;

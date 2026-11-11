@@ -155,31 +155,30 @@ export class BridgeBall extends Round {
     }
     // cannons charge up (glow), then fire
     for (const cn of this.cannons) {
-      if (!this.game.racing) continue;
+      cn.barrel.position.x += (-cn.side * 0.5 - cn.barrel.position.x) * Math.min(1, dt * 4);
+      if (cn.glowT > 0) {
+        cn.glowT -= dt;
+        const k = 1 - Math.max(0, cn.glowT) / 0.8;
+        cn.glow.material.opacity = k * 0.9;
+        cn.glow.scale.setScalar(0.6 + k * 0.7);
+      }
+      if (!this.game.racing || !this.auth) continue;
       // cannons speed up when someone is coming past them
       const busy = this.game.racers.some((c) => !c.finished && Math.abs(c.body.pos.z - cn.z) < 3.5);
-      cn.t -= dt * (busy ? 1.6 : 0.7);
-      if (cn.t < 0.8) {
-        cn.charge = 1 - cn.t / 0.8;
-        cn.glow.material.opacity = cn.charge * 0.9;
-        cn.glow.scale.setScalar(0.6 + cn.charge * 0.7);
+      cn.t -= dt * (busy ? 1 : 0.7);
+      if (cn.t < 0.8 && !cn.charging) {
+        cn.charging = true;
+        this.emit('chg', [this.cannons.indexOf(cn)]);
       }
       if (cn.t <= 0) {
-        cn.t = 1.8 + Math.random() * 1.6;
-        cn.glow.material.opacity = 0;
-        cn.barrel.position.x = cn.side * 0.1;
-        const mesh = new THREE.Mesh(this.ballGeo, Math.random() < 0.5 ? this.ballMat : this.ballMat2);
-        mesh.castShadow = true;
-        this.group.add(mesh);
+        cn.t = 2.6 + Math.random() * 2;
+        cn.charging = false;
         // aim at the nearest contestant coming up to this cannon
         let zz = cn.z + (Math.random() - 0.5) * 1.2;
         const near = this.game.racers.filter((c) => !c.finished && Math.abs(c.body.pos.z - cn.z) < 4).sort((a, b) => Math.abs(a.body.pos.z - cn.z) - Math.abs(b.body.pos.z - cn.z))[0];
-        if (near && Math.random() < 0.5) zz = near.body.pos.z - 0.8 + (Math.random() - 0.5) * 1.6;
-        this.balls.push({ x: cn.x - cn.side * 1.4, y: 0.95, z: zz, vx: -cn.side * (9 + Math.random() * 3), vy: 2.2, mesh });
-        particles.burst(new THREE.Vector3(cn.x - cn.side * 1.5, 1, cn.z), [0xdddddd, 0xffffff, 0xffa040], 10, 3, 0.2, { up: 0.5, gravity: -1, life: 0.8 });
-        if (this.game.nearPos(cn.x, cn.z, 18)) sfx('shoot', 0.7);
+        if (near && Math.random() < 0.3) zz = near.body.pos.z - 0.8 + (Math.random() - 0.5) * 1.6;
+        this.emit('ball', [this.cannons.indexOf(cn), Math.round(zz * 100) / 100, 7.5 + Math.random() * 2.5, Math.random() < 0.5 ? 1 : 0]);
       }
-      cn.barrel.position.x += (-cn.side * 0.5 - cn.barrel.position.x) * Math.min(1, dt * 4);
     }
     for (let i = this.balls.length - 1; i >= 0; i--) {
       const b = this.balls[i];
@@ -198,6 +197,23 @@ export class BridgeBall extends Round {
         this.group.remove(b.mesh);
         this.balls.splice(i, 1);
       }
+    }
+  }
+
+  onNet(kind, d) {
+    const cn = this.cannons[d[0]];
+    if (!cn) return;
+    if (kind === 'chg') cn.glowT = 0.8;
+    else if (kind === 'ball') {
+      cn.glowT = 0;
+      cn.glow.material.opacity = 0;
+      cn.barrel.position.x = cn.side * 0.1;
+      const mesh = new THREE.Mesh(this.ballGeo, d[3] ? this.ballMat : this.ballMat2);
+      mesh.castShadow = true;
+      this.group.add(mesh);
+      this.balls.push({ x: cn.x - cn.side * 1.4, y: 0.95, z: d[1], vx: -cn.side * d[2], vy: 2.2, mesh });
+      particles.burst(new THREE.Vector3(cn.x - cn.side * 1.5, 1, cn.z), [0xdddddd, 0xffffff, 0xffa040], 10, 3, 0.2, { up: 0.5, gravity: -1, life: 0.8 });
+      if (this.game.nearPos(cn.x, cn.z, 18)) sfx('shoot', 0.7);
     }
   }
 

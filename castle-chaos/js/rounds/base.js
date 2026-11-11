@@ -81,6 +81,7 @@ export class Round {
       { x0: -w - 1, x1: w + 1, z0: this.startZ + 9, z1: zA, y: gy },
     ], { count: 2200, flowers: 320, blocked: (x, z) => skip(z) || (this.grassBlocked && this.grassBlocked(x, z)) });
     S.startLine(this.group, this.startY || 0, this.startZ + 0.3, this.width);
+    S.showDressing(this.group, { startZ: this.startZ, finishZ: this.finishZ, width: this.width, y: this.startY || 0, finishY: this.finishY || 0 });
     this.goal = S.torii(this.group, 0, this.finishY || 0, this.finishZ, this.width + 1, 'GOAL');
   }
 
@@ -156,6 +157,31 @@ export class Round {
     this.foamMesh.instanceMatrix.needsUpdate = true;
   }
 
+  // ---------- online ----------
+  /** True on the device that runs the shared obstacles (always true offline). */
+  get auth() {
+    return !this.game.net || this.game.net.isHost;
+  }
+
+  /** Something everyone must see (a door bursting, a boulder spawning...). Runs here and on every other device. */
+  emit(kind, data) {
+    this.onNet(kind, data);
+    if (this.game.net) this.game.net.sendEvent(kind, data);
+  }
+
+  onNet() {}
+
+  /** Extra state this device owns, sent with every snapshot (array of entries). */
+  netLocal() {
+    return null;
+  }
+
+  netApply() {}
+
+  byId(id) {
+    return this.game.contestants[id];
+  }
+
   // ---------- life cycle ----------
   build() {}
   startPositions(n) {
@@ -191,7 +217,7 @@ export class Round {
   check(c) {
     if (c.respawning) return;
     if (c.body.pos.y < this.killY) this.sendBack(c, 'fall');
-    else if (!c.finished && this.crossedFinish(c)) this.game.qualify(c);
+    else if (!c.finished && this.crossedFinish(c)) this.game.requestQualify(c);
   }
 
   crossedFinish(c) {
@@ -206,7 +232,7 @@ export class Round {
   }
 
   /** Send a contestant back to their checkpoint after a short delay. */
-  sendBack(c, why = 'fall', delay = 1.3) {
+  sendBack(c, why = 'fall', delay = 0.9) {
     if (c.respawning) return;
     c.respawning = true;
     c.frozen = true;

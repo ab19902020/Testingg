@@ -188,6 +188,18 @@ export class ShowDown extends Round {
       if (k.out) {
         k.speed = approach(k.speed, 0, 8 * dt);
         k.outT += dt;
+      } else if (!this.isLocal(k)) {
+        // driven on another device: glide to where it says the kart is
+        if (k.net) {
+          k.x += (k.net[0] - k.x) * Math.min(1, dt * 12);
+          k.z += (k.net[1] - k.z) * Math.min(1, dt * 12);
+          k.heading = wrapAngle(k.heading + wrapAngle(k.net[2] - k.heading) * Math.min(1, dt * 12));
+          k.speed = k.net[3];
+          k.net[0] += Math.sin(k.net[2]) * k.net[3] * dt;
+          k.net[1] += Math.cos(k.net[2]) * k.net[3] * dt;
+        }
+        k.paper.visible = k.ringOk;
+        continue;
       } else if (racing) {
         if (k.driver && k.driver.isPlayer) this.playerControl(k);
         else this.aiControl(k, dt);
@@ -207,13 +219,17 @@ export class ShowDown extends Round {
         const dz = b.z - a.z;
         const d = Math.hypot(dx, dz);
         if (d < KART_R * 2 && d > 0.001) {
-          const push = (KART_R * 2 - d) / 2;
-          a.x -= (dx / d) * push;
-          a.z -= (dz / d) * push;
-          b.x += (dx / d) * push;
-          b.z += (dz / d) * push;
-          a.speed *= 0.7;
-          b.speed *= 0.7;
+          const la = this.isLocal(a);
+          const lb = this.isLocal(b);
+          const push = KART_R * 2 - d;
+          const pa = la ? (lb ? 0.5 : 1) : 0;
+          const pb = lb ? (la ? 0.5 : 1) : 0;
+          a.x -= (dx / d) * push * pa;
+          a.z -= (dz / d) * push * pa;
+          b.x += (dx / d) * push * pb;
+          b.z += (dz / d) * push * pb;
+          if (la) a.speed *= 0.7;
+          if (lb) b.speed *= 0.7;
           if (this.game.nearPos(a.x, a.z, 12) && Math.random() < 0.1) sfx('thud', 0.3);
         }
       }
@@ -308,11 +324,45 @@ export class ShowDown extends Round {
       dirZ = Math.cos(a);
       vy = (tgt.y - start.y) / t + 0.5 * SHOT_G * t + (Math.random() - 0.5) * spread * 8;
     }
-    const mesh = new THREE.Mesh(this.shotGeo, this.shotMat);
-    mesh.position.copy(start);
-    this.group.add(mesh);
-    this.shots.push({ pos: start, vel: new THREE.Vector3(dirX * SHOT_SPEED, vy, dirZ * SHOT_SPEED), team: k.team, from: k, mesh, life: 3 });
-    if (this.game.nearPos(k.x, k.z, 16)) sfx('shoot', k.driver?.isPlayer ? 1 : 0.4);
+    const r = (v) => Math.round(v * 100) / 100;
+    this.emit('shot', [this.karts.indexOf(k), r(start.x), r(start.y), r(start.z), r(dirX * SHOT_SPEED), r(vy), r(dirZ * SHOT_SPEED)]);
+  }
+
+  /** This device simulates the kart (our own kart, or the bots and castle karts on the host). */
+  isLocal(k) {
+    return k.driver ? !k.driver.remote : this.auth;
+  }
+
+  onNet(kind, d) {
+    if (kind === 'shot') {
+      const k = this.karts[d[0]];
+      if (!k) return;
+      const start = new THREE.Vector3(d[1], d[2], d[3]);
+      const mesh = new THREE.Mesh(this.shotGeo, this.shotMat);
+      mesh.position.copy(start);
+      this.group.add(mesh);
+      this.shots.push({ pos: start, vel: new THREE.Vector3(d[4], d[5], d[6]), team: k.team, from: k, mesh, life: 3 });
+      if (this.game.nearPos(k.x, k.z, 16)) sfx('shoot', k.driver?.isPlayer ? 1 : 0.4);
+    } else if (kind === 'burst') {
+      const k = this.karts[d[0]];
+      if (k && k.ringOk) this.burstRing(k, this.karts[d[1]]);
+    }
+  }
+
+  netLocal() {
+    const r = (v) => Math.round(v * 100) / 100;
+    const out = [];
+    this.karts.forEach((k, i) => {
+      if (this.isLocal(k)) out.push([i, r(k.x), r(k.z), r(k.heading), r(k.speed)]);
+    });
+    return out;
+  }
+
+  netApply(list) {
+    for (const e of list) {
+      const k = this.karts[e[0]];
+      if (k && !this.isLocal(k)) k.net = [e[1], e[2], e[3], e[4]];
+    }
   }
 
   updateShots(dt) {
@@ -332,7 +382,8 @@ export class ShowDown extends Round {
           // the ring is on the front of the kart, so it only bursts from a shot coming at the front
           const frontOn = s.vel.x * Math.sin(k.heading) + s.vel.z * Math.cos(k.heading) < 0;
           if (k.ringOk && frontOn && rp.distanceToSquared(s.pos) < 0.55 * 0.55) {
-            this.burstRing(k, s.from);
+            // whoever owns the kart that got hit decides, so nobody sees a hit that "missed" on their screen
+            if (this.isLocal(k)) this.emit('burst', [this.karts.indexOf(k), this.karts.indexOf(s.from)]);
             dead = true;
             break;
           }

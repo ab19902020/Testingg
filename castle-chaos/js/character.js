@@ -10,44 +10,70 @@ const ACCEL_GROUND = 55;
 const ACCEL_AIR = 24;
 const JUMP_V = 8.8;
 const DIVE_H = 10.5;
-const COYOTE = 0.12;
+const COYOTE = 0.16;
 
 const SKIN = [0xf2c6a0, 0xe0a97e, 0xc68863, 0x8d5a3b, 0xf6d5b8];
+
+/** Things the player can choose in the locker. */
+export const SUIT_COLORS = [0xe63946, 0x2a6fdb, 0x2bb673, 0xff8c1a, 0x9b5de5, 0x00b4d8, 0xf15bb5, 0x8ac926, 0xffbe0b, 0x3a3a8c, 0x111827, 0xf5f5f5];
+export const HELMET_COLORS = [0xffd23f, 0xffffff, 0xff5d8f, 0x4cc9f0, 0xff9f1c, 0xb8f15b, 0x9b5de5, 0x1f2937];
+export const HATS = ['none', 'horns', 'propeller', 'fin', 'antenna', 'mohawk', 'ears', 'crown'];
+export const HAT_NAMES = { none: 'No hat', horns: 'Horns', propeller: 'Propeller', fin: 'Shark fin', antenna: 'Antenna', mohawk: 'Mohawk', ears: 'Bear ears', crown: 'Crown' };
 
 // shared geometry for every contestant
 const G = {};
 function geoms() {
   if (G.torso) return G;
-  G.torso = new THREE.CapsuleGeometry(0.36, 0.42, 6, 14);
-  G.head = new THREE.SphereGeometry(0.27, 16, 12);
-  G.helmet = new THREE.SphereGeometry(0.3, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55);
-  G.brim = new THREE.CylinderGeometry(0.31, 0.31, 0.06, 18);
-  G.eye = new THREE.SphereGeometry(0.045, 8, 6);
-  G.arm = new THREE.CapsuleGeometry(0.085, 0.32, 4, 8);
-  G.leg = new THREE.CapsuleGeometry(0.11, 0.24, 4, 8);
-  G.shoe = new THREE.BoxGeometry(0.2, 0.1, 0.3);
-  G.bib = new THREE.PlaneGeometry(0.42, 0.4);
-  G.marker = new THREE.ConeGeometry(0.22, 0.4, 4);
-  G.mouth = new THREE.TorusGeometry(0.07, 0.018, 6, 10, Math.PI);
-  G.torso = new THREE.CapsuleGeometry(0.37, 0.42, 8, 20);
-  G.head = new THREE.SphereGeometry(0.28, 24, 18);
-  G.helmet = new THREE.SphereGeometry(0.31, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.55);
-  G.brim = new THREE.CylinderGeometry(0.32, 0.32, 0.06, 24);
-  G.stripe = new THREE.TorusGeometry(0.29, 0.035, 6, 24);
-  G.sclera = new THREE.SphereGeometry(0.07, 12, 10);
-  G.pupil = new THREE.SphereGeometry(0.038, 10, 8);
-  G.glint = new THREE.SphereGeometry(0.014, 6, 4);
-  G.cheek = new THREE.SphereGeometry(0.05, 8, 6);
-  G.belt = new THREE.TorusGeometry(0.37, 0.05, 6, 24);
-  G.hand = new THREE.SphereGeometry(0.1, 12, 8);
-  G.leg = new THREE.CapsuleGeometry(0.115, 0.24, 6, 12);
-  G.shoe = new THREE.CapsuleGeometry(0.1, 0.14, 4, 10);
+  G.torso = new THREE.CapsuleGeometry(0.4, 0.36, 8, 22);
+  G.belly = new THREE.SphereGeometry(0.3, 16, 12);
+  G.belt = new THREE.TorusGeometry(0.4, 0.05, 6, 24);
+  G.head = new THREE.SphereGeometry(0.33, 24, 18);
+  G.helmet = new THREE.SphereGeometry(0.365, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  G.brim = new THREE.CylinderGeometry(0.375, 0.375, 0.06, 24);
+  G.stripe = new THREE.TorusGeometry(0.34, 0.04, 6, 24);
+  G.sclera = new THREE.SphereGeometry(0.09, 14, 10);
+  G.pupil = new THREE.SphereGeometry(0.048, 10, 8);
+  G.glint = new THREE.SphereGeometry(0.018, 6, 4);
+  G.cheek = new THREE.SphereGeometry(0.055, 8, 6);
+  G.mouth = new THREE.SphereGeometry(0.075, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+  G.arm = new THREE.CapsuleGeometry(0.1, 0.3, 4, 10);
+  G.hand = new THREE.SphereGeometry(0.13, 12, 8);
+  G.leg = new THREE.CapsuleGeometry(0.13, 0.2, 6, 12);
+  G.shoe = new THREE.CapsuleGeometry(0.125, 0.16, 4, 10);
   G.shoe.rotateX(Math.PI / 2);
-  G.shadow = new THREE.PlaneGeometry(1.2, 1.2);
+  G.sole = new THREE.BoxGeometry(0.24, 0.05, 0.4);
+  G.bib = new THREE.PlaneGeometry(0.44, 0.4);
+  G.marker = new THREE.ConeGeometry(0.22, 0.4, 4);
+  G.shadow = new THREE.PlaneGeometry(1.3, 1.3);
   G.shadow.rotateX(-Math.PI / 2);
-  G.ring = new THREE.PlaneGeometry(1.7, 1.7);
+  G.ring = new THREE.PlaneGeometry(1.8, 1.8);
   G.ring.rotateX(-Math.PI / 2);
+  // hat parts
+  G.horn = new THREE.ConeGeometry(0.08, 0.34, 8);
+  G.cone = new THREE.ConeGeometry(0.1, 0.3, 4);
+  G.ball = new THREE.SphereGeometry(0.08, 10, 8);
+  G.stick = new THREE.CylinderGeometry(0.02, 0.02, 0.3, 5);
+  G.blade = new THREE.BoxGeometry(0.62, 0.02, 0.1);
+  G.fin = new THREE.ConeGeometry(0.2, 0.42, 3);
+  G.ear = new THREE.SphereGeometry(0.12, 10, 8);
+  G.crown = new THREE.CylinderGeometry(0.22, 0.18, 0.16, 8, 1, true);
   return G;
+}
+
+// One material for every contestant: glossy toy plastic with a soft rim light.
+let CHAR_MAT = null;
+function charMaterial() {
+  if (CHAR_MAT) return CHAR_MAT;
+  CHAR_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, envMapIntensity: 0.6 });
+  CHAR_MAT.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+       float rim = pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), 2.6);
+       totalEmissiveRadiance += diffuseColor.rgb * rim * 0.55 + vec3(rim * 0.12);`,
+    );
+  };
+  return CHAR_MAT;
 }
 
 const SHADOW_MAT = new THREE.MeshBasicMaterial({ map: tex('shadow'), transparent: true, depthWrite: false, toneMapped: false });
@@ -61,10 +87,14 @@ function bibTexture(num, color) {
   c.width = c.height = 64;
   const g = c.getContext('2d');
   g.fillStyle = '#fbf7ec';
-  g.fillRect(0, 0, 64, 64);
+  g.beginPath();
+  g.roundRect(0, 0, 64, 64, 10);
+  g.fill();
   g.strokeStyle = '#' + new THREE.Color(color).getHexString();
   g.lineWidth = 6;
-  g.strokeRect(3, 3, 58, 58);
+  g.beginPath();
+  g.roundRect(3, 3, 58, 58, 8);
+  g.stroke();
   g.fillStyle = '#111';
   g.font = 'bold 36px Arial, sans-serif';
   g.textAlign = 'center';
@@ -75,17 +105,70 @@ function bibTexture(num, color) {
   return t;
 }
 
+function nameTexture(name) {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 64;
+  const g = c.getContext('2d');
+  g.font = '900 34px Nunito, Arial, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineWidth = 8;
+  g.lineJoin = 'round';
+  g.strokeStyle = 'rgba(20,14,30,0.9)';
+  g.strokeText(name, 128, 34, 240);
+  g.fillStyle = '#fff';
+  g.fillText(name, 128, 34, 240);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** Geometry list for a hat, in head space (head centre at 0, helmet top about y = 0.38). */
+function hatParts(hat, g, suit) {
+  const gold = 0xffc93c;
+  switch (hat) {
+    case 'horns':
+      return [painted(g.horn, 0xfff3d6, -0.3, 0.34, 0, 0, 0, 0.7), painted(g.horn, 0xfff3d6, 0.3, 0.34, 0, 0, 0, -0.7)];
+    case 'fin':
+      return [painted(g.fin, 0x6b7c93, 0, 0.5, -0.05, 0, Math.PI / 2, 0, 0.5, 1, 1)];
+    case 'antenna':
+      return [painted(g.stick, 0x333333, 0, 0.5, 0), painted(g.ball, 0xff3b3b, 0, 0.68, 0)];
+    case 'mohawk':
+      return [-0.2, -0.07, 0.06, 0.19].map((z, i) => painted(g.cone, suit, 0, 0.44 - Math.abs(i - 1.5) * 0.035, z, 0, Math.PI / 4, 0, 0.7, 1, 1));
+    case 'ears':
+      return [painted(g.ear, 0x8d5a3b, -0.26, 0.36, 0), painted(g.ear, 0x8d5a3b, 0.26, 0.36, 0), painted(g.ball, 0xf2c6a0, -0.26, 0.36, 0.07), painted(g.ball, 0xf2c6a0, 0.26, 0.36, 0.07)];
+    case 'crown': {
+      const parts = [painted(g.crown, gold, 0, 0.44, 0)];
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        parts.push(painted(g.cone, gold, Math.cos(a) * 0.2, 0.58, Math.sin(a) * 0.2, 0, 0, 0, 0.5, 0.6, 0.5));
+      }
+      return parts;
+    }
+    case 'propeller':
+      return [painted(g.stick, 0x333333, 0, 0.46, 0, 0, 0, 0, 1, 0.6, 1), painted(g.ball, 0xff3b3b, 0, 0.56, 0, 0, 0, 0, 0.6, 0.6, 0.6)];
+    default:
+      return [];
+  }
+}
+
 export class Contestant {
-  constructor(scene, { name, suit, helmet, number, isPlayer = false, skill = 0.5 }) {
+  constructor(scene, { id = 0, name, suit, helmet, number, hat = 'none', isPlayer = false, human = false, remote = false, pid = null, skill = 0.5, speedMul = null }) {
+    this.id = id;
     this.name = name;
     this.suit = suit;
     this.helmetColor = helmet;
     this.number = number;
-    this.isPlayer = isPlayer;
+    this.hat = hat;
+    this.isPlayer = isPlayer; // the human on THIS device
+    this.human = human || isPlayer; // any human (online)
+    this.remote = remote; // simulated on another device: we only show it
+    this.pid = pid;
     this.skill = skill; // 0..1 for bots: speed, reaction and smarts
     this.body = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), r: 0.36, h: 1.6, grounded: false, ground: null, owner: this };
     this.body.onLand = (c) => this._onLand(c);
-    this.control = { x: 0, z: 0, jump: false, dive: false };
+    this.control = { x: 0, z: 0, jump: false, dive: false, jumpHeld: true };
     this.facing = Math.PI; // facing -z (towards the castle)
     this.state = 'idle';
     this.stun = 0;
@@ -96,7 +179,7 @@ export class Contestant {
     this.active = true; // still in the round
     this.finished = false;
     this.celebrate = false;
-    this.speedMul = isPlayer ? 1 : 0.86 + skill * 0.13;
+    this.speedMul = speedMul ?? (this.human ? 1 : 0.86 + skill * 0.13);
     this.airTime = 0;
     this.phase = Math.random() * 10;
     this.flail = 0;
@@ -114,9 +197,7 @@ export class Contestant {
     root.add(pose);
     const skin = SKIN[this.number % SKIN.length];
     const dark = 0x161616;
-    // glossy, toy-like plastic: low roughness plus the environment reflections
-    const vmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, envMapIntensity: 0.55 });
-    this.vmat = vmat;
+    const vmat = charMaterial();
     const part = (parent, geos, x, y, z, shadow = false) => {
       const m = new THREE.Mesh(mergeGeometries(geos, false), vmat);
       m.position.set(x, y, z);
@@ -124,31 +205,44 @@ export class Contestant {
       parent.add(m);
       return m;
     };
-    // torso + bib
+    // chunky torso with a lighter belly and a belt
+    const light = new THREE.Color(this.suit).lerp(new THREE.Color(0xffffff), 0.45).getHex();
     part(pose, [
-      painted(g.torso, this.suit, 0, 0.88, 0),
-      painted(g.belt, 0x222222, 0, 0.62, 0, Math.PI / 2),
+      painted(g.torso, this.suit, 0, 0.86, 0),
+      painted(g.belly, light, 0, 0.84, 0.17, 0, 0, 0, 1, 1.05, 0.75),
+      painted(g.belt, 0x222222, 0, 0.58, 0, Math.PI / 2),
     ], 0, 0, 0, true);
-    const bib = new THREE.Mesh(g.bib, new THREE.MeshStandardMaterial({ map: bibTexture(this.number, this.helmetColor), roughness: 0.7 }));
-    bib.position.set(0, 0.92, 0.372);
+    const bib = new THREE.Mesh(g.bib, new THREE.MeshStandardMaterial({ map: bibTexture(this.number, this.helmetColor), roughness: 0.7, transparent: true }));
+    bib.position.set(0, 0.95, 0.405);
+    bib.rotation.x = -0.08;
     pose.add(bib);
-    // head, helmet, face in one mesh
+    this.bib = bib;
+    // big head, helmet and a friendly face, all one mesh
     const head = part(pose, [
       painted(g.head, skin),
-      painted(g.helmet, this.helmetColor, 0, 0.02, 0, -0.18),
-      painted(g.brim, this.helmetColor, 0, 0.03, 0.02, -0.18, 0, 0, 1, 1, 1.05),
-      painted(g.stripe, this.suit, 0, 0.1, 0.01, Math.PI / 2 - 0.18, 0, 0, 1, 1, 1),
-      painted(g.sclera, 0xffffff, -0.1, -0.02, 0.22, 0, 0, 0, 1, 1.2, 0.8),
-      painted(g.sclera, 0xffffff, 0.1, -0.02, 0.22, 0, 0, 0, 1, 1.2, 0.8),
-      painted(g.pupil, dark, -0.1, -0.02, 0.27),
-      painted(g.pupil, dark, 0.1, -0.02, 0.27),
-      painted(g.glint, 0xffffff, -0.088, 0.0, 0.302),
-      painted(g.glint, 0xffffff, 0.112, 0.0, 0.302),
-      painted(g.cheek, 0xff8a8a, -0.17, -0.1, 0.2, 0, 0, 0, 1, 0.6, 0.5),
-      painted(g.cheek, 0xff8a8a, 0.17, -0.1, 0.2, 0, 0, 0, 1, 0.6, 0.5),
-      painted(g.mouth, dark, 0, -0.13, 0.25, 0, 0, Math.PI),
-    ], 0, 1.56, 0, true);
+      painted(g.helmet, this.helmetColor, 0, 0.03, 0, -0.18),
+      painted(g.brim, this.helmetColor, 0, 0.04, 0.03, -0.18, 0, 0, 1, 1, 1.06),
+      painted(g.stripe, this.suit, 0, 0.13, 0.01, Math.PI / 2 - 0.18),
+      painted(g.sclera, 0xffffff, -0.125, -0.02, 0.255, 0, 0, 0, 1, 1.25, 0.8),
+      painted(g.sclera, 0xffffff, 0.125, -0.02, 0.255, 0, 0, 0, 1, 1.25, 0.8),
+      painted(g.pupil, dark, -0.12, -0.025, 0.318),
+      painted(g.pupil, dark, 0.12, -0.025, 0.318),
+      painted(g.glint, 0xffffff, -0.105, 0.0, 0.358),
+      painted(g.glint, 0xffffff, 0.135, 0.0, 0.358),
+      painted(g.cheek, 0xff8a8a, -0.215, -0.12, 0.22, 0, 0, 0, 1, 0.6, 0.5),
+      painted(g.cheek, 0xff8a8a, 0.215, -0.12, 0.22, 0, 0, 0, 1, 0.6, 0.5),
+      painted(g.mouth, 0x5a1a1a, 0, -0.13, 0.285, -0.25, 0, 0, 1, 1, 0.5),
+      ...hatParts(this.hat, g, this.suit),
+    ], 0, 1.62, 0, true);
     this.head = head;
+    if (this.hat === 'propeller') {
+      const prop = new THREE.Mesh(g.blade, vmat.clone());
+      prop.material.vertexColors = false;
+      prop.material.color.set(0xffd23f);
+      prop.position.y = 0.56;
+      head.add(prop);
+      this.prop = prop;
+    }
     const limb = (geos, x, y) => {
       const piv = new THREE.Group();
       piv.position.set(x, y, 0);
@@ -156,12 +250,16 @@ export class Contestant {
       pose.add(piv);
       return piv;
     };
-    const arm = () => [painted(g.arm, this.suit, 0, -0.22, 0), painted(g.hand, 0xffffff, 0, -0.46, 0)];
-    const leg = () => [painted(g.leg, this.suit, 0, -0.2, 0), painted(g.shoe, 0x1c1c22, 0, -0.39, 0.06)];
-    this.armL = limb(arm(), -0.43, 1.18);
-    this.armR = limb(arm(), 0.43, 1.18);
-    this.legL = limb(leg(), -0.16, 0.42);
-    this.legR = limb(leg(), 0.16, 0.42);
+    const arm = () => [painted(g.arm, this.suit, 0, -0.2, 0), painted(g.hand, 0xffffff, 0, -0.44, 0)];
+    const leg = () => [
+      painted(g.leg, this.suit, 0, -0.18, 0),
+      painted(g.shoe, this.helmetColor, 0, -0.36, 0.07),
+      painted(g.sole, 0xffffff, 0, -0.46, 0.07),
+    ];
+    this.armL = limb(arm(), -0.48, 1.16);
+    this.armR = limb(arm(), 0.48, 1.16);
+    this.legL = limb(leg(), -0.18, 0.48);
+    this.legR = limb(leg(), 0.18, 0.48);
     // soft contact shadow so you can always tell where someone will land
     const sh = new THREE.Mesh(g.shadow, SHADOW_MAT);
     sh.renderOrder = 1;
@@ -174,19 +272,76 @@ export class Contestant {
       this.ring = ring;
       const mk = new THREE.Mesh(g.marker, new THREE.MeshBasicMaterial({ color: 0xffd23f, toneMapped: false }));
       mk.rotation.x = Math.PI;
-      mk.position.y = 2.35;
+      mk.position.y = 2.6;
       root.add(mk);
       this.marker = mk;
+    } else if (this.human) {
+      // other real players get a name tag
+      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture(this.name), depthWrite: false, toneMapped: false }));
+      tag.scale.set(2.4, 0.6, 1);
+      tag.position.y = 2.75;
+      root.add(tag);
+      this.tag = tag;
     }
     this.root = root;
     this.pose = pose;
     scene.add(root);
   }
 
+  // ---------- online: send our state / show someone else's ----------
+  netPack() {
+    const b = this.body;
+    const r = (v) => Math.round(v * 100) / 100;
+    const flags = (b.grounded ? 1 : 0) | (this.diving || this.slide > 0 ? 2 : 0) | (this.stun > 0 ? 4 : 0) | (this.frozen ? 8 : 0)
+      | (this.celebrate ? 16 : 0) | (this.root.visible ? 0 : 32) | (this.pose.visible ? 0 : 64);
+    return [this.id, r(b.pos.x), r(b.pos.y), r(b.pos.z), r(this.facing), flags, r(b.vel.x), r(b.vel.z)];
+  }
+
+  netApply(a) {
+    this.netT = { x: a[1], y: a[2], z: a[3], f: a[4], flags: a[5], vx: a[6], vz: a[7] };
+  }
+
+  /** Puppet update for characters simulated on another device. */
+  netUpdate(dt, world) {
+    const n = this.netT;
+    const b = this.body;
+    if (n) {
+      const dx = n.x - b.pos.x;
+      const dy = n.y - b.pos.y;
+      const dz = n.z - b.pos.z;
+      if (dx * dx + dy * dy + dz * dz > 36) b.pos.set(n.x, n.y, n.z);
+      else {
+        const k = 1 - Math.exp(-14 * dt);
+        b.pos.x += dx * k;
+        b.pos.y += dy * k;
+        b.pos.z += dz * k;
+      }
+      // keep moving between updates so it looks smooth
+      n.x += n.vx * dt;
+      n.z += n.vz * dt;
+      this.facing = turnTo(this.facing, n.f, 12 * dt);
+      const f = n.flags;
+      b.grounded = !!(f & 1);
+      this.diving = !!(f & 2);
+      const stunned = !!(f & 4);
+      if (stunned && this.stun <= 0) this.spin = 9;
+      this.stun = stunned ? 0.2 : 0;
+      this.frozen = !!(f & 8);
+      this.celebrate = !!(f & 16);
+      this.root.visible = !(f & 32);
+      this.pose.visible = !(f & 64);
+      b.vel.x = n.vx;
+      b.vel.z = n.vz;
+    }
+    this.groundY = b.grounded ? b.pos.y : world.groundAt(b.pos.x, b.pos.z, b.pos.y + 0.05);
+    this.animate(dt);
+  }
+
   dispose(scene) {
     scene.remove(this.root);
     this.root.traverse((o) => {
-      if (o.geometry && ![G.bib, G.marker, G.shadow, G.ring].includes(o.geometry)) o.geometry.dispose();
+      if (o.geometry && !Object.values(G).includes(o.geometry)) o.geometry.dispose();
+      if (o.isSprite || o === this.bib) o.material.map?.dispose();
     });
   }
 
@@ -286,7 +441,14 @@ export class Contestant {
       v.y = JUMP_V;
       this.coyote = 0;
       b.grounded = false;
+      this.jumpCut = false;
       if (this.isPlayer) sfx('jump');
+      particles.burst(new THREE.Vector3(b.pos.x, b.pos.y + 0.05, b.pos.z), [0xffffff, 0xe6d3ad], 4, 1.6, 0.1, { up: 0.3, gravity: 3, life: 0.4 });
+    }
+    // let go of jump early for a shorter hop
+    if (!c.jumpHeld && !this.jumpCut && v.y > 3.5 && !this.diving && this.stun <= 0) {
+      v.y *= 0.7;
+      this.jumpCut = true;
     }
     if (canControl && c.dive) {
       const dx = ml > 0.15 ? mx / Math.max(ml, 0.01) : Math.sin(this.facing);
@@ -377,8 +539,9 @@ export class Contestant {
     this.armR.rotation.z = armZ;
     this.legL.rotation.x = approach(this.legL.rotation.x, legX, 18 * dt);
     this.legR.rotation.x = approach(this.legR.rotation.x, this.diving || this.slide > 0 ? legX : -legX, 18 * dt);
+    if (this.prop) this.prop.rotation.y += dt * (8 + Math.hypot(b.vel.x, b.vel.z) * 3);
     if (this.marker) {
-      this.marker.position.y = 2.35 + Math.sin(performance.now() / 250) * 0.08;
+      this.marker.position.y = 2.6 + Math.sin(performance.now() / 250) * 0.08;
       this.marker.rotation.y += dt * 2;
     }
     // contact shadow (and the player's ring) sit on the ground below, shrinking with height
@@ -420,15 +583,26 @@ export function turnTo(a, b, d) {
 // ---------------------------------------------------------------------------
 // The contestant line-up: names, colours and bib numbers.
 // ---------------------------------------------------------------------------
-const SUITS = [0xe63946, 0x2a6fdb, 0x2bb673, 0xff8c1a, 0x9b5de5, 0x00b4d8, 0xf15bb5, 0x8ac926, 0xffbe0b, 0x3a3a8c, 0xd62828, 0x06d6a0];
-const HELMETS = [0xffd23f, 0xffffff, 0xff5d8f, 0x4cc9f0, 0xff9f1c, 0xb8f15b];
+const BOT_SUITS = [0x2a6fdb, 0x2bb673, 0xff8c1a, 0x9b5de5, 0x00b4d8, 0xf15bb5, 0x8ac926, 0xffbe0b, 0x3a3a8c, 0xd62828, 0x06d6a0, 0xe63946];
+const BOT_HELMETS = [0xffffff, 0xff5d8f, 0x4cc9f0, 0xff9f1c, 0xb8f15b, 0xffd23f];
 const NAMES = [
   'Big Kenji', 'Mama Yuki', 'Turbo Taro', 'Hiro the Hero', 'Noodle', 'Sushi Sam', 'Aiko', 'Daisuke', 'Banzai Bob',
   'Rin', 'Captain Kaz', 'Speedy Sora', 'Tofu Tom', 'Mika', 'Grandpa Goro', 'Yoshi K', 'Rocket Ren', 'Haruka',
   'Wobbly Wes', 'Kumiko', 'Shin', 'Lucky Lee', 'Momo', 'Ichiro', 'Nana', 'Kenta the Tank',
 ];
+/** How fast and sharp the bots are at each difficulty: [slowest, fastest] speed, and skill range. */
+export const DIFFICULTY = {
+  easy: { speed: [0.7, 0.84], skill: [0.05, 0.6] },
+  normal: { speed: [0.78, 0.93], skill: [0.15, 0.85] },
+  hard: { speed: [0.88, 1.0], skill: [0.4, 1.0] },
+};
 
-export function makeLineup(count, playerName) {
+/**
+ * Build the line-up. `humans` is a list of {name, look: {suit, helmet, hat}, pid}; the rest are bots.
+ * The result is plain data, so the host can send it to everyone in an online game.
+ */
+export function makeLineup(count, humans, difficulty = 'normal') {
+  const d = DIFFICULTY[difficulty] || DIFFICULTY.normal;
   const list = [];
   const names = NAMES.slice().sort(() => Math.random() - 0.5);
   const nums = [];
@@ -436,16 +610,26 @@ export function makeLineup(count, playerName) {
     const n = 1 + Math.floor(Math.random() * 99);
     if (!nums.includes(n)) nums.push(n);
   }
+  const botHats = HATS.filter((h) => h !== 'crown');
   for (let i = 0; i < count; i++) {
-    const isPlayer = i === 0;
-    list.push({
-      name: isPlayer ? playerName : names[i % names.length],
-      suit: isPlayer ? 0xe63946 : SUITS[(i * 5) % SUITS.length],
-      helmet: isPlayer ? 0xffd23f : HELMETS[(i * 7) % HELMETS.length],
-      number: nums[i],
-      isPlayer,
-      skill: isPlayer ? 1 : Math.min(1, Math.max(0, 0.15 + Math.random() * 0.85)),
-    });
+    const h = humans[i];
+    if (h) {
+      list.push({ id: i, name: h.name, suit: h.look.suit, helmet: h.look.helmet, hat: h.look.hat, number: nums[i], human: true, pid: h.pid ?? null, skill: 1, speedMul: 1 });
+    } else {
+      const k = Math.random();
+      list.push({
+        id: i,
+        name: names[i % names.length],
+        suit: BOT_SUITS[(i * 5) % BOT_SUITS.length],
+        helmet: BOT_HELMETS[(i * 7) % BOT_HELMETS.length],
+        hat: Math.random() < 0.35 ? botHats[1 + Math.floor(Math.random() * (botHats.length - 1))] : 'none',
+        number: nums[i],
+        human: false,
+        pid: null,
+        skill: d.skill[0] + k * (d.skill[1] - d.skill[0]),
+        speedMul: d.speed[0] + k * (d.speed[1] - d.speed[0]),
+      });
+    }
   }
   return list;
 }

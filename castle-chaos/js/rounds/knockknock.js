@@ -111,7 +111,7 @@ export class KnockKnock extends Round {
         frame.position.set(sx * DOOR_W / 2, DOOR_H / 2, 0);
         g.add(frame);
       }
-      const door = { x, type, state: 'closed', group: g, panel, wobble: 0 };
+      const door = { x, type, state: 'closed', group: g, panel, wobble: 0, wi, di };
       const col = this.world.addBox(x, DOOR_H / 2, z, DOOR_W, DOOR_H, 0.14, {
         onHit: (body, nx, nz, into) => this.hitDoor(door, body, nz, into),
       });
@@ -147,12 +147,7 @@ export class KnockKnock extends Round {
       if (nz > 0.5 && into > 2.5 && c && c.stun <= 0) {
         c.knock(body.vel.x * -0.2, 5.5, 8.5, 0.75);
         door.wobble = 1;
-        if (door.state !== 'revealed') {
-          door.state = 'revealed';
-          const x = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3), this.crossMat);
-          x.position.set(0, DOOR_H * 0.55, 0.075);
-          door.group.add(x);
-        }
+        if (door.state !== 'revealed') this.emit('rev', [door.wi, door.di]);
         particles.burst(body.pos.clone().setY(1.4), 0xffffff, 6, 2, 0.08);
         if (this.game.near(c)) sfx('boing');
         if (c.isPlayer) {
@@ -164,15 +159,29 @@ export class KnockKnock extends Round {
       return false;
     }
     // paper (or paper hiding mud): burst through!
-    door.state = door.type === 'mud' ? 'mudOpen' : 'open';
-    if (door.mud) door.mud.visible = true;
-    door.col.enabled = false;
-    door.group.remove(door.panel);
-    particles.burst(new THREE.Vector3(door.x, 1.3, door.col.z), [0xfbf6e4, 0xf1e6c8, 0xd7263d], 30, 4, 0.18, { up: 0.6, flat: true, life: 1.4, gravity: 8 });
-    if (this.game.near(c)) sfx('rip');
+    this.emit('door', [door.wi, door.di]);
     if (c?.isPlayer) this.game.shake(0.15);
-    this.cheer(0.7);
     return true;
+  }
+
+  onNet(kind, d) {
+    const door = this.walls[d[0]]?.doors[d[1]];
+    if (!door) return;
+    if (kind === 'rev' && door.state === 'closed') {
+      door.state = 'revealed';
+      door.wobble = 1;
+      const x = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3), this.crossMat);
+      x.position.set(0, DOOR_H * 0.55, 0.075);
+      door.group.add(x);
+    } else if (kind === 'door' && door.state === 'closed') {
+      door.state = door.type === 'mud' ? 'mudOpen' : 'open';
+      if (door.mud) door.mud.visible = true;
+      door.col.enabled = false;
+      door.group.remove(door.panel);
+      particles.burst(new THREE.Vector3(door.x, 1.3, door.col.z), [0xfbf6e4, 0xf1e6c8, 0xd7263d], 30, 4, 0.18, { up: 0.6, flat: true, life: 1.4, gravity: 8 });
+      if (this.game.nearPos(door.x, door.col.z)) sfx('rip');
+      this.cheer(0.7);
+    }
   }
 
   check(c) {

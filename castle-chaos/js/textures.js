@@ -165,6 +165,30 @@ const DRAW = {
     g.fillRect(0, 0, w, h);
     speckle(g, w, h, 3000, ['#3f424a', '#5a5d66', '#666a73', '#383a41'], 1.5, r);
   },
+  stripes(g, w, h) {
+    // red and white padding, like inflatable game-show kit
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#e8222e';
+    for (let i = -h; i < w; i += w / 4) {
+      g.beginPath();
+      g.moveTo(i, h);
+      g.lineTo(i + w / 8, h);
+      g.lineTo(i + w / 8 + h, 0);
+      g.lineTo(i + h, 0);
+      g.fill();
+    }
+  },
+  checker(g, w, h) {
+    const n = 4;
+    const s = w / n;
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        g.fillStyle = (x + y) % 2 ? '#3f8ae0' : '#eaf4ff';
+        g.fillRect(x * s, y * s, s, s);
+      }
+    }
+  },
   shadow(g, w, h) {
     const grd = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
     grd.addColorStop(0, 'rgba(0,0,0,0.55)');
@@ -194,7 +218,7 @@ const DRAW = {
   },
 };
 
-const SIZES = { grass: 512, dirt: 256, sand: 256, wood: 256, stone: 256, plaster: 128, roof: 128, tarmac: 256, shadow: 64, ring: 128, cloud: 64 };
+const SIZES = { stripes: 128, checker: 128, grass: 512, dirt: 256, sand: 256, wood: 256, stone: 256, plaster: 128, roof: 128, tarmac: 256, shadow: 64, ring: 128, cloud: 64 };
 
 /** Get a texture by name: grass, dirt, sand, wood, stone, plaster, roof, tarmac, shadow, ring. */
 export function tex(name) {

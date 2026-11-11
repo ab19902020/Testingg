@@ -41,10 +41,41 @@ export const input = {
   takeDive() { return take('dive'); },
   takeFire() { return take('fire'); },
   get fireHeld() { return held.fire || keys.has('Space') || keys.has('KeyF'); },
+  get jumpHeld() { return held.jump || keys.has('Space'); },
+  /** How far the camera has been dragged since last asked (radians of turn). */
+  takeLook(dt) {
+    let v = look.dx;
+    look.dx = 0;
+    if (keys.has('KeyZ')) v += 2.2 * dt;
+    if (keys.has('KeyX')) v -= 2.2 * dt;
+    return v;
+  },
   clear() {
     pressed.jump = pressed.dive = pressed.fire = 0;
   },
 };
+
+const look = { dx: 0, id: null, lastX: 0 };
+
+/** Drag on this element (the right side of the screen, or anywhere with a mouse) to turn the camera. */
+export function setupLook(el) {
+  el.addEventListener('pointerdown', (e) => {
+    if (look.id !== null) return;
+    look.id = e.pointerId;
+    look.lastX = e.clientX;
+    el.setPointerCapture?.(e.pointerId);
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== look.id) return;
+    look.dx -= ((e.clientX - look.lastX) / Math.max(320, window.innerWidth)) * 3.2;
+    look.lastX = e.clientX;
+  });
+  const end = (e) => {
+    if (e.pointerId === look.id) look.id = null;
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+}
 
 // A press stays "buffered" for a short time so a jump pressed just before landing still counts.
 function take(name) {

@@ -655,6 +655,78 @@ export function water(parent, w, d, x, y, z, { deep = 0x07507a, shallow = 0x2aa6
   return { mesh: m, update() {} };
 }
 
+/**
+ * TV game-show set dressing: hot-air balloons in the sky, bunches of balloons, inflatable pylons
+ * and floodlight towers around a course.
+ */
+export function showDressing(parent, { startZ, finishZ, width, y = 0, finishY = 0 }) {
+  const w = width / 2;
+  const cols = [0xe8222e, 0xffc93c, 0x2a6fdb, 0x2bb673, 0xf15bb5, 0xffffff, 0xff8c1a];
+  // hot-air balloons drifting in the distance
+  const envGeo = new THREE.SphereGeometry(1, 20, 16);
+  const spots = [[-55, 34, finishZ - 40], [48, 42, finishZ - 10], [-38, 50, startZ - 20], [70, 30, startZ + 10]];
+  spots.forEach(([bx, by, bz], i) => {
+    const g = new THREE.Group();
+    g.position.set(bx, by, bz);
+    const env = new THREE.Mesh(envGeo, mat(i % 2 ? 0xffffff : cols[i % cols.length], { map: repeat('stripes', 6, 1), rough: 0.5 }));
+    env.scale.set(7, 8.5, 7);
+    g.add(env);
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 1.2, 3, 12, 1, true), mat(cols[(i + 2) % cols.length], { rough: 0.6 }));
+    skirt.position.y = -8.2;
+    g.add(skirt);
+    const basket = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.3, 1.6), mat(0x8a5a34, { rough: 0.9 }));
+    basket.position.y = -11.5;
+    g.add(basket);
+    parent.add(g);
+  });
+  // bunches of balloons and inflatable pylons at the start and finish
+  const balloon = new THREE.SphereGeometry(0.32, 12, 10);
+  const bunch = (x, z, yy) => {
+    const parts = [painted(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 4), 0x444444, x, yy + 1.3, z)];
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      parts.push(painted(balloon, cols[(k + Math.floor(x + z + 100)) % cols.length], x + Math.cos(a) * 0.35, yy + 2.7 + (k % 3) * 0.32, z + Math.sin(a) * 0.35, 0, 0, 0, 1, 1.2, 1));
+    }
+    const m = new THREE.Mesh(mergeGeometries(parts, false), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25 }));
+    m.castShadow = true;
+    parent.add(m);
+  };
+  const pylon = (x, z, yy) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.75, 3.4, 14), mat(0xffffff, { map: repeat('stripes', 3, 2), rough: 0.4 }));
+    m.position.set(x, yy + 1.7, z);
+    m.castShadow = true;
+    parent.add(m);
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), mat(0xffc93c, { rough: 0.3, metal: 0.5 }));
+    top.position.set(x, yy + 3.5, z);
+    parent.add(top);
+  };
+  for (const sx of [-1, 1]) {
+    bunch(sx * (w + 2.6), startZ + 3, y);
+    bunch(sx * (w + 2.6), finishZ - 2, finishY);
+    pylon(sx * (w + 1.6), startZ + 5, y);
+    pylon(sx * (w + 3.4), finishZ - 4, finishY);
+  }
+  // floodlight towers
+  const steel = mat(0x4b5563, { rough: 0.4, metal: 0.7 });
+  const lamp = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c4, emissiveIntensity: 1.6 });
+  for (const sx of [-1, 1]) {
+    for (const z of [startZ + 9, finishZ - 9]) {
+      const yy = z < (startZ + finishZ) / 2 ? finishY : y;
+      const g = new THREE.Group();
+      g.position.set(sx * (w + 13), yy, z);
+      g.rotation.y = Math.atan2(-sx * (w + 13), (startZ + finishZ) / 2 - z);
+      box(g, 0.3, 13, 0.3, 0, 0, 6.5, 0, { material: steel, shadow: false });
+      box(g, 3.4, 1.7, 0.4, 0, 0, 13.4, 0, { material: steel, shadow: false });
+      for (let i = 0; i < 6; i++) {
+        const l = new THREE.Mesh(new THREE.CircleGeometry(0.36, 12), lamp);
+        l.position.set(-1.1 + (i % 3) * 1.1, 13 + Math.floor(i / 3) * 0.8, 0.21);
+        g.add(l);
+      }
+      parent.add(g);
+    }
+  }
+}
+
 /** Paper lantern on a post. */
 export function lantern(parent, x, z, h = 2.2) {
   const g = new THREE.Group();

@@ -97,6 +97,12 @@ export class BoulderDash extends Round {
 
   spawnBoulder() {
     const r = 0.7 + Math.random() * 0.45;
+    const x = (Math.random() - 0.5) * (this.width - 2 * r - 0.4);
+    this.emit('b', [x, r, 1.5 + Math.random() * 1.5, (Math.random() - 0.5) * 0.8]);
+  }
+
+  onNet(kind, [x, r, vz, vx]) {
+    if (kind !== 'b') return;
     const mesh = new THREE.Mesh(this.boulderGeo, this.boulderMat);
     mesh.scale.setScalar(r);
     mesh.castShadow = true;
@@ -105,15 +111,14 @@ export class BoulderDash extends Round {
     const warn = new THREE.Mesh(this.warnGeo, this.warnMat);
     warn.renderOrder = 1;
     this.group.add(warn);
-    const x = (Math.random() - 0.5) * (this.width - 2 * r - 0.4);
     const z = -RAMP_LEN - 1;
-    this.boulders.push({ x, z, y: this.h(z) + r, r, vz: 1.5 + Math.random() * 1.5, vx: (Math.random() - 0.5) * 0.8, mesh, warn, dustT: 0 });
+    this.boulders.push({ x, z, y: this.h(z) + r, r, vz, vx, mesh, warn, dustT: 0 });
   }
 
   update(dt) {
     super.update(dt);
     this.update2(dt);
-    if (this.game.racing) {
+    if (this.game.racing && this.auth) {
       this.spawnT -= dt;
       const pace = Math.min(1, this.t / 60);
       if (this.spawnT <= 0) {

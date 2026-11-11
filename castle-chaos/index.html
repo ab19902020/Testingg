@@ -28,12 +28,60 @@
     <label class="field" for="nameInput">Your name
       <input id="nameInput" maxlength="14" placeholder="Contestant" autocomplete="off">
     </label>
-    <button id="playBtn" class="btn primary big">Play the show</button>
     <div class="row">
-      <button id="practiceBtn" class="btn">Practice an event</button>
+      <button id="playBtn" class="btn primary big">Play</button>
+      <button id="onlineBtn" class="btn big">Online</button>
+    </div>
+    <div class="seg" role="group" aria-label="Difficulty">
+      <button class="seg-btn" data-diff="easy">Easy</button>
+      <button class="seg-btn" data-diff="normal">Normal</button>
+      <button class="seg-btn" data-diff="hard">Hard</button>
+    </div>
+    <div class="row">
+      <button id="lockerBtn" class="btn">Locker</button>
+      <button id="practiceBtn" class="btn">Practice</button>
       <button id="howBtn" class="btn">How to play</button>
     </div>
+    <p class="crowns">Crowns won: <b id="crownCount">0</b></p>
     <button id="muteBtn" class="link">Sound: on</button>
+  </div>
+</section>
+
+<section id="online" class="screen" hidden>
+  <div class="panel">
+    <h2>Play online</h2>
+    <div id="onlineStart" class="stack">
+      <p>Play the show with up to 8 real players. Bots fill the other places.</p>
+      <button id="hostBtn" class="btn primary big">Host a game</button>
+      <label class="field" for="codeInput">Or join with a code
+        <div class="row">
+          <input id="codeInput" maxlength="4" placeholder="ABCD" autocomplete="off" autocapitalize="characters" spellcheck="false">
+          <button id="joinBtn" class="btn">Join</button>
+        </div>
+      </label>
+    </div>
+    <div id="lobby" class="stack" hidden>
+      <p class="eyebrow">Game code</p>
+      <p id="lobbyCode" class="code">----</p>
+      <p id="lobbyHint">Tell your friends this code. They tap Online, type it in and press Join.</p>
+      <ul id="lobbyList" class="res-list"></ul>
+      <button id="startOnlineBtn" class="btn primary big">Start the show</button>
+    </div>
+    <p id="onlineStatus" class="status" role="status"></p>
+    <button id="onlineBack" class="btn">Back</button>
+  </div>
+</section>
+
+<section id="locker" class="screen side" hidden>
+  <div class="panel">
+    <h2>Locker</h2>
+    <h3>Suit</h3>
+    <div id="suitRow" class="swatches"></div>
+    <h3>Helmet</h3>
+    <div id="helmetRow" class="swatches"></div>
+    <h3>Hat</h3>
+    <div id="hatRow" class="chips"></div>
+    <button class="btn primary" data-back>Done</button>
   </div>
 </section>
 
@@ -56,6 +104,7 @@
           <li><b>Drag</b> on the left side to run</li>
           <li><b>JUMP</b> and <b>DIVE</b> buttons on the right</li>
           <li>Final: drag to drive, hold <b>FIRE</b></li>
+          <li><b>Drag</b> on the right side to turn the camera</li>
           <li><b>Cam</b> button switches the view</li>
         </ul>
       </div>
@@ -65,7 +114,7 @@
           <li><b>WASD</b> or arrows to run</li>
           <li><b>Space</b> jump, <b>Shift</b> dive</li>
           <li>Final: <b>Space</b> or <b>F</b> to fire</li>
-          <li><b>C</b> switches the camera</li>
+          <li><b>C</b> switches the camera, drag the mouse (or <b>Z</b>/<b>X</b>) to turn it</li>
           <li><b>Esc</b> quits to the menu</li>
         </ul>
       </div>
@@ -79,6 +128,9 @@
       <li><b>Bridge Ball</b>: cross the wobbly bridge while cannons fire at you.</li>
       <li><b>Mushroom Trip</b>: hop across bobbing, sliding and bouncy mushrooms.</li>
       <li><b>Honeycomb Maze</b>: find the exit, avoid the sticky honey.</li>
+      <li><b>Big Balls</b>: bounce across giant red balls.</li>
+      <li><b>Punch Wall</b>: edge past boxing gloves that punch out of a wall.</li>
+      <li><b>Sweeper</b>: jump the red arm, stay down for the yellow. Last ones standing go through.</li>
       <li><b>Show Down</b>: the go-kart water-cannon final.</li>
     </ul>
     <button class="btn" data-back>Back</button>
@@ -103,6 +155,8 @@
 </div>
 <button id="quit" class="quit" hidden aria-label="Quit to menu">✕</button>
 <button id="camBtn" class="cam-btn" hidden>Cam: Overhead</button>
+<div id="hudPos" class="hud-pos" hidden></div>
+<div id="toast" class="toast" role="status"></div>
 <div class="vignette" aria-hidden="true"></div>
 <div id="caption" class="caption"></div>
 <div id="banner" class="banner"></div>
@@ -118,6 +172,7 @@
 </section>
 
 <div id="touch" class="touch" hidden>
+  <div id="lookZone" class="look-zone"></div>
   <div id="stickZone" class="stick-zone"></div>
   <div id="stickBase" class="stick-base" hidden><div id="stickKnob" class="stick-knob"></div></div>
   <button id="btnDive" class="tbtn dive">DIVE</button>
@@ -125,6 +180,7 @@
   <button id="btnFire" class="tbtn fire" hidden>FIRE</button>
 </div>
 <!--GAME-UI-END-->
+<script src="vendor/peerjs/peerjs.min.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

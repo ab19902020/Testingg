@@ -101,7 +101,13 @@ export class SumoGong extends Round {
       if (target && !s.hold) tx = target.body.pos.x;
       tx = Math.max(s.cx - s.zone - 1, Math.min(s.cx + s.zone + 1, tx));
       tx = Math.max(-w + 1, Math.min(w - 1, tx));
-      if (!s.hold) {
+      if (!this.auth) {
+        // online guest: the host moves the sumos, we glide to where it says they are
+        if (s.netX !== undefined) {
+          s.x += (s.netX - s.x) * Math.min(1, dt * 12);
+          s.z += (s.netZ - s.z) * Math.min(1, dt * 12);
+        }
+      } else if (!s.hold) {
         const step = (target ? s.speed * 0.75 : s.speed) * dt;
         s.x += Math.max(-step, Math.min(step, tx - s.x));
         const lunge = Math.max(0, Math.sin(this.t * 1.3 + s.lungePh) - 0.7) * 8;
@@ -115,12 +121,16 @@ export class SumoGong extends Round {
         s.holdT += dt;
         arms.rotation.x = -2.4;
         const c = s.hold;
-        c.body.pos.set(s.x, 2.5 + Math.sin(s.holdT * 10) * 0.1, s.z + 0.3);
-        c.body.vel.set(0, 0, 0);
+        if (!c.remote) {
+          c.body.pos.set(s.x, 2.5 + Math.sin(s.holdT * 10) * 0.1, s.z + 0.3);
+          c.body.vel.set(0, 0, 0);
+        }
         if (s.holdT > 1.1) {
           // THROW!
-          c.frozen = false;
-          c.knock((Math.random() - 0.5) * 6, 8, 7 + Math.random() * 2, 1.1);
+          if (!c.remote) {
+            c.frozen = false;
+            c.knock((Math.random() - 0.5) * 6, 8, 7 + Math.random() * 2, 1.1);
+          }
           s.hold = null;
           s.cool = 2.2;
           if (this.game.near(c)) sfx('throw');
@@ -145,8 +155,7 @@ export class SumoGong extends Round {
       const dx = p.x - s.x;
       const dz = p.z - s.z;
       if (dx * dx + dz * dz < 1.55 * 1.55 && p.y < 1.5) {
-        s.hold = c;
-        s.holdT = 0;
+        this.emit('grab', [this.sumos.indexOf(s), c.id]);
         c.frozen = true;
         c.diving = false;
         c.celebrate = false;
@@ -162,6 +171,29 @@ export class SumoGong extends Round {
       }
     }
     super.check(c);
+  }
+
+  onNet(kind, [si, id]) {
+    const s = this.sumos[si];
+    if (kind === 'grab' && s && !s.hold) {
+      s.hold = this.byId(id);
+      s.holdT = 0;
+    }
+  }
+
+  netLocal() {
+    return this.auth ? this.sumos.map((s) => [Math.round(s.x * 100) / 100, Math.round(s.z * 100) / 100]) : null;
+  }
+
+  netApply(list) {
+    if (this.auth) return;
+    list.forEach((e, i) => {
+      const s = this.sumos[i];
+      if (s) {
+        s.netX = e[0];
+        s.netZ = e[1];
+      }
+    });
   }
 
   crossedFinish(c) {

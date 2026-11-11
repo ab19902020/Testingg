@@ -246,13 +246,17 @@ export function separateBodies(bodies) {
       const d2 = dx * dx + dz * dz;
       if (d2 >= rr * rr || d2 < 1e-8) continue;
       const d = Math.sqrt(d2);
-      const push = (rr - d) * 0.5;
       const nx = dx / d;
       const nz = dz / d;
-      a.pos.x -= nx * push;
-      a.pos.z -= nz * push;
-      b.pos.x += nx * push;
-      b.pos.z += nz * push;
+      // "fixed" bodies belong to players on other devices: they push us, we don't move them
+      if (a.fixed && b.fixed) continue;
+      const pa = a.fixed ? 0 : b.fixed ? 1 : 0.5;
+      const pb = b.fixed ? 0 : a.fixed ? 1 : 0.5;
+      a.pos.x -= nx * (rr - d) * pa;
+      a.pos.z -= nz * (rr - d) * pa;
+      b.pos.x += nx * (rr - d) * pb;
+      b.pos.z += nz * (rr - d) * pb;
+      if (a.fixed || b.fixed) continue;
       // trade a little momentum so diving into someone knocks them
       const rel = (b.vel.x - a.vel.x) * nx + (b.vel.z - a.vel.z) * nz;
       if (rel < 0) {
