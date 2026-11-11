@@ -185,10 +185,11 @@ export class ShowDown extends Round {
     super.update(dt);
     const racing = this.game.racing && !this.over;
     for (const k of this.karts) {
-      if (k.out) {
+      if (k.out && this.isLocal(k)) {
         k.speed = approach(k.speed, 0, 8 * dt);
         k.outT += dt;
       } else if (!this.isLocal(k)) {
+        if (k.out) k.outT += dt;
         // driven on another device: glide to where it says the kart is
         if (k.net) {
           k.x += (k.net[0] - k.x) * Math.min(1, dt * 12);

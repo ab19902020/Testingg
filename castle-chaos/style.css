@@ -334,3 +334,17 @@ h3 { margin: 6px 0 2px; font: 800 0.8rem var(--body); letter-spacing: 0.12em; te
   .crowns { display: none; }
   .hud-pos { font-size: 1.2rem; top: calc(56px + var(--safe-t)); }
 }
+
+@media (max-height: 520px) {
+  .title-panel .eyebrow { display: none; }
+  .title-panel .logo { flex-direction: row; justify-content: center; gap: 0.3em; font-size: 1.7rem; }
+  .title-panel .logo span:last-child { font-size: 1em; }
+  .title-panel .field { flex-direction: row; align-items: center; gap: 10px; }
+  .title-panel .field input { flex: 1; min-width: 0; padding: 6px 10px; font-size: 1rem; }
+  .btn { padding: 8px 12px; }
+  .btn.big { font-size: 1.1rem; padding: 9px; }
+  .seg-btn { padding: 5px 4px; }
+  .swatch { width: 30px; height: 30px; }
+  h2 { font-size: 1.4rem; }
+  h3 { margin: 2px 0 0; }
+}

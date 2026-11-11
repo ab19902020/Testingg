@@ -430,6 +430,9 @@ class Game {
     c.flail = Math.random() * 6;
     c.body.grounded = true;
     c.groundY = 0;
+    if (c.tag) c.tag.visible = false;
+    if (c.marker) c.marker.visible = false;
+    if (c.ring) c.ring.visible = false;
   }
 
   /** Rebuild the player's model on the menu after changing colours or hat. */

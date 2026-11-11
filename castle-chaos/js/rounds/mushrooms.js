@@ -134,6 +134,10 @@ export class MushroomTrip extends Round {
       b.vel.z = Math.min(b.vel.z, -3);
       b.grounded = false;
       g.mush.squish = 1;
+      // bots: you've used this one, look for the next
+      c.ai.row = g.mush.row;
+      c.ai.target = null;
+      c.ai.mush = null;
       c.squash = 0.35;
       particles.burst(b.pos.clone().setY(b.pos.y + 0.2), [0x7fc1ff, 0xffffff], 10, 3, 0.12);
       if (this.game.near(c)) sfx('boing');
@@ -161,8 +165,8 @@ export class MushroomTrip extends Round {
     const cur = this.rowOf(c);
     c.ai.row = cur;
     const t = c.ai.target;
-    if (!b.grounded) {
-      if (t) this.steer(c, t.x, t.z);
+    if (!b.grounded && t) {
+      this.steer(c, t.x, t.z);
       return;
     }
     if (cur >= ROWS) {
@@ -200,7 +204,7 @@ export class MushroomTrip extends Round {
         let s = -d * 0.6 + Math.random();
         if (o.type === 'still') s += c.skill * 1.5;
         if (o.type === 'bounce') s -= 0.5;
-        if (d > 7) s -= 5;
+        if (d > 4.3) s -= 4;
         if (s > bestS) {
           bestS = s;
           best = o;

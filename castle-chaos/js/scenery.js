@@ -77,7 +77,7 @@ function tuftGeometry() {
     const w = 0.07;
     const h = 0.45 + (i % 2) * 0.15;
     blade.setAttribute('position', new THREE.Float32BufferAttribute([-w, 0, 0, w, 0, 0, 0.03, h, 0], 3));
-    blade.setAttribute('color', new THREE.Float32BufferAttribute([0.3, 0.55, 0.2, 0.3, 0.55, 0.2, 0.62, 0.86, 0.36], 3));
+    blade.setAttribute('color', new THREE.Float32BufferAttribute([0.13, 0.33, 0.08, 0.13, 0.33, 0.08, 0.36, 0.62, 0.16], 3));
     blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
     blade.rotateZ((i - 1.5) * 0.25);
     blade.rotateY((i / 4) * Math.PI);

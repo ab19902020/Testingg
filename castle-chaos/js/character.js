@@ -70,7 +70,7 @@ function charMaterial() {
       '#include <emissivemap_fragment>',
       `#include <emissivemap_fragment>
        float rim = pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), 2.6);
-       totalEmissiveRadiance += diffuseColor.rgb * rim * 0.55 + vec3(rim * 0.12);`,
+       totalEmissiveRadiance += diffuseColor.rgb * rim * 0.22 + vec3(rim * 0.04);`,
     );
   };
   return CHAR_MAT;
