@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.ColourFilm" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF0E0F13</item>
+        <item name="android:statusBarColor">#FF0E0F13</item>
+        <item name="android:navigationBarColor">#FF0E0F13</item>
+    </style>
+</resources>

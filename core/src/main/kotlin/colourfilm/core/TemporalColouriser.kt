@@ -36,6 +36,8 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
     private val confTmp = FloatArray(n)
     private val modelAb = FloatArray(2 * n)
     private val warped = FloatArray(2 * n)
+    private val wide = FloatArray(2 * n)
+    private val boxTmp = FloatArray(n)
     private val prevHist = FloatArray(HIST_BINS)
     private val curHist = FloatArray(HIST_BINS)
 
@@ -108,11 +110,14 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
                 }
             } else {
                 // Tracking is reliable almost everywhere; keep tracked colour. The few
-                // unreliable pixels (< LOW_CONF_LIMIT) fall back to the last model estimate.
+                // unreliable pixels (newly revealed background next to a moving subject) take
+                // the broad colour of their surroundings rather than the subject's colour,
+                // which would otherwise be dragged along and leave a coloured trail.
+                localMean(warped, 0, wide); localMean(warped, n, wide)
                 for (i in 0 until n) {
                     val c = conf[i]
-                    outAb[i] = modelAb[i] + c * (warped[i] - modelAb[i])
-                    outAb[n + i] = modelAb[n + i] + c * (warped[n + i] - modelAb[n + i])
+                    outAb[i] = wide[i] + c * (warped[i] - wide[i])
+                    outAb[n + i] = wide[n + i] + c * (warped[n + i] - wide[n + i])
                 }
             }
         }
@@ -167,6 +172,30 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         }
     }
 
+    /** Box mean of radius WIDE_R over one plane of [src] (offset [o]) into [dst] at the same offset. */
+    private fun localMean(src: FloatArray, o: Int, dst: FloatArray) {
+        val r = WIDE_R
+        for (y in 0 until size) {
+            var s = 0f; var c = 0
+            val row = o + y * size
+            for (x in 0..minOf(r, size - 1)) { s += src[row + x]; c++ }
+            for (x in 0 until size) {
+                boxTmp[y * size + x] = s / c
+                if (x + r + 1 < size) { s += src[row + x + r + 1]; c++ }
+                if (x - r >= 0) { s -= src[row + x - r]; c-- }
+            }
+        }
+        for (x in 0 until size) {
+            var s = 0f; var c = 0
+            for (y in 0..minOf(r, size - 1)) { s += boxTmp[y * size + x]; c++ }
+            for (y in 0 until size) {
+                dst[o + y * size + x] = s / c
+                if (y + r + 1 < size) { s += boxTmp[(y + r + 1) * size + x]; c++ }
+                if (y - r >= 0) { s -= boxTmp[(y - r) * size + x]; c-- }
+            }
+        }
+    }
+
     private fun box3(a: FloatArray, tmp: FloatArray) {
         for (y in 0 until size) for (x in 0 until size) {
             val l = maxOf(0, x - 1); val r = minOf(size - 1, x + 1)
@@ -183,7 +212,9 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         /** Photometric tolerance in units of the frame's luminance standard deviation. */
         const val SIGMA = 0.25f
         /** Fraction of unreliable pixels above which the model is re-run on a non-key frame. */
-        const val LOW_CONF_LIMIT = 0.03f
+        const val LOW_CONF_LIMIT = 0.015f
+        /** Radius (analysis pixels) of the surrounding-colour fallback. */
+        const val WIDE_R = 10
         const val HIST_BINS = 32
 
         fun normalise(src: FloatArray, dst: FloatArray) {
