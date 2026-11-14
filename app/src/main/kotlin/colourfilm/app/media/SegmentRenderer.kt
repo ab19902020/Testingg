@@ -76,7 +76,7 @@ class SegmentRenderer(
 
             val encName = EncoderSupport.encoderName(outW, outH) ?: throw IllegalStateException("No H.264 encoder for ${outW}x$outH")
             enc = MediaCodec.createByCodecName(encName)
-            enc.configure(encoderFormat(enc), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            configureEncoder(enc)
             enc.start()
 
             val bi = MediaCodec.BufferInfo()
@@ -187,15 +187,38 @@ class SegmentRenderer(
         }
     }
 
-    private fun encoderFormat(enc: MediaCodec): MediaFormat {
+    /**
+     * Encoders differ in which optional keys they accept, so configure from the richest format
+     * (High profile, VBR, colour tags) down to the minimal mandatory one.
+     */
+    private fun configureEncoder(enc: MediaCodec) {
+        var last: Exception? = null
+        for (level in 0..3) {
+            val f = encoderFormat(enc, level)
+            try {
+                enc.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                if (level > 0) android.util.Log.i("SegmentRenderer", "encoder ${enc.name} accepted fallback format #$level: $f")
+                return
+            } catch (e: Exception) {
+                last = e
+                android.util.Log.w("SegmentRenderer", "encoder ${enc.name} rejected format #$level: $f")
+                enc.reset()
+            }
+        }
+        throw IllegalStateException("The phone's H.264 encoder (${enc.name}) refused every configuration for ${outW}x$outH.", last)
+    }
+
+    /** simplify: 0 = full, 1 = no profile/level/header repeat, 2 = also no bitrate mode/colour/B-frame keys, 3 = mandatory keys only. */
+    private fun encoderFormat(enc: MediaCodec, simplify: Int = 0): MediaFormat {
         val fps = if (info.frameRate in 1f..240f) info.frameRate else 30f
         val f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, outW, outH)
         f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
         f.setInteger(MediaFormat.KEY_BIT_RATE, StorageEstimate.videoBitrate(outW, outH, fps))
         f.setInteger(MediaFormat.KEY_FRAME_RATE, Math.round(fps))
         f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+        if (simplify >= 3) return f
         f.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
-        f.setInteger(MediaFormat.KEY_PREPEND_HEADER_TO_SYNC_FRAMES, 1)
+        if (simplify >= 2) return f
         f.setInteger(MediaFormat.KEY_COLOR_STANDARD, when (info.colour.matrix) {
             colourfilm.core.VideoColour.Matrix.BT709 -> MediaFormat.COLOR_STANDARD_BT709
             colourfilm.core.VideoColour.Matrix.BT2020 -> MediaFormat.COLOR_STANDARD_BT2020
@@ -206,6 +229,9 @@ class SegmentRenderer(
         val caps = enc.codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
         if (caps.encoderCapabilities.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR))
             f.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+        if (simplify >= 1) return f
+        // Repeat SPS/PPS on keyframes so independently encoded segments always decode after joining.
+        f.setInteger(MediaFormat.KEY_PREPEND_HEADER_TO_SYNC_FRAMES, 1)
         caps.profileLevels.filter { it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh }.maxByOrNull { it.level }?.let {
             f.setInteger(MediaFormat.KEY_PROFILE, it.profile)
             f.setInteger(MediaFormat.KEY_LEVEL, it.level)

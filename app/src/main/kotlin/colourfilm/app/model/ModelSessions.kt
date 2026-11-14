@@ -35,7 +35,11 @@ object ModelSessions {
 
     enum class Preference { AUTO, CPU_ONLY }
 
+    /** Instrumented tests only: substitute a model (e.g. a fast stand-in on slow emulators). */
+    @Volatile var overrideForTests: ((Context) -> LoadedModel)? = null
+
     fun open(context: Context, models: ModelManager, pref: Preference, onStatus: (String) -> Unit): LoadedModel {
+        overrideForTests?.let { return it(context) }
         val path = models.modelFile.absolutePath
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (probe == null) probe = runCatching {

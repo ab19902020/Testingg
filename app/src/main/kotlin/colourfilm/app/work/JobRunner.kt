@@ -157,9 +157,9 @@ class JobRunner(
         val ex = MediaExtractor()
         try {
             ex.setDataSource(f.absolutePath)
-            val v = (0 until ex.trackCount).map { ex.getTrackFormat(it) }.firstOrNull { it.getString(MediaFormat.KEY_MIME) == MediaFormat.MIMETYPE_VIDEO_AVC }
+            val vi = (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME) == MediaFormat.MIMETYPE_VIDEO_AVC }
                 ?: throw JobFailure("The export has no H.264 video track.")
-            ex.selectTrack((0 until ex.trackCount).first { ex.getTrackFormat(it) == v })
+            ex.selectTrack(vi)
             val buf = java.nio.ByteBuffer.allocate(4 * 1024 * 1024)
             if (ex.readSampleData(buf, 0) <= 0) throw JobFailure("The export contains no video frames.")
         } catch (e: JobFailure) { f.delete(); throw e } catch (e: Exception) {

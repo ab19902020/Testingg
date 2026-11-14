@@ -54,12 +54,29 @@ class PipelineTest {
                 File(models.dir, "ok").writeText("test")
             }
             assertTrue("model files missing", models.isInstalled())
+            // Software-emulated devices run DDColor at minutes per frame. Unless the runner is given
+            // -e realModel true, use a fast deterministic stand-in that still varies colour with
+            // picture content, so the Android media pipeline itself can be tested end to end.
+            val real = InstrumentationRegistry.getArguments().getString("realModel") == "true"
+            if (!real) colourfilm.app.model.ModelSessions.overrideForTests = {
+                colourfilm.app.model.LoadedModel(StandInModel(), "stand-in (test)", 0.0, null)
+            }
         }
 
         fun fixture(name: String): Uri {
             val f = File(ctx.cacheDir, name)
             InstrumentationRegistry.getInstrumentation().context.assets.open(name).use { i -> f.outputStream().use { i.copyTo(it) } }
             return Uri.fromFile(f)
+        }
+    }
+
+    /** Cheap model: brightness-dependent warm/cool colouring, 256x256 like DDColor. */
+    class StandInModel : colourfilm.core.ChromaModel {
+        override val inputSize = 256
+        override val id = "stand-in"
+        override fun predict(grey: FloatArray, outAb: FloatArray) {
+            val n = inputSize * inputSize
+            for (i in 0 until n) { outAb[i] = 40f * (grey[i] - 0.4f); outAb[n + i] = 30f * (0.5f - grey[i]) + 15f }
         }
     }
 
@@ -127,8 +144,9 @@ class PipelineTest {
         val src = sourcePts(uri)
         assertEquals(MediaFormat.MIMETYPE_VIDEO_AVC, t.video!!.getString(MediaFormat.KEY_MIME))
         assertEquals("every source frame exported once", src.size, t.frames)
-        assertEquals(src.first(), t.firstUs)
-        assertEquals(src.last(), t.lastUs)
+        // MP4 stores timestamps in track timescale units, so allow sub-millisecond rounding.
+        assertEquals(src.first().toDouble(), t.firstUs.toDouble(), 1000.0)
+        assertEquals(src.last().toDouble(), t.lastUs.toDouble(), 1000.0)
         assertNotNull("audio kept", t.audio)
         assertEquals(MediaFormat.MIMETYPE_AUDIO_AAC, t.audio!!.getString(MediaFormat.KEY_MIME))
         val c = colourfulness(done.output!!, 2_000_000)
@@ -167,6 +185,21 @@ class PipelineTest {
         val t = tracks(done.output!!)
         assertEquals(MediaFormat.MIMETYPE_AUDIO_AAC, t.audio?.getString(MediaFormat.KEY_MIME))
         assertTrue(t.frames > 0)
+    }
+
+    /** Real DDColor on the device (run with -e realModel true; minutes per frame on emulators). */
+    @Test
+    fun realModelShortClip() {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("realModel") == "true")
+        val uri = fixture("bw_audio.mp4")
+        val j = job(uri).let { it.copy(id = it.id + "-real", endUs = 300_000) }
+        val done = run(j)
+        assertTrue(done.backend!!.contains("CPU") || done.backend!!.contains("NPU"))
+        val t = tracks(done.output!!)
+        assertTrue(t.frames in 6..9)
+        val c = colourfulness(done.output!!, 100_000)
+        Log.i(TAG, "real model colourfulness=$c backend=${done.backend}")
+        assertTrue("real model output has colour ($c)", c > 3.0)
     }
 
     @Test
