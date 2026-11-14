@@ -163,7 +163,9 @@ fun ReviewScreen(vm: AppViewModel, info: VideoInfo, pad: PaddingValues) {
             "First use downloads the AI model (206 MB) from Qualcomm AI Hub. Only the model is downloaded — your video stays on this phone.", Muted)
 
         BigButton("Colourise", Icons.Filled.AutoAwesome, enabled = info.canProcess) { player.pause(); vm.start(info) }
-        if (info.durationUs > 12_000_000) SecondaryButton("Try a 5-second preview from ${formatTime(player.currentPosition * 1000)}",
+        var posUs by remember { mutableLongStateOf(0L) }
+        LaunchedEffect(player) { while (true) { posUs = player.currentPosition * 1000; kotlinx.coroutines.delay(400) } }
+        if (info.durationUs > 12_000_000) SecondaryButton("Try a 5-second preview from ${formatTime(posUs)}",
             Icons.Filled.PlayCircle, Modifier.fillMaxWidth(), enabled = info.canProcess) {
             val at = player.currentPosition * 1000; player.pause(); vm.start(info, at)
         }
@@ -235,6 +237,7 @@ fun ProcessingScreen(vm: AppViewModel, jobId: String, pad: PaddingValues) {
     val jobs by vm.jobs.collectAsState()
     val job = jobs.firstOrNull { it.id == jobId } ?: vm.store.load(jobId)
     val live = run?.takeIf { it.jobId == jobId }
+    val modelState by vm.models.state.collectAsState()
     LaunchedEffect(live?.phase) { if (live?.phase == RunState.Phase.DONE) vm.go(colourfilm.app.Screen.Result(jobId)) }
     var confirmCancel by remember { mutableStateOf(false) }
 
@@ -253,6 +256,10 @@ fun ProcessingScreen(vm: AppViewModel, jobId: String, pad: PaddingValues) {
                     InfoRow("Processed", "${formatTime(live.processedUs)} of ${formatTime(live.totalUs)}")
                     InfoRow("Time left", live.etaMs?.let { "about " + ColouriseService.formatDuration(it) } ?: "measuring…")
                     live.speedRatio?.let { InfoRow("Measured speed", "%.2f× real time".format(it)) }
+                } else if (live.phase == RunState.Phase.DOWNLOADING_MODEL && modelState is ModelManager.State.Downloading) {
+                    val d = modelState as ModelManager.State.Downloading
+                    LinearProgressIndicator({ d.bytes.toFloat() / d.total }, Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)))
+                    InfoRow("Downloaded", "${formatBytes(d.bytes)} of ${formatBytes(d.total)}")
                 } else {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 }

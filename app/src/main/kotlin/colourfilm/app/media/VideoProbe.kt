@@ -73,7 +73,7 @@ object VideoProbe {
                 if (vIndex < 0 && mime.startsWith("video/")) vIndex = i
                 if (aIndex < 0 && mime.startsWith("audio/")) aIndex = i
             }
-            if (vIndex < 0) throw UnsupportedVideoException("No video track was found in this file.")
+            if (vIndex < 0) throw UnsupportedVideoException("No playable video was found in this file. It may be damaged, incomplete (for example an interrupted download), or not a video.")
             val vf = ex.getTrackFormat(vIndex)
             val vMime = vf.getString(MediaFormat.KEY_MIME)!!
             val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)

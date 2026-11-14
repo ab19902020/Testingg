@@ -29,6 +29,8 @@ android {
         create("universal") {
             dimension = "runtime"
             applicationIdSuffix = ".universal"
+            // e.g. -PonlyAbi=x86_64 for a lean emulator test build
+            (project.findProperty("onlyAbi") as String?)?.let { ndk { abiFilters += it } }
             buildConfigField("boolean", "HAS_QNN", "false")
         }
     }
