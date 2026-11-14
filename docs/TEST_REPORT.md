@@ -108,3 +108,11 @@ Bugs found and fixed by these tests:
 * Picking from Google Photos and other gallery providers.
 
 ## 5. Late results
+* **Real DDColor inside the Android app on the emulator: not completed.** The software-only
+  x86-64 emulator (no KVM in this environment) spent over 80 minutes on the three warm-up model
+  runs without finishing, so the run was stopped. This says nothing about phone speed; it is
+  emulation overhead. The real model is verified on desktop with identical Kotlin and ONNX code
+  (section 2); inside the app it is still unverified.
+* **UI smoke test: incomplete.** The release universal APK installed and `MainActivity` reached the
+  resumed state with no crash. The emulator's own system process kept showing "isn't responding",
+  and its test image has no rendered display, so the screens could not be inspected.
