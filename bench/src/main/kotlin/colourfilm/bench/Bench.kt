@@ -52,6 +52,7 @@ fun main(args: Array<String>) {
     colourfilm.core.TemporalColouriser.enableClean = "--no-clean" !in flags
     opt["--alpha"]?.let { colourfilm.core.TemporalColouriser.alphaOverride = it.toFloat() }
     colourfilm.core.TemporalColouriser.enableShotMemory = "--no-shots" !in flags
+    colourfilm.core.TemporalColouriser.enableModelDenoise = "--no-model-denoise" !in flags
     val probe = Probe.of(input)
     val w = probe.width and 1.inv(); val h = probe.height and 1.inv()
     println("source ${probe.width}x${probe.height} fps=${probe.fps} audio=${probe.hasAudio} -> ${w}x$h settings=${settings.fingerprint()}")

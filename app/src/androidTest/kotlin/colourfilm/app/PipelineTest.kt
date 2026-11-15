@@ -255,9 +255,10 @@ class PipelineTest {
 
     @Test
     fun frameRateDoublingAddsInBetweenFramesAcrossSegments() {
-        val uri = fixture("bw_audio.mp4")
+        // short fixture (20 frames over 2 s) split into 0.7 s segments, so in-between frames must bridge segments
+        val uri = fixture("portrait_silent.mp4")
         val src = sourcePts(uri)
-        val done = run(job(uri, segmentUs = 1_500_000, smooth = ColouriseSettings.Smooth.DOUBLE).let { it.copy(id = it.id + "-x2") })
+        val done = run(job(uri, segmentUs = 700_000, smooth = ColouriseSettings.Smooth.DOUBLE).let { it.copy(id = it.id + "-x2") })
         val t = tracks(done.output!!)
         Log.i(TAG, "doubling: source ${src.size} frames -> ${t.frames}")
         // every source frame, plus up to one new frame per gap (none across the clip's scene cuts)
@@ -265,7 +266,6 @@ class PipelineTest {
         for (i in 1 until t.pts.size) assertTrue("timestamps increase at $i", t.pts[i] > t.pts[i - 1])
         assertEquals(src.first().toDouble(), t.firstUs.toDouble(), 1000.0)
         assertEquals(src.last().toDouble(), t.lastUs.toDouble(), 1000.0)
-        assertNotNull(t.audio)
     }
 
     @Test

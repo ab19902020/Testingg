@@ -97,8 +97,9 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         }
 
         val runModel = cut || resumedShot || sinceModel + 1 >= settings.speed.maxStride || lowFraction > LOW_CONF_LIMIT
+        val modelIn = if (enableModelDenoise) conditionForModel(grey, hasPrev && !cut && !resumedShot) else grey
         if (runModel) {
-            model.predict(grey, modelAb)
+            model.predict(modelIn, modelAb)
             modelRuns++
             modelGap = sinceModel + 1
             sinceModel = 0
@@ -147,7 +148,7 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
     }
 
     /** Clears temporal history, e.g. before a seek. */
-    fun reset() { hasPrev = false; sinceModel = 0; confAvg = 0f; shotFrames = 0; shots.forEach { it.used = false } }
+    fun reset() { haveClean = false; gridNoise = 0f; hasPrev = false; sinceModel = 0; confAvg = 0f; shotFrames = 0; shots.forEach { it.used = false } }
 
     /** Serialisable temporal state so a resumed job continues without a colour jump. */
     fun exportState(): FloatArray? {
@@ -186,6 +187,96 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
                 warped[o + i] = t + (b - t) * fy
             }
         }
+    }
+
+    // ---- what the colour model gets to see ----
+    private val prevGrey = FloatArray(n)
+    private val cleanGrey = FloatArray(n)
+    private val modelGrey = FloatArray(n)
+    private val noiseHist = IntArray(96)
+    private var haveClean = false
+    /** Estimated grain on the analysis grid, in 0..1 brightness units (for diagnostics and tests). */
+    var gridNoise = 0f; private set
+
+    /**
+     * The colour model was trained on clean photographs. Given a grainy frame it concludes
+     * "old black-and-white picture" and returns almost no colour. So the model is shown a
+     * de-grained view: the frame averaged with its own history along the tracked motion, plus a
+     * little blur if grain remains. Only the model's input is affected; the output picture keeps
+     * its own detail. Clean footage (no measurable grain) is passed through untouched.
+     */
+    private fun conditionForModel(grey: FloatArray, tracked: Boolean): FloatArray {
+        // 1. measure grain: median frame difference along motion (or, without history, the
+        //    median difference from a local average)
+        noiseHist.fill(0)
+        var samples = 0
+        if (tracked) {
+            // overall brightness change between the frames (exposure flicker) is not grain
+            var sum = 0f; var cnt = 0
+            var i = 0
+            while (i < n) {
+                if (conf[i] > 0.6f) {
+                    sum += grey[i] - Resample.sample(prevGrey, size, size, i % size + flowX[i], i / size + flowY[i]); cnt++
+                }
+                i += 3
+            }
+            val offset = if (cnt > 0) sum / cnt else 0f
+            i = 0
+            while (i < n) {
+                if (conf[i] > 0.6f) {
+                    val d = grey[i] - Resample.sample(prevGrey, size, size, i % size + flowX[i], i / size + flowY[i]) - offset
+                    noiseHist[minOf(95, (abs(d) * 255f * 4f).toInt())]++; samples++
+                }
+                i += 3
+            }
+        }
+        if (samples > 200) {
+            gridNoise = 0.8f * gridNoise + 0.2f * (median(samples) / (4f * 255f) * 1.4826f / 1.414f).let { if (gridNoise == 0f) it * 5f else it }
+        } else if (gridNoise == 0f) {
+            noiseHist.fill(0); samples = 0
+            for (y in 1 until size - 1 step 2) for (x in 1 until size - 1 step 2) {
+                val i = y * size + x
+                val local = (grey[i - 1] + grey[i + 1] + grey[i - size] + grey[i + size]) * 0.25f
+                noiseHist[minOf(95, (abs(grey[i] - local) * 255f * 4f).toInt())]++; samples++
+            }
+            gridNoise = median(samples) / (4f * 255f) * 1.4826f / 1.118f
+        }
+        System.arraycopy(grey, 0, prevGrey, 0, n)
+        if (gridNoise < MODEL_NOISE_OK) { haveClean = false; return grey }
+
+        // 2. average with history along the motion, where tracking is reliable
+        var remaining = gridNoise
+        if (tracked && haveClean) {
+            for (y in 0 until size) for (x in 0 until size) {
+                val i = y * size + x
+                val k = MODEL_HISTORY * conf[i]
+                modelGrey[i] = if (k <= 0.01f) grey[i] else
+                    grey[i] + k * (Resample.sample(cleanGrey, size, size, x + flowX[i], y + flowY[i]) - grey[i])
+            }
+            System.arraycopy(modelGrey, 0, cleanGrey, 0, n)
+            cleanFrames++
+            // recursive average: noise falls towards sqrt((1-k)/(1+k)) over a few frames
+            val steady = sqrt((1f - MODEL_HISTORY) / (1f + MODEL_HISTORY))
+            remaining *= maxOf(steady, 1f / sqrt(cleanFrames.toFloat()))
+        } else {
+            System.arraycopy(grey, 0, cleanGrey, 0, n); System.arraycopy(grey, 0, modelGrey, 0, n)
+            cleanFrames = 1
+        }
+        haveClean = true
+        // 3. blur away what is left (mostly at the start of a shot, before history builds up)
+        if (remaining > MODEL_NOISE_TARGET) {
+            val passes = when { remaining > 4f * MODEL_NOISE_TARGET -> 3; remaining > 2f * MODEL_NOISE_TARGET -> 2; else -> 1 }
+            repeat(passes) { box3(modelGrey, confTmp) }
+        }
+        return modelGrey
+    }
+
+    private var cleanFrames = 0
+
+    private fun median(samples: Int): Float {
+        var acc = 0
+        for (b in 0 until 96) { acc += noiseHist[b]; if (acc * 2 >= samples) return b + 0.5f }
+        return 96f
     }
 
     /** Estimates motion from [from] to the current frame and fills [conf]; returns the low-confidence fraction. */
@@ -395,6 +486,11 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         const val MIN_SHOT_FRAMES = 5
         const val SHOT_MATCH = 0.62f
         @JvmField var enableShotMemory = true
+        /** Grain (0..1 units on the analysis grid) below which the model sees the frame as is / which is aimed for. */
+        const val MODEL_NOISE_OK = 0.006f
+        const val MODEL_NOISE_TARGET = 0.006f
+        const val MODEL_HISTORY = 0.8f
+        @JvmField var enableModelDenoise = true
         @JvmField var enableSearch = true
         @JvmField var enableClean = true
 

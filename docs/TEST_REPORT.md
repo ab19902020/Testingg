@@ -260,3 +260,88 @@ finds pavement). Mean saturation is about 2% lower than 1.3.0.
 Unit tests: 9/9 (two new: an established colour resists a contrary guess but yields to a
 persistent one; a returning shot resumes its colours). Emulator suite not re-run (no app code changed
 apart from one settings description).
+
+## 11. Version 1.5.0: picture restoration and frame-rate increase
+
+### Restoration (`core/LumaEnhancer.kt`, `core/DustRemover.kt`)
+Tested on the desktop harness with deliberately damaged copies of clean clips
+(`tools/degrade.py`: film grain, exposure flicker, 4–12 single-frame dust blotches per frame, and
+optionally a faded print), scored against the clean clip with `tools/restore_metrics.py`.
+Sharpening was off for the fidelity numbers (it changes the picture by design).
+
+| Clip | Version | Fidelity (PSNR) | Grain left (rms) | Flicker (rms) |
+|---|---|---|---|---|
+| Megamind, damaged | input | 31.5 dB | 5.18 | 3.51 |
+| | restored (default) | 36.2 dB | 3.14 | 0.41 |
+| Pedestrians, damaged | input | 28.6 dB | 5.66 | 12.04 |
+| | restored (default) | 35.5 dB | 3.29 | 0.49 |
+| | restored (grain Strong) | 35.9 dB | 3.12 | 0.29 |
+| Pedestrians, damaged + faded | input | 18.9 dB | 9.81 | 11.93 |
+| | restored (default) | 29.9 dB | 6.48 | 0.93 |
+| Megamind, clean (safety check) | restored, all steps | 46.5 dB | 0.79 | 0.50 |
+| Pedestrians, clean (safety check) | restored, no sharpening | 46.6 dB | 0.73 | 0.62 |
+| | restored, all steps | 39.1 dB | 2.11 | 0.62 |
+
+Dust removal on the damaged clips: 770 spots (Megamind) and 876 (Pedestrians) removed, of roughly
+2,200 and 1,200 inserted; the rest are low-contrast or next to motion and are left. False removals
+on the clean clips: 0 (Megamind) and 6 small ones (Pedestrians).
+
+Problems found and fixed during this work:
+* Contrast restoration brightened a scene that is meant to be dark (Megamind dropped to 25 dB).
+  It now only acts when the black point is lifted (faded film).
+* The first dust detector erased walking people's feet and lower legs (461 false removals on the
+  clean pedestrian clip). It now requires the surroundings of a spot to be unchanged, with a
+  threshold that adapts to the grain level.
+* Grain reduction switched itself off on very small frames (too few noise samples).
+
+Limits: scratches that stay in place for many frames are not removed; dust next to moving things
+is left; grain on moving objects is not reduced (only where the picture matches the previous
+frame); no upscaling or AI detail reconstruction; the damage used for testing is simulated, not
+real 1900s film. Restoration cost on the desktop: 5–11 ms per frame at 768×576.
+
+### Frame-rate increase (`core/FrameInterpolator.kt`)
+Engine comparison and choice are in `docs/MODEL.md`. Measured by dropping every other frame and
+re-creating it: 38.5 dB (Megamind, 12→24 fps) and 30.8 dB (Pedestrians, 5→10 fps) against 34.5
+and 29.1 dB for a plain cross-fade; 67–84 ms per new frame on the desktop. Visual check of the
+5→10 fps case: the walker's body is placed correctly between the two frames, but his legs are
+ghosted (they move further than the method can follow at that frame rate). No in-between frame
+is made across a scene cut. Auto mode acts only below 20 fps.
+
+### Tests
+* JVM unit tests: 17/17 (new: dust speck removed and stream delayed by exactly one frame; small
+  moving object not treated as dust; flicker steadied and full-contrast footage unchanged; grain
+  reduced on a still scene; every frame output once with dust removal on or off; in-between frame
+  lies halfway along the motion; unrelated frames are not interpolated; Auto mode thresholds).
+* Android emulator (Android 13, debug build, stand-in colour model): see the results line below.
+  Three tests were run on the final code and pass: portrait clip (every source frame output once
+  with restoration's one-frame delay, rotation kept), frame-rate doubling across 0.7 s segments
+  (frame count between 1.5× and 2×−1, strictly increasing timestamps, first/last timestamps kept),
+  and the variable-frame-rate MKV (timestamps within 1 ms). The rest of the suite was not re-run:
+  under software emulation the debug build now takes about 15 s per frame.
+
+### Found while making the showcase: grain makes the colour model return grey
+Colourising the faded, grainy test clip with restoration on first gave almost no colour (mean
+chroma 2.6, against 14.7 for clean footage). Cause, confirmed on single frames: once contrast
+restoration amplifies the grain, DDColor's output drops to 0.2; even un-stretched grainy film gets
+about half the colour of a clean frame (8.7 vs 16.5); a 4-frame average restores it to 12.9.
+Fix (`TemporalColouriser.conditionForModel`): the model is shown a de-grained view of each frame
+(history averaged along the tracked motion, plus blur while history builds up). Only the model's
+input changes; the output picture keeps its detail, and footage with no measurable grain is
+passed through unchanged.
+
+| Clip | Version | Mean chroma | Colour error vs truth |
+|---|---|---|---|
+| Pedestrians, faded + damaged | before fix | 2.6 | not measured |
+| | 1.5.0 | 13.0 | not measured |
+| Pedestrians, damaged | before fix | 13.4 | 12.12 |
+| | 1.5.0 | 14.7 | 10.07 |
+| Pedestrians, clean | 1.4.0 / 1.5.0 | 14.7 / 14.7 | 9.12 |
+| Megamind, damaged | before fix | not measured | 9.58 |
+| | 1.5.0 | not measured | 6.13 |
+| Megamind, clean | 1.4.0 | not measured | 5.46 |
+
+The first frames of a grainy shot are still less colourful (colour builds up over roughly 20 frames).
+`samples/full_pipeline_1.5.0.jpg` and `samples/damaged_film_restored_colour_30fps.mp4` show the result.
+
+Not verified for 1.5.0: anything on a real phone (speed of restoration and frame-rate increase
+there is unknown), real archival film, the release build on a device.
