@@ -160,3 +160,23 @@ Emulator tests (debug build, Android 13): 11 pass, 1 skipped by design. New: ful
 the real screens (open video → Review → Colourise → Processing with live progress → Result),
 software-codec fallback, stage recovery logic.
 Untested: everything on a real phone, as before.
+
+## 8. Version 1.2.1: the real cause of the phone crash, found and fixed
+**Reproduced on an Android 15 emulator (API 35 ATD image):** pressing Colourise killed the app with
+`InvalidForegroundServiceTypeException: Starting FGS with type none ... targetSDK=35`.
+Cause: `androidx.core` 1.15 `ServiceCompat.startForeground` masks the service type with the
+Android 14 type list, which removes `mediaProcessing` (Android 15 only). Android 15 then rejects
+the foreground service and kills the process. Android 13/14 use `dataSync` and never hit this,
+which is why the Android 13 emulator tests passed. This matches the phone report exactly (app
+shuts as soon as Colourise is pressed; jobs left "Interrupted").
+
+Fix: the service calls the platform `Service.startForeground(id, notification, type)` directly,
+with a fallback to `dataSync` if the preferred type is refused.
+
+Verified on the Android 15 emulator (debug build, stand-in model): the full user flow test
+(open video → Review → Colourise → foreground service type 8192 → Processing → finished MP4 →
+Result) passes. Before the fix the same step crashed.
+
+The earlier guesses (AI chip) were wrong as the cause of this crash. The 1.2.0 safety changes
+stay (AI chip opt-in, stage recovery, diagnostics), since the AI chip is still untested.
+Still untested: a real phone, Android 16, the NPU path.

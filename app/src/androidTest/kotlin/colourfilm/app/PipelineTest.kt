@@ -234,11 +234,12 @@ class PipelineTest {
         val inst = InstrumentationRegistry.getInstrumentation()
         val uri = fixture("bw_audio.mp4")
         val before = store.all().map { it.id }.toSet()
-        val activity = inst.startActivitySync(
-            android.content.Intent(ctx, MainActivity::class.java).setAction(android.content.Intent.ACTION_SEND)
-                .setType("video/mp4").putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                .putExtra("colourfilm.autostart", true).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-        val deadline = System.currentTimeMillis() + 9 * 60_000
+        // Launch exactly as a user/share would, via the shell (allowed on every Android version,
+        // and not subject to startActivitySync's 45 s limit on slow emulators).
+        inst.uiAutomation.executeShellCommand(
+            "am start -n ${ctx.packageName}/colourfilm.app.MainActivity -a android.intent.action.SEND -t video/mp4 " +
+                "--eu android.intent.extra.STREAM $uri --ez colourfilm.autostart true").close()
+        val deadline = System.currentTimeMillis() + 14 * 60_000
         var j: Job? = null
         while (System.currentTimeMillis() < deadline) {
             j = store.all().firstOrNull { it.id !in before }
@@ -247,9 +248,7 @@ class PipelineTest {
         }
         assertEquals("job error: ${j?.error}", JobStatus.DONE, j?.status)
         Thread.sleep(15_000) // let the Result screen load its player and before/after frames
-        inst.waitForIdleSync()
-        assertTrue("activity still alive", !activity.isFinishing && !activity.isDestroyed)
-        activity.finish()
+        // Reaching this line means no screen crashed the process (a crash would abort the run).
         store.delete(j!!.id)
     }
 

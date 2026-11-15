@@ -14,6 +14,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import colourfilm.app.ColourFilmApp
+import colourfilm.app.CrashReporter
 import colourfilm.app.MainActivity
 import colourfilm.app.R
 import kotlinx.coroutines.CoroutineScope
@@ -136,9 +137,20 @@ class ColouriseService : Service() {
     }
 
     private fun startInForeground(n: Notification) {
-        val type = if (Build.VERSION.SDK_INT >= 35) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+        // Call the platform API directly. androidx ServiceCompat (core 1.15) masks the type with the
+        // Android 14 list, which drops mediaProcessing; Android 15 then throws
+        // InvalidForegroundServiceTypeException ("type none") and the app is killed.
+        val preferred = if (Build.VERSION.SDK_INT >= 35) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
         else ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-        ServiceCompat.startForeground(this, NOTIF_ID, n, type)
+        try {
+            startForeground(NOTIF_ID, n, preferred)
+            CrashReporter.breadcrumb("foreground service started (type $preferred)")
+        } catch (e: Exception) {
+            // Fall back to the other declared type rather than crash.
+            CrashReporter.breadcrumb("foreground type $preferred refused: $e")
+            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            CrashReporter.breadcrumb("foreground service started (dataSync fallback)")
+        }
     }
 
     private fun acquireWakeLock() {
