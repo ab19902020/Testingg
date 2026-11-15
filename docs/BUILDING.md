@@ -11,9 +11,14 @@ Compose BOM 2024.12.01, Media3 1.5.1, ONNX Runtime 1.29.0.
 ## Commands
 ```bash
 ./gradlew :core:test                      # unit tests for the colourisation core (JVM)
-./gradlew :app:assembleSnapdragonRelease  # arm64 APK with Qualcomm NPU support  (≈68 MB)
-./gradlew :app:assembleUniversalRelease   # CPU-only APK for any Android 10+ phone (≈55 MB)
+./gradlew :app:assembleSnapdragonRelease  # arm64 APK with Qualcomm NPU support  (≈275 MB, model included)
+./gradlew :app:assembleUniversalRelease   # CPU-only APK for any Android 10+ phone (≈261 MB, model included)
 ```
+The AI model (228 MB) is bundled into the APK. It is not stored in git: the `fetchModel` Gradle
+task downloads it once from Qualcomm AI Hub and verifies its SHA-256. Options:
+`-PmodelDir=<folder with ddcolor.onnx and ddcolor.data>` uses a local copy (offline builds);
+`-PnoBundledModel` builds a small APK that downloads the model on first use instead.
+
 APKs land in `app/build/outputs/apk/<flavor>/release/`. Release builds are signed with the
 Android debug key so they install directly; use your own keystore before distributing.
 
@@ -23,8 +28,9 @@ uploading them as a workflow artifact.
 ## Flavors
 * **snapdragon** (`colourfilm.app`): `onnxruntime-android-qnn` + Qualcomm QNN HTP libraries
   (V69/V73/V75/V79/V81 = Snapdragon 8 Gen 1 … 8 Elite Gen 5, 7-series with those NPUs).
-  At first run the app compiles the model for the NPU, checks NPU output against the CPU on a
-  real photo and uses the NPU only if it agrees and is faster. Otherwise it uses the CPU.
+  At first run the app compiles the model for the NPU in a separate process (so a driver crash
+  cannot close the app), checks NPU output against the CPU on a real photo and uses the NPU only
+  if it agrees and is faster. Otherwise it uses the CPU.
 * **universal** (`colourfilm.app.universal`): plain `onnxruntime-android` (CPU), all ABIs. Can be
   installed side by side with the Snapdragon build.
 

@@ -5,6 +5,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.os.PowerManager
 import android.os.StatFs
+import colourfilm.app.CrashReporter
 import colourfilm.app.media.Assembler
 import colourfilm.app.media.SegmentFile
 import colourfilm.app.media.SegmentRenderer
@@ -67,6 +68,7 @@ class JobRunner(
             RunBus.state.value = RunState(job.id, job.name, phase, msg, fraction, processedUs, job.durationUs, eta, ratio, backend, ms, thermalText())
         }
 
+        CrashReporter.breadcrumb("job start ${job.id.take(8)} preview=${job.preview}")
         publish(RunState.Phase.PREPARING, "Checking the video…")
         val info: VideoInfo = try { VideoProbe.probe(context, job.uri) } catch (e: SecurityException) {
             throw JobFailure("ColourFilm no longer has permission to read this video. Choose it again from Home.")
@@ -90,13 +92,18 @@ class JobRunner(
         )
 
         if (!models.isInstalled()) {
-            publish(RunState.Phase.DOWNLOADING_MODEL, "Downloading the AI model (about 206 MB, one time)…")
-            val ok = runBlocking { models.ensureDownloaded() }
-            if (!ok) throw JobFailure("The AI model couldn't be downloaded: " +
-                ((models.state.value as? ModelManager.State.Failed)?.message ?: "unknown error") + ". Check your connection and tap Resume.")
+            CrashReporter.breadcrumb("installing model (bundled=${models.bundled})")
+            publish(RunState.Phase.DOWNLOADING_MODEL,
+                if (models.bundled) "Unpacking the AI model (one time, under a minute)…" else "Downloading the AI model (about 206 MB, one time)…")
+            val ok = runBlocking { models.ensureInstalled() }
+            if (!ok) throw JobFailure("The AI model couldn't be prepared: " +
+                ((models.state.value as? ModelManager.State.Failed)?.message ?: "unknown error") +
+                if (models.bundled) "" else ". Check your connection and tap Resume.")
         }
+        CrashReporter.breadcrumb("opening model")
         val loaded = ModelSessions.open(context, models, ModelSessions.Preference.AUTO) { publish(RunState.Phase.PREPARING, it) }
         job = job.copy(backend = loaded.backend); store.save(job)
+        CrashReporter.breadcrumb("model ready: ${loaded.backend} ${"%.0f".format(loaded.msPerRun)} ms ${loaded.note ?: ""}; ${info.videoMime} ${info.width}x${info.height} -> ${info.outWidth}x${info.outHeight}")
 
         val plan = colourfilm.core.JobPlan(job.startUs, job.endUs, job.segmentUs)
         val done = job.segments.associateBy { it.index }.toMutableMap()
@@ -138,8 +145,10 @@ class JobRunner(
             }
         } finally {
             parallel.close()
-            loaded.model.close()
+            runCatching { loaded.model.close() }
+            ModelSessions.markIdle(context)
         }
+        CrashReporter.breadcrumb("frames done, assembling")
 
         publish(RunState.Phase.ASSEMBLING, "Adding the soundtrack and finishing the MP4…", 1f, job.durationUs)
         val segs = done.values.sortedBy { it.index }.filter { it.frames > 0 }.map { SegmentFile(store.segmentFile(job.id, it.index), it.firstPtsUs) }

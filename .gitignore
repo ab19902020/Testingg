@@ -5,3 +5,4 @@ local.properties
 .idea/
 /models/
 /samples/work/
+/dist/*.apk

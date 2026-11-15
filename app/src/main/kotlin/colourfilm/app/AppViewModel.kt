@@ -37,6 +37,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val cf = app as ColourFilmApp
     val store = cf.jobs
     val models = cf.models
+    val lastCrash = cf.lastCrash
+    fun dismissCrash() { cf.lastCrash.value = null }
 
     private val _screen = MutableStateFlow<Screen>(Screen.Home)
     val screen: StateFlow<Screen> = _screen
@@ -71,9 +73,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         busy.value = true
         viewModelScope.launch {
             try {
+                CrashReporter.breadcrumb("opening video")
                 val info = withContext(Dispatchers.IO) { VideoProbe.probe(ctx, uri) }
+                CrashReporter.breadcrumb("probed ${info.videoMime} ${info.width}x${info.height} rot=${info.rotation} fps=${info.frameRate} audio=${info.audioMime} problems=${info.problems.size}")
                 go(Screen.Review(info))
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                CrashReporter.breadcrumb("open failed: $e")
                 message.value = e.message ?: "This video couldn't be opened."
             } finally { busy.value = false }
         }

@@ -59,6 +59,7 @@ private const val AI_NOTE = "Colours are AI estimates. Black-and-white film does
 fun HomeScreen(vm: AppViewModel, pad: PaddingValues, onChoose: () -> Unit) {
     val jobs by vm.jobs.collectAsState()
     val busy by vm.busy.collectAsState()
+    val crash by vm.lastCrash.collectAsState()
     LaunchedEffect(Unit) { vm.refreshJobs() }
     LazyColumn(
         Modifier.fillMaxSize().padding(pad).padding(horizontal = 20.dp),
@@ -73,12 +74,37 @@ fun HomeScreen(vm: AppViewModel, pad: PaddingValues, onChoose: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text("Processing happens on this phone. Your videos are not uploaded.", color = Muted, fontSize = 13.sp)
         }
+        if (crash != null) item { CrashCard(crash!!) { vm.dismissCrash() } }
         if (jobs.isNotEmpty()) item {
             Spacer(Modifier.height(8.dp))
             Text("Recent projects", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         }
         items(jobs, key = { it.id }) { job -> JobRow(vm, job) }
         item { Spacer(Modifier.height(32.dp)) }
+    }
+}
+
+@Composable
+private fun CrashCard(report: String, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    var open by remember { mutableStateOf(false) }
+    Card {
+        Text("ColourFilm closed unexpectedly last time", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Warn)
+        Text("Unfinished videos are kept; open them below and tap Resume. The report helps get the problem fixed. It contains " +
+            "technical details only, and is not sent anywhere unless you share it.", color = Muted, fontSize = 14.sp, lineHeight = 19.sp)
+        if (open) Text(report, fontSize = 12.sp, lineHeight = 16.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton(if (open) "Hide" else "Details", modifier = Modifier.weight(1f)) { open = !open }
+            SecondaryButton("Copy", modifier = Modifier.weight(1f)) { clipboard.setText(androidx.compose.ui.text.AnnotatedString(report)) }
+            SecondaryButton("Share", modifier = Modifier.weight(1f)) {
+                runCatching {
+                    ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(Intent.EXTRA_TEXT, report), "Share crash report"))
+                }
+            }
+        }
+        TextButton(onDismiss, Modifier.heightIn(min = 48.dp)) { Text("Dismiss") }
     }
 }
 
@@ -159,8 +185,8 @@ fun ReviewScreen(vm: AppViewModel, info: VideoInfo, pad: PaddingValues) {
         info.resizeReason?.let { Notice(it) }
         info.warnings.forEach { Notice(it) }
 
-        if (modelState !is ModelManager.State.Ready) Notice(
-            "First use downloads the AI model (206 MB) from Qualcomm AI Hub. Only the model is downloaded — your video stays on this phone.", Muted)
+        if (modelState !is ModelManager.State.Ready && !vm.models.bundled) Notice(
+            "This build doesn't include the AI model, so first use downloads it (206 MB). Your video stays on this phone.", Muted)
 
         BigButton("Colourise", Icons.Filled.AutoAwesome, enabled = info.canProcess) { player.pause(); vm.start(info) }
         var posUs by remember { mutableLongStateOf(0L) }
@@ -256,6 +282,9 @@ fun ProcessingScreen(vm: AppViewModel, jobId: String, pad: PaddingValues) {
                     InfoRow("Processed", "${formatTime(live.processedUs)} of ${formatTime(live.totalUs)}")
                     InfoRow("Time left", live.etaMs?.let { "about " + ColouriseService.formatDuration(it) } ?: "measuring…")
                     live.speedRatio?.let { InfoRow("Measured speed", "%.2f× real time".format(it)) }
+                } else if (live.phase == RunState.Phase.DOWNLOADING_MODEL && modelState is ModelManager.State.Unpacking) {
+                    val d = modelState as ModelManager.State.Unpacking
+                    LinearProgressIndicator({ d.bytes.toFloat() / d.total }, Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)))
                 } else if (live.phase == RunState.Phase.DOWNLOADING_MODEL && modelState is ModelManager.State.Downloading) {
                     val d = modelState as ModelManager.State.Downloading
                     LinearProgressIndicator({ d.bytes.toFloat() / d.total }, Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)))

@@ -26,6 +26,7 @@ class LoadedModel(val model: ChromaModel, val backend: String, val msPerRun: Dou
 object ModelSessions {
     private const val TAG = "ModelSessions"
     private const val PREFS = "model_backend"
+    private const val INFLIGHT = "npu_in_use"
 
     private val env: OrtEnvironment by lazy {
         OrtEnvironment.getEnvironment(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING, "colourfilm").also {
@@ -42,48 +43,100 @@ object ModelSessions {
         overrideForTests?.let { return it(context) }
         val path = models.modelFile.absolutePath
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (probe == null) probe = runCatching {
-            context.assets.open("probe_grey_256.bin").use { it.readBytes() }.let { b -> FloatArray(b.size) { (b[it].toInt() and 0xFF) / 255f } }
-        }.getOrNull()
-        val key = "${ModelManager.MODEL_DIR}|${Build.FINGERPRINT}|ort1.29.0"
-        val verdict = prefs.getString(key, null)
+        loadProbeImage(context)
+        val key = verdictKey()
+        var verdict = prefs.getString(key, null)
+        var note: String? = prefs.getString("$key|why", null)
 
         if (BuildConfig.HAS_QNN && pref == Preference.AUTO && verdict != "cpu") {
-            try {
-                onStatus(if (verdict == null) "Preparing the NPU (first time only, can take a minute)…" else "Starting the NPU…")
-                val npu = openQnn(context, path)
-                val npuModel = OrtChromaModel(env, npu, "ddcolor-tiny-0.66.0/qnn-htp-fp16")
-                val npuMs = timeRuns(npuModel)
-                if (verdict == "npu") return LoadedModel(npuModel, "Qualcomm NPU (QNN HTP, FP16)", npuMs, null)
-
-                onStatus("Checking NPU results against the CPU…")
-                val cpu = OrtChromaModel(env, openCpu(path), "ddcolor-tiny-0.66.0/cpu-fp32")
-                val cpuMs = timeRuns(cpu, 2)
-                val diff = compare(npuModel, cpu)
-                cpu.close()
-                Log.i(TAG, "NPU ${npuMs}ms CPU ${cpuMs}ms meanAbsDiff=$diff")
-                if (diff < 2.5 && npuMs < cpuMs * 0.8) {
-                    prefs.edit().putString(key, "npu").apply()
-                    return LoadedModel(npuModel, "Qualcomm NPU (QNN HTP, FP16)", npuMs, null)
+            if (verdict == null) {
+                // First time on this phone: try the NPU in a separate, disposable process. Vendor
+                // NPU drivers can crash natively; that must never take the app down with it.
+                onStatus("Testing the phone's AI chip (first time only, can take a few minutes)…")
+                val r = NpuProbe.run(context)
+                verdict = if (r.usable) "npu" else "cpu"
+                note = r.reason
+                prefs.edit().putString(key, verdict).putString("$key|why", note).commit()
+                Log.i(TAG, "NPU probe: $r")
+            }
+            if (verdict == "npu") {
+                try {
+                    onStatus("Starting the AI chip…")
+                    // If the process dies while the NPU is in use, the next launch switches to CPU.
+                    prefs.edit().putBoolean(INFLIGHT, true).commit()
+                    val npuModel = OrtChromaModel(env, openQnn(context, path), "ddcolor-tiny-0.66.0/qnn-htp-fp16")
+                    return LoadedModel(npuModel, "Qualcomm NPU (QNN HTP, FP16)", timeRuns(npuModel), null)
+                } catch (t: Throwable) {
+                    Log.w(TAG, "QNN unavailable in app process", t)
+                    note = "NPU failed to start: ${t.message?.take(120)}"
+                    prefs.edit().putString(key, "cpu").putString("$key|why", note).putBoolean(INFLIGHT, false).commit()
+                    File(context.filesDir, "qnn_ctx").deleteRecursively()
                 }
-                npuModel.close()
-                prefs.edit().putString(key, "cpu").apply()
-                val why = if (diff >= 2.5) "NPU output differed from CPU (Δ=%.1f)".format(diff) else "NPU wasn't faster"
-                onStatus("Using CPU ($why)")
-                val m = OrtChromaModel(env, openCpu(path), "ddcolor-tiny-0.66.0/cpu-fp32")
-                return LoadedModel(m, "CPU (ONNX Runtime)", timeRuns(m, 2), why)
-            } catch (t: Throwable) {
-                Log.w(TAG, "QNN unavailable", t)
-                prefs.edit().putString(key, "cpu").apply()
-                File(context.filesDir, "qnn_ctx").deleteRecursively()
-                onStatus("NPU not available on this phone; using CPU")
-                val m = OrtChromaModel(env, openCpu(path), "ddcolor-tiny-0.66.0/cpu-fp32")
-                return LoadedModel(m, "CPU (ONNX Runtime)", timeRuns(m, 2), "NPU unavailable: ${t.message?.take(120)}")
             }
         }
         onStatus("Loading AI model…")
         val m = OrtChromaModel(env, openCpu(path), "ddcolor-tiny-0.66.0/cpu-fp32")
-        return LoadedModel(m, "CPU (ONNX Runtime)", timeRuns(m, 2), null)
+        return LoadedModel(m, "CPU (ONNX Runtime)", timeRuns(m, 1), note)
+    }
+
+    /** Call when a job stops using the model for any reason other than the process dying. */
+    fun markIdle(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(INFLIGHT, false).apply()
+    }
+
+    /**
+     * Call once at app start (main process). If the previous process died while the NPU was in
+     * use, stop using the NPU on this phone. Returns true when that happened.
+     */
+    fun recoverFromNpuCrash(context: Context, crashed: Boolean): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(INFLIGHT, false)) return false
+        if (!crashed) { prefs.edit().putBoolean(INFLIGHT, false).apply(); return false }
+        val key = verdictKey()
+        prefs.edit().putBoolean(INFLIGHT, false).putString(key, "cpu")
+            .putString("$key|why", "The app closed unexpectedly while using the AI chip, so the CPU is used instead").commit()
+        File(context.filesDir, "qnn_ctx").deleteRecursively()
+        return true
+    }
+
+    fun describeVerdict(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val key = verdictKey()
+        return "${prefs.getString(key, "untested")} (${prefs.getString("$key|why", "-")})"
+    }
+
+    private fun verdictKey() = "${ModelManager.MODEL_DIR}|${Build.FINGERPRINT}|ort1.29.0"
+
+    private fun loadProbeImage(context: Context) {
+        if (probe == null) probe = runCatching {
+            context.assets.open("probe_grey_256.bin").use { it.readBytes() }.let { b -> FloatArray(b.size) { (b[it].toInt() and 0xFF) / 255f } }
+        }.getOrNull()
+    }
+
+    /**
+     * Runs inside the disposable probe process only: compiles the model for the NPU, checks its
+     * output against the CPU on a real photo, and times both. Returns "npu|<ms>" or "cpu|<reason>".
+     */
+    fun probeNpuInThisProcess(context: Context, modelPath: String): String {
+        loadProbeImage(context)
+        return try {
+            val npuModel = OrtChromaModel(env, openQnn(context, modelPath), "npu")
+            val npuMs = timeRuns(npuModel)
+            val cpu = OrtChromaModel(env, openCpu(modelPath), "cpu")
+            val cpuMs = timeRuns(cpu, 1)
+            val diff = compare(npuModel, cpu)
+            cpu.close(); npuModel.close()
+            Log.i(TAG, "NPU ${npuMs}ms CPU ${cpuMs}ms meanAbsDiff=$diff")
+            when {
+                diff >= 2.5 -> "cpu|AI chip output differed from the CPU (difference %.1f)".format(diff)
+                npuMs >= cpuMs * 0.8 -> "cpu|AI chip wasn't faster (%.0f ms vs %.0f ms)".format(npuMs, cpuMs)
+                else -> "npu|%.0f ms per frame (CPU: %.0f ms)".format(npuMs, cpuMs)
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "QNN probe failed", t)
+            File(context.filesDir, "qnn_ctx").deleteRecursively()
+            "cpu|AI chip unavailable: ${t.message?.take(160)}"
+        }
     }
 
     /** Forget a cached NPU/CPU decision (Settings → "Re-test NPU"). */

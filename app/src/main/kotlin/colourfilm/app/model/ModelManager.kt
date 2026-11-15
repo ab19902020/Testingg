@@ -26,6 +26,8 @@ class ModelManager(private val context: Context) {
     sealed interface State {
         data object Missing : State
         data class Downloading(val bytes: Long, val total: Long) : State
+        /** Unpacking the model that ships inside the APK (one time). */
+        data class Unpacking(val bytes: Long, val total: Long) : State
         data object Verifying : State
         data object Ready : State
         data class Failed(val message: String) : State
@@ -39,6 +41,49 @@ class ModelManager(private val context: Context) {
 
     fun isInstalled() = File(dir, "ddcolor.onnx").length() > 1_000_000 &&
         File(dir, "ddcolor.data").length() == DATA_BYTES && File(dir, "ok").exists()
+
+    /** True when this APK carries the model in its assets (the normal builds do). */
+    val bundled: Boolean by lazy { runCatching { context.assets.open("$ASSET_DIR/ddcolor.onnx").close(); true }.getOrDefault(false) }
+
+    /**
+     * Makes the model available on disk: unpacks it from the APK, or, only for builds made
+     * without a bundled model, downloads it.
+     */
+    suspend fun ensureInstalled(): Boolean = withContext(Dispatchers.IO) {
+        if (isInstalled()) { _state.value = State.Ready; return@withContext true }
+        if (!bundled) return@withContext ensureDownloaded()
+        try {
+            val free = StatFs(context.filesDir.path).availableBytes
+            if (free < DATA_BYTES + 50L * 1024 * 1024) throw IOException(
+                "Not enough free space to unpack the AI model: needs about ${(DATA_BYTES + 50_000_000) / 1_000_000} MB, ${free / 1_000_000} MB free."
+            )
+            dir.deleteRecursively(); dir.mkdirs()
+            var done = 0L
+            for (name in listOf("ddcolor.onnx", "ddcolor.data")) {
+                context.assets.open("$ASSET_DIR/$name").use { input ->
+                    FileOutputStream(File(dir, name)).use { out ->
+                        val buf = ByteArray(1 shl 18)
+                        var last = 0L
+                        while (true) {
+                            val r = input.read(buf)
+                            if (r < 0) break
+                            out.write(buf, 0, r); done += r
+                            if (done - last > 4L * 1024 * 1024) { last = done; _state.value = State.Unpacking(done, DATA_BYTES + 2_750_675L) }
+                        }
+                        out.fd.sync()
+                    }
+                }
+            }
+            if (File(dir, "ddcolor.data").length() != DATA_BYTES) throw IOException("The bundled AI model is incomplete; please reinstall the app.")
+            File(dir, "ok").writeText("bundled")
+            _state.value = State.Ready
+            true
+        } catch (e: Exception) {
+            dir.deleteRecursively()
+            _state.value = State.Failed(e.message ?: e.javaClass.simpleName)
+            false
+        }
+    }
 
     suspend fun ensureDownloaded(): Boolean = withContext(Dispatchers.IO) {
         if (isInstalled()) { _state.value = State.Ready; return@withContext true }
@@ -126,6 +171,7 @@ class ModelManager(private val context: Context) {
 
     companion object {
         const val MODEL_DIR = "ddcolor-tiny-qaihub-0.66.0"
+        const val ASSET_DIR = "model"
         const val MODEL_URL =
             "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/ddcolor/releases/v0.66.0/ddcolor-onnx-float.zip"
         const val ZIP_SHA256 = "512e788cab02db6796ede174af0db2302247130284a3a00eab9aafddafa48a49"

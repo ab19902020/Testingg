@@ -1,3 +1,7 @@
+import java.net.URI
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,8 +16,8 @@ android {
         applicationId = "colourfilm.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -66,6 +70,46 @@ android {
         }
     }
 }
+
+// ---- AI model bundled into the APK -------------------------------------------------------
+// The model is not stored in git (228 MB). It is fetched once at build time from Qualcomm AI Hub
+// and verified by SHA-256, or taken from -PmodelDir=<folder with ddcolor.onnx + ddcolor.data>.
+// Build without it (app downloads it on first use instead) with -PnoBundledModel.
+val modelAssets = layout.buildDirectory.dir("modelAssets")
+val fetchModel = tasks.register("fetchModel") {
+    val outDir = modelAssets.map { it.dir("model") }
+    val local = providers.gradleProperty("modelDir").orNull
+    val skip = providers.gradleProperty("noBundledModel").isPresent
+    outputs.dir(modelAssets)
+    doLast {
+        val dest = outDir.get().asFile
+        if (skip) { dest.deleteRecursively(); return@doLast }
+        val data = File(dest, "ddcolor.data"); val onnx = File(dest, "ddcolor.onnx")
+        if (data.length() == 225_312_128L && onnx.length() > 1_000_000L) return@doLast
+        dest.mkdirs()
+        if (local != null) {
+            File(local, "ddcolor.onnx").copyTo(onnx, true); File(local, "ddcolor.data").copyTo(data, true)
+        } else {
+            val zip = File(temporaryDir, "ddcolor-onnx-float.zip")
+            val url = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/ddcolor/releases/v0.66.0/ddcolor-onnx-float.zip"
+            URI(url).toURL().openStream().use { i -> zip.outputStream().use { i.copyTo(it, 1 shl 20) } }
+            val md = MessageDigest.getInstance("SHA-256")
+            zip.inputStream().use { i -> val b = ByteArray(1 shl 20); while (true) { val r = i.read(b); if (r < 0) break; md.update(b, 0, r) } }
+            val sha = md.digest().joinToString("") { "%02x".format(it) }
+            check(sha == "512e788cab02db6796ede174af0db2302247130284a3a00eab9aafddafa48a49") { "Model archive checksum mismatch: $sha" }
+            ZipFile(zip).use { z ->
+                for (e in z.entries()) {
+                    val name = e.name.substringAfterLast('/')
+                    if (name == "ddcolor.onnx" || name == "ddcolor.data") z.getInputStream(e).use { i -> File(dest, name).outputStream().use { i.copyTo(it, 1 shl 20) } }
+                }
+            }
+            zip.delete()
+        }
+        check(data.length() == 225_312_128L) { "ddcolor.data has the wrong size: ${data.length()}" }
+    }
+}
+android.sourceSets.getByName("main").assets.srcDir(modelAssets)
+tasks.named("preBuild") { dependsOn(fetchModel) }
 
 dependencies {
     implementation(project(":core"))

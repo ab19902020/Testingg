@@ -202,6 +202,39 @@ class PipelineTest {
         assertTrue("real model output has colour ($c)", c > 3.0)
     }
 
+    /** The real app path: activity in front, foreground service started, job runs to a finished MP4. */
+    @Test
+    fun foregroundServiceRunsJobToCompletion() {
+        val inst = InstrumentationRegistry.getInstrumentation()
+        val activity = inst.startActivitySync(
+            android.content.Intent(ctx, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        val j = job(fixture("portrait_silent.mp4")).let { it.copy(id = it.id + "-svc") }
+        store.delete(j.id)
+        store.save(j)
+        colourfilm.app.work.ColouriseService.start(ctx, j.id)
+        val deadline = System.currentTimeMillis() + 8 * 60_000
+        var last: Job? = null
+        while (System.currentTimeMillis() < deadline) {
+            last = store.load(j.id)
+            if (last?.status == JobStatus.DONE || last?.status == JobStatus.FAILED) break
+            Thread.sleep(2000)
+        }
+        activity.finish()
+        assertEquals("service job error: ${last?.error}", JobStatus.DONE, last?.status)
+        assertTrue(File(last!!.output!!).length() > 10_000)
+        assertEquals(sourcePts(j.uri).size, tracks(last.output!!).frames)
+    }
+
+    @Test
+    fun bundledModelUnpacksFromApk() {
+        org.junit.Assume.assumeTrue(models.bundled)
+        models.dir.deleteRecursively()
+        assertTrue(!models.isInstalled())
+        val ok = kotlinx.coroutines.runBlocking { models.ensureInstalled() }
+        assertTrue("unpack failed: ${models.state.value}", ok)
+        assertEquals(ModelManager.DATA_BYTES, File(models.dir, "ddcolor.data").length())
+    }
+
     @Test
     fun damagedFileIsRejectedWithExplanation() {
         try {

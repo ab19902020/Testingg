@@ -116,3 +116,28 @@ Bugs found and fixed by these tests:
 * **UI smoke test: incomplete.** The release universal APK installed and `MainActivity` reached the
   resumed state with no crash. The emulator's own system process kept showing "isn't responding",
   and its test image has no rendered display, so the screens could not be inspected.
+
+## 6. Version 1.1.0 (after the first real-phone report)
+The first install on the Honor Magic 6 Pro (v1.0.0) crashed after choosing a video. The crash
+could not be reproduced on the emulator: the v1.0.0 release build opened a video and showed the
+Review screen without crashing. The phone-only code path is the Qualcomm NPU start-up, so that
+is the suspected cause. It is **not confirmed**.
+
+Changes in 1.1.0:
+* The AI model is bundled in the APK (no download). It is unpacked once on first use.
+* The NPU is tested in a separate process; a native driver crash or hang there can no longer close
+  the app, and the app falls back to the CPU. If the app still crashes while the NPU is in use,
+  the next launch switches to the CPU permanently on that phone.
+* A crash report (reason, device, last steps) is shown on Home after an unexpected close, with
+  Copy and Share.
+
+Tests run on the Android 13 emulator with the 1.1.0 code:
+* Full `PipelineTest` suite on the debug build: 9 pass, 1 skipped (real model on emulator, by design).
+  New tests: the foreground service runs a job to a finished MP4; the bundled model unpacks from
+  the APK with the right size.
+* Release universal APK: Home renders; opening a video shows Review (checked on v1.0.0 release);
+  a forced native crash (`kill -SEGV`) produces the crash report card on the next launch.
+
+Still untested: the NPU probe process and NPU inference (need a Snapdragon phone), and the
+Colourise tap in the release build's UI (the emulator's automation could not drive it; the same
+service path is covered by the instrumented test on the debug build).

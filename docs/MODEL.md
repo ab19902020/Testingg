@@ -7,8 +7,8 @@
 | Model | **DDColor** ("DDColor: Towards Photo-Realistic Image Colorization via Dual Decoders", ICCV 2023), checkpoint `ddcolor_paper_tiny` (ConvNeXt-T encoder, 56.3 M parameters) |
 | Original code + weights | https://github.com/piddnad/DDColor (Apache-2.0), weights at https://huggingface.co/piddnad/DDColor-models |
 | Mobile export used | Qualcomm AI Hub Models **v0.66.0**, ONNX float export, https://huggingface.co/qualcomm/DDColor (Apache-2.0, points to the DDColor licence) |
-| Download URL (used by the app on first run) | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/ddcolor/releases/v0.66.0/ddcolor-onnx-float.zip` |
-| Archive SHA-256 (pinned in the app) | `512e788cab02db6796ede174af0db2302247130284a3a00eab9aafddafa48a49` (206,251,342 bytes) |
+| Download URL (used at build time to bundle the model into the APK) | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/ddcolor/releases/v0.66.0/ddcolor-onnx-float.zip` |
+| Archive SHA-256 (pinned in the build and the app) | `512e788cab02db6796ede174af0db2302247130284a3a00eab9aafddafa48a49` (206,251,342 bytes) |
 | Files used | `ddcolor.onnx` (graph, 2.75 MB) + `ddcolor.data` (weights, 225,312,128 bytes) |
 | Input / output | 1×3×256×256 grey RGB in 0..1 → 1×2×256×256 Lab a/b (OpenCV Lab units) |
 | Runtime | ONNX Runtime 1.29.0 (`onnxruntime-android-qnn` in the Snapdragon build, `onnxruntime-android` in the universal build) |
@@ -50,8 +50,8 @@ odd colours on small objects (an orange stripe on a grey lamp post).
 
 | Component | Licence | Notes |
 |---|---|---|
-| DDColor code & weights | Apache-2.0 | downloaded at runtime, not bundled |
-| Qualcomm AI Hub export | Apache-2.0 (model card) | downloaded at runtime |
+| DDColor code & weights | Apache-2.0 | bundled in the APK (fetched at build time) |
+| Qualcomm AI Hub export | Apache-2.0 (model card) | bundled in the APK |
 | ONNX Runtime | MIT | bundled |
 | Qualcomm QNN runtime libraries | Qualcomm "AI Stack License" | bundled in the Snapdragon APK only. The licence allows use in your own applications but not standalone redistribution of the libraries. Fine for personal use; review before publishing the app. |
 | AndroidX / Compose / Media3 | Apache-2.0 | bundled |
