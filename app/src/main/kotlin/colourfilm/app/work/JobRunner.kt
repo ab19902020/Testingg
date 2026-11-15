@@ -88,7 +88,7 @@ class JobRunner(
         }
 
         // Storage check before doing any work.
-        val fps = if (info.frameRate > 0) info.frameRate else 30f
+        val fps = (if (info.frameRate > 0) info.frameRate else 30f) * (job.settings.inBetweenFrames(info.frameRate) + 1)
         val vbps = StorageEstimate.videoBitrate(info.outWidth, info.outHeight, fps)
         val need = StorageEstimate.bytesNeeded(job.durationUs, vbps, if (info.audioMime != null) 192_000 else 0)
         val free = StatFs(context.filesDir.path).availableBytes

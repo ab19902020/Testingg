@@ -44,7 +44,7 @@ data class Job(
         put("intensity", settings.intensity.toDouble()); put("look", settings.look.name); put("speed", settings.speed.name)
         put("stability", settings.stability.name); put("edgeRefine", settings.edgeRefine)
         put("deflicker", settings.deflicker); put("autoContrast", settings.autoContrast); put("grain", settings.grain.name)
-        put("dust", settings.dust); put("sharpen", settings.sharpen)
+        put("dust", settings.dust); put("sharpen", settings.sharpen); put("smooth", settings.smooth.name)
         put("preview", preview); put("includeAudio", includeAudio); put("status", status.name)
         put("segments", JSONArray().apply {
             segments.forEach { put(JSONObject().put("i", it.index).put("n", it.frames).put("f", it.firstPtsUs).put("l", it.lastPtsUs)) }
@@ -69,6 +69,7 @@ data class Job(
                 deflicker = o.optBoolean("deflicker", false), autoContrast = o.optBoolean("autoContrast", false),
                 grain = ColouriseSettings.Grain.valueOf(o.optString("grain", "OFF")),
                 dust = o.optBoolean("dust", false), sharpen = o.optBoolean("sharpen", false),
+                smooth = ColouriseSettings.Smooth.valueOf(o.optString("smooth", "OFF")),
             ),
             preview = o.getBoolean("preview"), includeAudio = o.optBoolean("includeAudio", true),
             status = JobStatus.valueOf(o.getString("status")),

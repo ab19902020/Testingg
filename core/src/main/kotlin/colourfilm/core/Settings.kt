@@ -26,7 +26,21 @@ data class ColouriseSettings(
     val dust: Boolean = true,
     /** Light sharpening after grain reduction. */
     val sharpen: Boolean = true,
+    /** Frame-rate increase by creating in-between frames. */
+    val smooth: Smooth = Smooth.AUTO,
 ) {
+    enum class Smooth { OFF, AUTO, DOUBLE }
+
+    /**
+     * Number of new frames to create between each pair of source frames.
+     * AUTO only acts on low frame rates (below 20 fps, typical of old film) and aims for about 30 fps.
+     */
+    fun inBetweenFrames(sourceFps: Float): Int = when (smooth) {
+        Smooth.OFF -> 0
+        Smooth.DOUBLE -> 1
+        Smooth.AUTO -> if (sourceFps <= 0f || sourceFps >= 20f) 0 else (Math.round(30f / sourceFps) - 1).coerceIn(1, 3)
+    }
+
     /** blend = how much of the motion-matched previous frame is mixed in where the picture is unchanged. */
     enum class Grain(val blend: Float) { OFF(0f), LIGHT(0.5f), STRONG(0.72f) }
 
@@ -56,5 +70,5 @@ data class ColouriseSettings(
     /** Stable textual fingerprint (used for segment reuse decisions). */
     fun fingerprint(): String =
         "i=${"%.2f".format(java.util.Locale.ROOT, intensity)};l=$look;s=$speed;t=$stability;e=$edgeRefine" +
-            ";r=${if (deflicker) 1 else 0}${if (autoContrast) 1 else 0}${grain.ordinal}${if (dust) 1 else 0}${if (sharpen) 1 else 0}"
+            ";m=$smooth;r=${if (deflicker) 1 else 0}${if (autoContrast) 1 else 0}${grain.ordinal}${if (dust) 1 else 0}${if (sharpen) 1 else 0}"
 }

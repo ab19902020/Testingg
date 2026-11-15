@@ -247,6 +247,17 @@ fun ReviewScreen(vm: AppViewModel, info: VideoInfo, pad: PaddingValues) {
                 })
             }
         }
+        Card {
+            val made = settings.inBetweenFrames(info.frameRate)
+            Text("Smoother motion", fontSize = 17.sp, fontWeight = FontWeight.Medium)
+            Choice(listOf("Off", "Auto", "Double"), settings.smooth.ordinal) { vm.settings.value = settings.copy(smooth = ColouriseSettings.Smooth.entries[it]) }
+            Text(when {
+                settings.smooth == ColouriseSettings.Smooth.OFF -> "Keeps the original frame rate."
+                made == 0 -> "Auto only acts on film below 20 frames per second; this video is already %.0f fps, so nothing is added.".format(info.frameRate)
+                else -> "Creates $made new frame${if (made > 1) "s" else ""} between each pair: about %.0f → %.0f frames per second. ".format(info.frameRate, info.frameRate * (made + 1)) +
+                    "New frames are estimates; very fast movement can look ghosted."
+            }, color = Muted, fontSize = 13.sp, lineHeight = 18.sp)
+        }
         BigButton(if (settings.restores) "Restore & colourise" else "Colourise", Icons.Filled.AutoAwesome, enabled = info.canProcess) { player.pause(); vm.start(info) }
         var posUs by remember { mutableLongStateOf(0L) }
         LaunchedEffect(player) { while (true) { posUs = player.currentPosition * 1000; kotlinx.coroutines.delay(400) } }

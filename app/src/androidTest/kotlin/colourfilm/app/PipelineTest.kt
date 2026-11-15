@@ -80,12 +80,13 @@ class PipelineTest {
         }
     }
 
-    private fun job(uri: Uri, segmentUs: Long = 15_000_000, speed: ColouriseSettings.Speed = ColouriseSettings.Speed.FAST): Job {
+    private fun job(uri: Uri, segmentUs: Long = 15_000_000, speed: ColouriseSettings.Speed = ColouriseSettings.Speed.FAST,
+                    smooth: ColouriseSettings.Smooth = ColouriseSettings.Smooth.OFF): Job {
         val info = VideoProbe.probe(ctx, uri)
         val id = "test-" + uri.lastPathSegment!!.replace('.', '-') + "-" + segmentUs
         store.delete(id)
         return Job(id, uri, info.displayName, JobRunner.sourceKey(info), 0, info.durationUs, segmentUs,
-            ColouriseSettings(speed = speed), preview = false, includeAudio = true, status = JobStatus.QUEUED)
+            ColouriseSettings(speed = speed, smooth = smooth), preview = false, includeAudio = true, status = JobStatus.QUEUED)
     }
 
     private fun run(j: Job, stop: () -> JobRunner.StopReason? = { null }): Job {
@@ -250,6 +251,21 @@ class PipelineTest {
         Thread.sleep(15_000) // let the Result screen load its player and before/after frames
         // Reaching this line means no screen crashed the process (a crash would abort the run).
         store.delete(j!!.id)
+    }
+
+    @Test
+    fun frameRateDoublingAddsInBetweenFramesAcrossSegments() {
+        val uri = fixture("bw_audio.mp4")
+        val src = sourcePts(uri)
+        val done = run(job(uri, segmentUs = 1_500_000, smooth = ColouriseSettings.Smooth.DOUBLE).let { it.copy(id = it.id + "-x2") })
+        val t = tracks(done.output!!)
+        Log.i(TAG, "doubling: source ${src.size} frames -> ${t.frames}")
+        // every source frame, plus up to one new frame per gap (none across the clip's scene cuts)
+        assertTrue("frames ${t.frames}", t.frames > src.size * 3 / 2 && t.frames <= 2 * src.size - 1)
+        for (i in 1 until t.pts.size) assertTrue("timestamps increase at $i", t.pts[i] > t.pts[i - 1])
+        assertEquals(src.first().toDouble(), t.firstUs.toDouble(), 1000.0)
+        assertEquals(src.last().toDouble(), t.lastUs.toDouble(), 1000.0)
+        assertNotNull(t.audio)
     }
 
     @Test

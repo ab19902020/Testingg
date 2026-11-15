@@ -96,3 +96,45 @@ class RestorationTest {
         }
     }
 }
+
+class InterpolationTest {
+    private val w = 192; private val h = 128
+    private fun frame(shift: Int) = ByteArray(w * h) { i ->
+        val x = i % w - shift; val y = i / w
+        (128 + 60 * Math.sin(x * 0.19) * Math.cos(y * 0.23) + 40 * Math.sin((x + y) * 0.07)).toInt().coerceIn(16, 235).toByte()
+    }
+
+    @Test
+    fun inBetweenFrameIsHalfwayAlongTheMotion() {
+        val fi = FrameInterpolator(w, h, Parallel(1))
+        val a = frame(0); val b = frame(8); val truth = frame(4)
+        val grey = ByteArray((w / 2) * (h / 2)) { 128.toByte() }
+        fi.prepare(a, b)
+        assertTrue(fi.render(a, grey, grey, b, grey, grey, 0.5f))
+        fun err(x: ByteArray): Double { var s = 0.0; var n = 0
+            for (yy in 16 until h - 16) for (xx in 16 until w - 16) { val i = yy * w + xx; s += abs((x[i].toInt() and 0xFF) - (truth[i].toInt() and 0xFF)); n++ }
+            return s / n }
+        val blend = ByteArray(w * h) { (((a[it].toInt() and 0xFF) + (b[it].toInt() and 0xFF)) / 2).toByte() }
+        val e = err(fi.midY); val eb = err(blend)
+        assertTrue(e < 0.4 * eb, "motion-compensated error $e should be far below plain blend $eb")
+    }
+
+    @Test
+    fun unrelatedFramesAreNotInterpolated() {
+        val fi = FrameInterpolator(w, h, Parallel(1))
+        val a = frame(0)
+        val b = ByteArray(w * h) { i -> if (((i % w) / 6 + (i / w) / 6) % 2 == 0) 30 else 220.toByte() }
+        val grey = ByteArray((w / 2) * (h / 2)) { 128.toByte() }
+        fi.prepare(a, b)
+        assertTrue(!fi.render(a, grey, grey, b, grey, grey, 0.5f), "fallback share ${fi.lastFallback}")
+    }
+
+    @Test
+    fun autoModeOnlyActsOnLowFrameRates() {
+        val s = ColouriseSettings()
+        assertEquals(0, s.inBetweenFrames(30f)); assertEquals(0, s.inBetweenFrames(24f))
+        assertEquals(1, s.inBetweenFrames(16f)); assertEquals(2, s.inBetweenFrames(10f))
+        assertEquals(1, s.copy(smooth = ColouriseSettings.Smooth.DOUBLE).inBetweenFrames(30f))
+        assertEquals(0, s.copy(smooth = ColouriseSettings.Smooth.OFF).inBetweenFrames(12f))
+    }
+}

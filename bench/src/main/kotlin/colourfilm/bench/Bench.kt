@@ -68,7 +68,8 @@ fun main(args: Array<String>) {
     val timed = TimedModel(opt["--cache"]?.let { CachingModel(model, File(it)) } ?: model)
     val parallel = Parallel(opt["--threads"]?.toInt() ?: 4)
     val colour = VideoColour.defaultFor(h)
-    val proc = FrameProcessor(w, h, colour, timed, settings, parallel)
+    val between = opt["--between"]?.toInt() ?: 0   // in-between frames per source pair
+    val proc = FrameProcessor(w, h, colour, timed, settings, parallel, between)
     val neutral = ByteArray((w / 2) * (h / 2)) { 128.toByte() }
 
     val seek = buildList { opt["--start"]?.let { add("-ss"); add(it) } }
@@ -79,7 +80,7 @@ fun main(args: Array<String>) {
     val audioArgs = if (probe.hasAudio) seek + listOf("-i", input) + listOf("-map", "0:v", "-map", "1:a:0", "-c:a", "aac", "-b:a", "192k")
     else listOf("-map", "0:v")
     val enc = ProcessBuilder(listOf("ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", "${w}x$h",
-        "-r", probe.fpsRational, "-i", "-") + audioArgs + dur +
+        "-r", if (opt["--between"] != null) "${probe.fps * ((opt["--between"]!!.toInt()) + 1)}" else probe.fpsRational, "-i", "-") + audioArgs + dur +
         listOf("-c:v", "libx264", "-preset", "medium", "-crf", opt["--crf"] ?: "17", "-pix_fmt", "yuv420p",
             "-color_primaries", if (h >= 720) "bt709" else "smpte170m", "-colorspace", if (h >= 720) "bt709" else "smpte170m",
             "-color_trc", if (h >= 720) "bt709" else "smpte170m",
@@ -93,7 +94,17 @@ fun main(args: Array<String>) {
     var frames = 0
     val st0 = proc.stats
     val start = System.nanoTime()
+    var outFrames = 0
     fun emit() {
+        for (j in 1..proc.inBetweenAvailable) {
+            if (proc.renderInBetween(j)) { out.write(proc.midY); out.write(if (greyOut) neutral else proc.midU); out.write(if (greyOut) neutral else proc.midV) }
+            else { // keep a constant frame rate in this raw-video harness: repeat the nearer frame
+                out.write(proc.outY); out.write(if (greyOut) neutral else proc.outU); out.write(if (greyOut) neutral else proc.outV) }
+            outFrames++
+        }
+        if (between > 0 && proc.inBetweenAvailable == 0 && frames > 0) repeat(between) {
+            out.write(proc.outY); out.write(if (greyOut) neutral else proc.outU); out.write(if (greyOut) neutral else proc.outV); outFrames++ }
+        outFrames++
         out.write(proc.outY); out.write(if (greyOut) neutral else proc.outU); out.write(if (greyOut) neutral else proc.outV)
         if ("--trace" in flags) println("f=$frames conf=%.3f hist=%.3f model=${st0.lastModelRun} cut=${st0.lastCut}".format(st0.lastMeanConfidence, st0.lastHistDistance))
         frames++
@@ -113,6 +124,7 @@ fun main(args: Array<String>) {
         timed.nanos / 1e6 / maxOf(1, timed.runs), proc.analysisNanos / 1e6 / maxOf(1, frames), proc.composeNanos / 1e6 / maxOf(1, frames)))
     println("restore %.1f ms/frame; dust spots removed=${proc.dustStats.spotsRemoved} (${proc.dustStats.pixelsRepaired} px); noise sigma=%.1f; last gain=%.2f".format(
         proc.restoreNanos / 1e6 / maxOf(1, frames), proc.enhancerStats.lastNoiseSigma, proc.enhancerStats.lastGain))
+    if (between > 0) println("in-between frames made=${proc.inBetweenMade} skipped=${proc.inBetweenSkipped}, %.1f ms each incl. motion".format(proc.interpolateNanos / 1e6 / maxOf(1, proc.inBetweenMade + proc.inBetweenSkipped)))
     println("encoder exit=${enc.exitValue()} -> $output")
     parallel.close(); model.close()
 }

@@ -37,7 +37,13 @@ class SegmentRenderer(
 ) : AutoCloseable {
     private val outW = info.outWidth
     private val outH = info.outHeight
-    private val processor = FrameProcessor(outW, outH, info.colour, model, settings, parallel)
+    /** New frames created between each pair of source frames (frame-rate increase). */
+    private val inBetween = settings.inBetweenFrames(info.frameRate)
+    private val processor = FrameProcessor(outW, outH, info.colour, model, settings, parallel, inBetween)
+    // planes currently being handed to the encoder (a finished frame or an in-between frame)
+    private var curY = processor.outY; private var curU = processor.outU; private var curV = processor.outV
+    private var lastOutPts = -1L
+    private var lastEndUs = -1L
     private val yBuf = ByteArray(outW * outH)
     private var srcBuf = ByteArray(0)
     val stats get() = processor.stats
@@ -55,6 +61,9 @@ class SegmentRenderer(
     ): SegmentResult {
         processor.importState(restoreState)
         processor.startSegment()
+        // In-between frames may only bridge segments that follow on directly within this run.
+        if (startUs != lastEndUs) { processor.breakContinuity(); lastOutPts = -1L }
+        lastEndUs = endUs
         segmentsStarted++
         val ex = MediaExtractor()
         var dec: MediaCodec? = null
@@ -133,8 +142,7 @@ class SegmentRenderer(
 
             val pending = ArrayDeque<Long>()
             /** Sends the processor's finished frame to the encoder with its original timestamp. */
-            fun emit(pts: Long) {
-                if (frames == 0) crumb("first frame finished, encoding")
+            fun sendToEncoder(pts: Long) {
                 while (true) {
                     val ei = enc.dequeueInputBuffer(10_000)
                     if (ei >= 0) {
@@ -148,9 +156,24 @@ class SegmentRenderer(
                 if (firstPts < 0) firstPts = pts
                 lastPts = pts
                 frames++
+                drainEncoder(0)
+            }
+            fun emit(pts: Long) {
+                if (frames == 0) crumb("first frame finished, encoding")
+                // In-between frames first, spaced evenly between the previous frame and this one.
+                val k = processor.inBetweenAvailable
+                if (k > 0 && lastOutPts >= 0 && pts > lastOutPts) {
+                    for (j in 1..k) {
+                        if (!processor.renderInBetween(j)) continue // motion not followable: player holds the previous frame
+                        curY = processor.midY; curU = processor.midU; curV = processor.midV
+                        sendToEncoder(lastOutPts + (pts - lastOutPts) * j / (k + 1))
+                    }
+                }
+                curY = processor.outY; curU = processor.outU; curV = processor.outV
+                sendToEncoder(pts)
+                lastOutPts = pts
                 if (frames == 1) crumb("first frame queued to encoder")
                 onFrame(pts)
-                drainEncoder(0)
             }
 
             while (!decodeDone) {
@@ -229,7 +252,7 @@ class SegmentRenderer(
 
     /** simplify: 0 = full, 1 = no profile/level/header repeat, 2 = also no bitrate mode/colour/B-frame keys, 3 = mandatory keys only. */
     private fun encoderFormat(enc: MediaCodec, simplify: Int = 0): MediaFormat {
-        val fps = if (info.frameRate in 1f..240f) info.frameRate else 30f
+        val fps = ((if (info.frameRate in 1f..240f) info.frameRate else 30f) * (inBetween + 1)).coerceAtMost(120f)
         val f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, outW, outH)
         f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
         f.setInteger(MediaFormat.KEY_BIT_RATE, StorageEstimate.videoBitrate(outW, outH, fps))
@@ -323,13 +346,13 @@ class SegmentRenderer(
         }
     }
 
-    // ---- processor.outY/processor.outU/processor.outV -> encoder ----
+    // ---- yBuf/uBuf/vBuf -> encoder ----
 
     private fun writeImage(img: Image) {
         val cw = outW / 2; val ch = outH / 2
-        writePlane(img.planes[0], processor.outY, outW, outH)
-        writePlane(img.planes[1], processor.outU, cw, ch)
-        writePlane(img.planes[2], processor.outV, cw, ch)
+        writePlane(img.planes[0], curY, outW, outH)
+        writePlane(img.planes[1], curU, cw, ch)
+        writePlane(img.planes[2], curV, cw, ch)
     }
 
     private fun writePlane(p: Image.Plane, src: ByteArray, w: Int, h: Int) {
@@ -351,19 +374,19 @@ class SegmentRenderer(
         val stride = if (fmt.containsKey(MediaFormat.KEY_STRIDE)) fmt.getInteger(MediaFormat.KEY_STRIDE) else outW
         val slice = if (fmt.containsKey(MediaFormat.KEY_SLICE_HEIGHT)) fmt.getInteger(MediaFormat.KEY_SLICE_HEIGHT) else outH
         buf.clear()
-        for (y in 0 until outH) { buf.position(y * stride); buf.put(processor.outY, y * outW, outW) }
+        for (y in 0 until outH) { buf.position(y * stride); buf.put(curY, y * outW, outW) }
         val cw = outW / 2; val ch = outH / 2
         val cBase = stride * slice
         if (cf == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
             for (y in 0 until ch) for (x in 0 until cw) {
-                buf.put(cBase + y * stride + 2 * x, processor.outU[y * cw + x]); buf.put(cBase + y * stride + 2 * x + 1, processor.outV[y * cw + x])
+                buf.put(cBase + y * stride + 2 * x, curU[y * cw + x]); buf.put(cBase + y * stride + 2 * x + 1, curV[y * cw + x])
             }
             return cBase + stride * ch
         }
         val cs = stride / 2
-        for (y in 0 until ch) { buf.position(cBase + y * cs); buf.put(processor.outU, y * cw, cw) }
+        for (y in 0 until ch) { buf.position(cBase + y * cs); buf.put(curU, y * cw, cw) }
         val vBase = cBase + cs * (slice / 2)
-        for (y in 0 until ch) { buf.position(vBase + y * cs); buf.put(processor.outV, y * cw, cw) }
+        for (y in 0 until ch) { buf.position(vBase + y * cs); buf.put(curV, y * cw, cw) }
         return vBase + cs * ch
     }
 
