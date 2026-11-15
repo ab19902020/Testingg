@@ -144,19 +144,22 @@ class LumaEnhancer(
         diffHist.fill(0)
         var n = 0
         val sx = width.toFloat() / grid; val sy = height.toFloat() / grid
-        var by = 0
-        while (by < height - BLOCK) {
-            var bx = 0
-            while (bx < width - BLOCK) {
+        // sample on an 8 px lattice (denser on small frames), using each block's motion
+        val step = if (width * height < 400_000) 4 else 8
+        var py0 = 3
+        while (py0 < height) {
+            var px0 = 3
+            while (px0 < width) {
+                val bx = px0 / BLOCK * BLOCK; val by = py0 / BLOCK * BLOCK
                 val dx = blockShift(flowX, grid, bx, by, sx); val dy = blockShift(flowY, grid, bx, by, sy)
-                val px = bx + 3 + dx; val py = by + 3 + dy
+                val px = px0 + dx; val py = py0 + dy
                 if (px in 0 until width && py in 0 until height) {
-                    val d = abs((y[off + (by + 3) * stride + bx + 3].toInt() and 0xFF) - (prev[py * width + px].toInt() and 0xFF))
+                    val d = abs((y[off + py0 * stride + px0].toInt() and 0xFF) - (prev[py * width + px].toInt() and 0xFF))
                     diffHist[minOf(63, d)]++; n++
                 }
-                bx += BLOCK
+                px0 += step
             }
-            by += BLOCK
+            py0 += step
         }
         if (n < 50) return
         var acc = 0; var med = 0
