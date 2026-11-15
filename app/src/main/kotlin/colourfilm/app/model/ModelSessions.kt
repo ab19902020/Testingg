@@ -7,6 +7,8 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import colourfilm.app.BuildConfig
+import colourfilm.app.CrashReporter
+import colourfilm.app.SafeMode
 import colourfilm.core.ChromaModel
 import colourfilm.core.OrtChromaModel
 import java.io.File
@@ -26,7 +28,6 @@ class LoadedModel(val model: ChromaModel, val backend: String, val msPerRun: Dou
 object ModelSessions {
     private const val TAG = "ModelSessions"
     private const val PREFS = "model_backend"
-    private const val INFLIGHT = "npu_in_use"
 
     private val env: OrtEnvironment by lazy {
         OrtEnvironment.getEnvironment(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING, "colourfilm").also {
@@ -48,55 +49,43 @@ object ModelSessions {
         var verdict = prefs.getString(key, null)
         var note: String? = prefs.getString("$key|why", null)
 
-        if (BuildConfig.HAS_QNN && pref == Preference.AUTO && verdict != "cpu") {
+        if (BuildConfig.HAS_QNN && pref == Preference.AUTO && SafeMode.npuEnabled(context) && verdict != "cpu") {
             if (verdict == null) {
-                // First time on this phone: try the NPU in a separate, disposable process. Vendor
-                // NPU drivers can crash natively; that must never take the app down with it.
+                // First time: try the NPU in a separate, disposable process. Vendor NPU drivers can
+                // crash natively; that must never take the app down with it.
                 onStatus("Testing the phone's AI chip (first time only, can take a few minutes)…")
+                CrashReporter.breadcrumb("npu: probe process start")
                 val r = NpuProbe.run(context)
+                CrashReporter.breadcrumb("npu: probe result usable=${r.usable} ${r.reason}")
                 verdict = if (r.usable) "npu" else "cpu"
                 note = r.reason
                 prefs.edit().putString(key, verdict).putString("$key|why", note).commit()
-                Log.i(TAG, "NPU probe: $r")
             }
             if (verdict == "npu") {
                 try {
                     onStatus("Starting the AI chip…")
-                    // If the process dies while the NPU is in use, the next launch switches to CPU.
-                    prefs.edit().putBoolean(INFLIGHT, true).commit()
+                    SafeMode.enter(context, "model:npu")
+                    CrashReporter.breadcrumb("npu: creating session in app process")
                     val npuModel = OrtChromaModel(env, openQnn(context, path), "ddcolor-tiny-0.66.0/qnn-htp-fp16")
-                    return LoadedModel(npuModel, "Qualcomm NPU (QNN HTP, FP16)", timeRuns(npuModel), null)
+                    val ms = timeRuns(npuModel)
+                    CrashReporter.breadcrumb("npu: session ok, %.0f ms".format(ms))
+                    return LoadedModel(npuModel, "Qualcomm NPU (QNN HTP, FP16)", ms, null)
                 } catch (t: Throwable) {
                     Log.w(TAG, "QNN unavailable in app process", t)
                     note = "NPU failed to start: ${t.message?.take(120)}"
-                    prefs.edit().putString(key, "cpu").putString("$key|why", note).putBoolean(INFLIGHT, false).commit()
+                    CrashReporter.breadcrumb("npu: $note")
+                    prefs.edit().putString(key, "cpu").putString("$key|why", note).commit()
                     File(context.filesDir, "qnn_ctx").deleteRecursively()
                 }
             }
         }
         onStatus("Loading AI model…")
+        SafeMode.enter(context, "model:cpu")
+        CrashReporter.breadcrumb("cpu: creating session, ${cpuThreads()} threads")
         val m = OrtChromaModel(env, openCpu(path), "ddcolor-tiny-0.66.0/cpu-fp32")
-        return LoadedModel(m, "CPU (ONNX Runtime)", timeRuns(m, 1), note)
-    }
-
-    /** Call when a job stops using the model for any reason other than the process dying. */
-    fun markIdle(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(INFLIGHT, false).apply()
-    }
-
-    /**
-     * Call once at app start (main process). If the previous process died while the NPU was in
-     * use, stop using the NPU on this phone. Returns true when that happened.
-     */
-    fun recoverFromNpuCrash(context: Context, crashed: Boolean): Boolean {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (!prefs.getBoolean(INFLIGHT, false)) return false
-        if (!crashed) { prefs.edit().putBoolean(INFLIGHT, false).apply(); return false }
-        val key = verdictKey()
-        prefs.edit().putBoolean(INFLIGHT, false).putString(key, "cpu")
-            .putString("$key|why", "The app closed unexpectedly while using the AI chip, so the CPU is used instead").commit()
-        File(context.filesDir, "qnn_ctx").deleteRecursively()
-        return true
+        val ms = timeRuns(m, 1)
+        CrashReporter.breadcrumb("cpu: session ok, %.0f ms".format(ms))
+        return LoadedModel(m, "CPU (ONNX Runtime)", ms, note)
     }
 
     fun describeVerdict(context: Context): String {

@@ -80,7 +80,51 @@ fun HomeScreen(vm: AppViewModel, pad: PaddingValues, onChoose: () -> Unit) {
             Text("Recent projects", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         }
         items(jobs, key = { it.id }) { job -> JobRow(vm, job) }
+        item { SettingsCard() }
         item { Spacer(Modifier.height(32.dp)) }
+    }
+}
+
+@Composable
+private fun SettingsCard() {
+    val ctx = LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    var npu by remember { mutableStateOf(colourfilm.app.SafeMode.npuEnabled(ctx)) }
+    var soft by remember { mutableStateOf(colourfilm.app.SafeMode.softCodecs(ctx)) }
+    var copied by remember { mutableStateOf(false) }
+    Spacer(Modifier.height(8.dp))
+    Card {
+        Text("Settings", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        if (colourfilm.app.BuildConfig.HAS_QNN) Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Use the phone's AI chip (experimental)", fontSize = 15.sp)
+                Text("Faster when it works, but untested on real phones. Off: uses the normal processor.", color = Muted, fontSize = 13.sp, lineHeight = 17.sp)
+            }
+            Switch(npu, {
+                npu = it; colourfilm.app.SafeMode.setNpuEnabled(ctx, it)
+                if (it) colourfilm.app.model.ModelSessions.forgetVerdict(ctx)
+            })
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Software video codecs", fontSize = 15.sp)
+                Text("Slower but safest. Switched on automatically if the app stops while using the phone's hardware codecs.", color = Muted, fontSize = 13.sp, lineHeight = 17.sp)
+            }
+            Switch(soft, { soft = it; colourfilm.app.SafeMode.setSoftCodecs(ctx, it) })
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton(if (copied) "Copied ✓" else "Copy diagnostics", modifier = Modifier.weight(1f)) {
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(colourfilm.app.CrashReporter.diagnostics(ctx))); copied = true
+            }
+            SecondaryButton("Share diagnostics", modifier = Modifier.weight(1f)) {
+                runCatching {
+                    ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
+                        .putExtra(Intent.EXTRA_TEXT, colourfilm.app.CrashReporter.diagnostics(ctx)), "Share diagnostics"))
+                }
+            }
+        }
+        Text("Version ${colourfilm.app.BuildConfig.VERSION_NAME}. Diagnostics contain technical details only (no video content) and stay on the phone unless you share them.",
+            color = Muted, fontSize = 12.sp, lineHeight = 16.sp)
     }
 }
 
@@ -90,7 +134,8 @@ private fun CrashCard(report: String, onDismiss: () -> Unit) {
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var open by remember { mutableStateOf(false) }
     Card {
-        Text("ColourFilm closed unexpectedly last time", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Warn)
+        Text("ColourFilm stopped unexpectedly last time", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Warn)
+        Text(report.lineSequence().first(), fontSize = 14.sp, lineHeight = 19.sp)
         Text("Unfinished videos are kept; open them below and tap Resume. The report helps get the problem fixed. It contains " +
             "technical details only, and is not sent anywhere unless you share it.", color = Muted, fontSize = 14.sp, lineHeight = 19.sp)
         if (open) Text(report, fontSize = 12.sp, lineHeight = 16.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)

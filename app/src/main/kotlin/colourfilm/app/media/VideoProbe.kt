@@ -207,10 +207,27 @@ object EncoderSupport {
         return null
     }
 
-    fun encoderName(w: Int, h: Int): String? {
+    private fun isSoftware(name: String) = name.startsWith("c2.android.") || name.startsWith("OMX.google.")
+
+    /** H.264 encoder for this size; [soft] restricts to Android's own software encoder. */
+    fun encoderName(w: Int, h: Int, soft: Boolean = false): String? {
         val infos = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { info ->
             info.isEncoder && info.supportedTypes.any { it.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) }
-        }.sortedBy { if (it.isHardwareAccelerated) 0 else 1 }
+        }.sortedBy { if (isSoftware(it.name) == soft) 0 else 1 }
         return infos.firstOrNull { it.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).videoCapabilities.isSizeSupported(w, h) }?.name
+    }
+
+    /** Decoder for [format]; with [soft], prefers Android's software decoder when one supports it. */
+    fun decoderName(format: MediaFormat, soft: Boolean): String? {
+        val list = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+        val lookup = MediaFormat(format).apply { setString(MediaFormat.KEY_FRAME_RATE, null) }
+        if (soft) {
+            val mime = format.getString(MediaFormat.KEY_MIME) ?: return null
+            list.codecInfos.firstOrNull { info ->
+                !info.isEncoder && isSoftware(info.name) && info.supportedTypes.any { it.equals(mime, true) } &&
+                    runCatching { info.getCapabilitiesForType(mime).isFormatSupported(lookup) }.getOrDefault(false)
+            }?.let { return it.name }
+        }
+        return list.findDecoderForFormat(lookup)
     }
 }

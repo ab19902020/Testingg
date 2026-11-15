@@ -65,7 +65,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         go(Screen.Home); return true
     }
 
-    fun openVideo(uri: Uri) {
+    fun openVideo(uri: Uri, autostart: Boolean = false) {
         val ctx = getApplication<Application>()
         // Keep read access so interrupted jobs can resume after a restart. Not every provider
         // grants persistable access; processing still works for the current session.
@@ -77,6 +77,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val info = withContext(Dispatchers.IO) { VideoProbe.probe(ctx, uri) }
                 CrashReporter.breadcrumb("probed ${info.videoMime} ${info.width}x${info.height} rot=${info.rotation} fps=${info.frameRate} audio=${info.audioMime} problems=${info.problems.size}")
                 go(Screen.Review(info))
+                if (autostart && info.canProcess) start(info)
             } catch (e: Throwable) {
                 CrashReporter.breadcrumb("open failed: $e")
                 message.value = e.message ?: "This video couldn't be opened."

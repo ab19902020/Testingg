@@ -141,3 +141,22 @@ Tests run on the Android 13 emulator with the 1.1.0 code:
 Still untested: the NPU probe process and NPU inference (need a Snapdragon phone), and the
 Colourise tap in the release build's UI (the emulator's automation could not drive it; the same
 service path is covered by the instrumented test on the debug build).
+
+## 7. Version 1.2.0 (second real-phone report: still stops after tapping Colourise)
+The phone showed jobs left "Interrupted" and no crash card, so the process died in a way 1.1.0
+did not classify as a crash. Still **not reproduced** off the phone: on the Android 13 emulator the
+1.1.0 release build opens a video, starts the job, shows the Processing screen, starts the
+foreground service and unpacks the model without crashing. The cause on the phone is unknown.
+
+Changes in 1.2.0:
+* The Qualcomm AI chip is off by default (opt-in switch on Home). The CPU runs the model.
+* Stage tracking: if the process dies mid-job for any reason, the next launch switches off the
+  riskiest component in use (AI chip first, then hardware codecs → Android software codecs).
+* Step-by-step log written to disk (model load, decoder/encoder names, first frame through each
+  step) and a "Copy diagnostics" button that is always available, including Android's recorded
+  exit reasons for the last runs.
+
+Emulator tests (debug build, Android 13): 11 pass, 1 skipped by design. New: full UI flow through
+the real screens (open video → Review → Colourise → Processing with live progress → Result),
+software-codec fallback, stage recovery logic.
+Untested: everything on a real phone, as before.

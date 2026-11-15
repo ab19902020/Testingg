@@ -19,12 +19,9 @@ class ColourFilmApp : Application() {
         // The NPU test runs in its own short-lived process, which needs nothing below.
         if (getProcessName() != packageName) return
         CrashReporter.install(this)
-        val report = CrashReporter.collect(this)
-        // Only blame the AI chip when the app really crashed while it was in use.
-        val npuCrash = colourfilm.app.model.ModelSessions.recoverFromNpuCrash(this, crashed = report != null)
-        lastCrash.value = report?.let {
-            if (npuCrash) "$it\nThe AI chip was in use, so ColourFilm has switched to the CPU on this phone.\n" else it
-        }
+        // If the last process died mid-job, switch off whatever risky component was in use.
+        val recovered = SafeMode.recover(this)
+        lastCrash.value = CrashReporter.collect(this, recovered)
         CrashReporter.breadcrumb("app start")
         // A fresh process means no job can be running: anything marked running was interrupted
         // (app killed, phone restarted, …) and is offered for resumption from its last segment.

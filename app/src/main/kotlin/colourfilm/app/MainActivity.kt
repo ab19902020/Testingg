@@ -74,7 +74,8 @@ class MainActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             val uri = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
             else intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
-            uri?.let { vm.openVideo(it) }
+            // "colourfilm.autostart" is a test hook: start colourising without tapping the button.
+            uri?.let { vm.openVideo(it, autostart = intent.getBooleanExtra("colourfilm.autostart", false)) }
         }
     }
 }

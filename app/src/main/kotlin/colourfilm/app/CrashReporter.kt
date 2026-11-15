@@ -13,8 +13,8 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Records why the app last closed unexpectedly, so the next launch can show a report the
- * user can copy or share. Nothing is sent anywhere automatically.
+ * Keeps a small local log of what the app was doing and why it last closed, so a report can be
+ * copied or shared from the Home screen. Nothing is sent anywhere automatically.
  */
 object CrashReporter {
     private const val PREFS = "crash"
@@ -34,52 +34,75 @@ object CrashReporter {
         }
     }
 
-    /** Short notes about what the app was doing; the last few are included in a crash report. */
+    /** Short notes about what the app is doing, written to disk immediately. */
+    @Synchronized
     fun breadcrumb(text: String) {
         val c = appContext ?: return
         runCatching {
             val f = breadcrumbFile(c)
-            if (f.length() > 16_000) f.writeText(f.readText().takeLast(8_000))
-            f.appendText("${SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(Date())} $text\n")
+            if (f.length() > 24_000) f.writeText(f.readText().takeLast(12_000))
+            f.appendText("${SimpleDateFormat("MM-dd HH:mm:ss", Locale.ROOT).format(Date())} $text\n")
         }
     }
 
-    /** Returns a report if the main process crashed since the last time this was called. */
-    fun collect(context: Context): String? {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val seen = prefs.getLong("seen", 0L)
-        var reason: String? = null
-        var newest = seen
+    private fun reasonName(r: Int) = when (r) {
+        ApplicationExitInfo.REASON_CRASH -> "CRASH (Java)"
+        ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVE"
+        ApplicationExitInfo.REASON_ANR -> "ANR (not responding)"
+        ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
+        ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE_RESOURCE_USAGE"
+        ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "INITIALIZATION_FAILURE"
+        ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+        ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
+        ApplicationExitInfo.REASON_USER_REQUESTED -> "USER_REQUESTED"
+        ApplicationExitInfo.REASON_USER_STOPPED -> "USER_STOPPED"
+        ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
+        ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "PERMISSION_CHANGE"
+        ApplicationExitInfo.REASON_OTHER -> "OTHER"
+        else -> "reason $r"
+    }
+
+    /** Full diagnostics text; available at any time from Home. */
+    fun diagnostics(context: Context, headline: String? = null): String = buildString {
+        headline?.let { appendLine(it); appendLine() }
+        appendLine("ColourFilm ${BuildConfig.VERSION_NAME} (${BuildConfig.FLAVOR})")
+        appendLine("${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), ${if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE}")
+        appendLine("AI chip enabled: ${SafeMode.npuEnabled(context)}; decision: ${ModelSessions.describeVerdict(context)}")
+        appendLine("Software codecs: ${SafeMode.softCodecs(context)}; stage: ${SafeMode.stage(context)}")
         if (Build.VERSION.SDK_INT >= 30) runCatching {
             val am = context.getSystemService(ActivityManager::class.java)
-            for (info in am.getHistoricalProcessExitReasons(context.packageName, 0, 8)) {
-                if (info.timestamp <= seen) continue
-                newest = maxOf(newest, info.timestamp)
-                if (info.processName != context.packageName || reason != null) continue
-                val kind = when (info.reason) {
-                    ApplicationExitInfo.REASON_CRASH -> "App crash (Java)"
-                    ApplicationExitInfo.REASON_CRASH_NATIVE -> "Native crash (signal ${info.status})"
-                    ApplicationExitInfo.REASON_ANR -> "App not responding"
-                    ApplicationExitInfo.REASON_LOW_MEMORY -> "Closed by Android: low memory"
-                    ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "Closed by Android: excessive resource use"
-                    ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "Initialisation failure"
-                    else -> null
-                }
-                if (kind != null) reason = "$kind at ${Date(info.timestamp)}\n${info.description ?: ""}"
+            val infos = am.getHistoricalProcessExitReasons(context.packageName, 0, 6)
+            if (infos.isNotEmpty()) { appendLine(); appendLine("Recent process exits:") }
+            val fmt = SimpleDateFormat("MM-dd HH:mm:ss", Locale.ROOT)
+            for (i in infos) appendLine("${fmt.format(Date(i.timestamp))} ${i.processName.removePrefix(context.packageName).ifEmpty { "main" }} " +
+                "${reasonName(i.reason)} status=${i.status} importance=${i.importance} ${i.description ?: ""}")
+        }
+        javaFile(context).takeIf { it.exists() }?.let { appendLine(); appendLine("Java crash:"); appendLine(it.readText().trim().take(6000)) }
+        val crumbs = runCatching { breadcrumbFile(context).readLines().takeLast(45).joinToString("\n") }.getOrDefault("")
+        if (crumbs.isNotBlank()) { appendLine(); appendLine("Last steps:"); appendLine(crumbs) }
+    }
+
+    /**
+     * Call once at app start. Returns a report when the previous run ended unexpectedly: a Java
+     * crash was recorded, Android reports a crash-like exit, or a job was cut off ([recovered]).
+     */
+    fun collect(context: Context, recovered: String?): String? {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val seen = prefs.getLong("seen", 0L)
+        var crashed = recovered != null || javaFile(context).exists()
+        if (Build.VERSION.SDK_INT >= 30) runCatching {
+            val am = context.getSystemService(ActivityManager::class.java)
+            for (info in am.getHistoricalProcessExitReasons(context.packageName, 0, 6)) {
+                if (info.timestamp <= seen || info.processName != context.packageName) continue
+                if (info.reason in setOf(ApplicationExitInfo.REASON_CRASH, ApplicationExitInfo.REASON_CRASH_NATIVE,
+                        ApplicationExitInfo.REASON_ANR, ApplicationExitInfo.REASON_LOW_MEMORY,
+                        ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE, ApplicationExitInfo.REASON_INITIALIZATION_FAILURE)) crashed = true
             }
         }
-        val java = javaFile(context).takeIf { it.exists() }?.let { f -> f.readText().also { f.delete() } }
-        prefs.edit().putLong("seen", maxOf(newest, System.currentTimeMillis() - 1)).apply()
-        if (reason == null && java == null) return null
-        val crumbs = runCatching { breadcrumbFile(context).readLines().takeLast(25).joinToString("\n") }.getOrDefault("")
-        return buildString {
-            appendLine("ColourFilm ${BuildConfig.VERSION_NAME} (${BuildConfig.FLAVOR})")
-            appendLine("${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT}), ${if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE}")
-            appendLine("AI backend decision: ${ModelSessions.describeVerdict(context)}")
-            reason?.let { appendLine(); appendLine(it.trim()) }
-            java?.let { appendLine(); appendLine(it.trim().take(6000)) }
-            if (crumbs.isNotBlank()) { appendLine(); appendLine("Last steps:"); appendLine(crumbs) }
-        }
+        prefs.edit().putLong("seen", System.currentTimeMillis()).apply()
+        if (!crashed) return null
+        val text = diagnostics(context, recovered)
+        javaFile(context).delete()
+        return text
     }
 }
-

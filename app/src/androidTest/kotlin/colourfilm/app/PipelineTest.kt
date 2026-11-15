@@ -225,6 +225,59 @@ class PipelineTest {
         assertEquals(sourcePts(j.uri).size, tracks(last.output!!).frames)
     }
 
+    /**
+     * The whole user flow through the real screens: video opened → Review → Colourise →
+     * Processing screen with live progress → Result screen. A crash in any screen fails the run.
+     */
+    @Test
+    fun fullUiFlowReviewProcessingResult() {
+        val inst = InstrumentationRegistry.getInstrumentation()
+        val uri = fixture("bw_audio.mp4")
+        val before = store.all().map { it.id }.toSet()
+        val activity = inst.startActivitySync(
+            android.content.Intent(ctx, MainActivity::class.java).setAction(android.content.Intent.ACTION_SEND)
+                .setType("video/mp4").putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                .putExtra("colourfilm.autostart", true).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        val deadline = System.currentTimeMillis() + 9 * 60_000
+        var j: Job? = null
+        while (System.currentTimeMillis() < deadline) {
+            j = store.all().firstOrNull { it.id !in before }
+            if (j?.status == JobStatus.DONE || j?.status == JobStatus.FAILED) break
+            Thread.sleep(2000)
+        }
+        assertEquals("job error: ${j?.error}", JobStatus.DONE, j?.status)
+        Thread.sleep(15_000) // let the Result screen load its player and before/after frames
+        inst.waitForIdleSync()
+        assertTrue("activity still alive", !activity.isFinishing && !activity.isDestroyed)
+        activity.finish()
+        store.delete(j!!.id)
+    }
+
+    @Test
+    fun softwareCodecFallbackProducesVideo() {
+        SafeMode.setSoftCodecs(ctx, true)
+        try {
+            val uri = fixture("portrait_silent.mp4")
+            val done = run(job(uri).let { it.copy(id = it.id + "-soft") })
+            assertEquals(sourcePts(uri).size, tracks(done.output!!).frames)
+            assertEquals("stage reset after job", "idle", SafeMode.stage(ctx))
+        } finally { SafeMode.setSoftCodecs(ctx, false) }
+    }
+
+    @Test
+    fun interruptedStageSwitchesOffRiskyComponent() {
+        SafeMode.setNpuEnabled(ctx, true)
+        SafeMode.enter(ctx, "run:npu+hw")
+        assertTrue(SafeMode.recover(ctx)!!.contains("AI chip"))
+        assertTrue(!SafeMode.npuEnabled(ctx))
+        SafeMode.enter(ctx, "run:cpu+hw")
+        assertTrue(SafeMode.recover(ctx)!!.contains("codecs"))
+        assertTrue(SafeMode.softCodecs(ctx))
+        SafeMode.setSoftCodecs(ctx, false)
+        assertEquals(null, SafeMode.recover(ctx))
+        assertTrue(CrashReporter.diagnostics(ctx).contains("ColourFilm"))
+    }
+
     @Test
     fun bundledModelUnpacksFromApk() {
         org.junit.Assume.assumeTrue(models.bundled)

@@ -43,6 +43,8 @@ class SegmentRenderer(
     private val uBuf = ByteArray((outW / 2) * (outH / 2))
     private val vBuf = ByteArray((outW / 2) * (outH / 2))
     val stats get() = processor.stats
+    private var segmentsStarted = 0
+    private fun crumb(text: String) { if (segmentsStarted <= 1 || text.startsWith("segment")) colourfilm.app.CrashReporter.breadcrumb(text) }
 
     /**
      * Renders frames with presentation time in [startUs, endUs) to [out].
@@ -54,6 +56,7 @@ class SegmentRenderer(
         isCancelled: () -> Boolean, onFrame: (Long) -> Unit,
     ): SegmentResult {
         processor.importState(restoreState)
+        segmentsStarted++
         val ex = MediaExtractor()
         var dec: MediaCodec? = null
         var enc: MediaCodec? = null
@@ -66,18 +69,23 @@ class SegmentRenderer(
             val vTrack = (0 until ex.trackCount).first { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)!!.startsWith("video/") }
             ex.selectTrack(vTrack)
             val inFmt = ex.getTrackFormat(vTrack)
-            val decName = MediaCodecList(MediaCodecList.REGULAR_CODECS).findDecoderForFormat(MediaFormat(inFmt).apply { setString(MediaFormat.KEY_FRAME_RATE, null) })
+            val soft = colourfilm.app.SafeMode.softCodecs(context)
+            val decName = EncoderSupport.decoderName(inFmt, soft)
                 ?: throw IllegalStateException("No decoder for ${info.videoMime}")
+            crumb("decoder $decName configuring (${info.videoMime} ${info.width}x${info.height})")
             dec = MediaCodec.createByCodecName(decName)
             inFmt.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
             dec.configure(inFmt, null, null, 0)
             dec.start()
             if (startUs > 0) ex.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
 
-            val encName = EncoderSupport.encoderName(outW, outH) ?: throw IllegalStateException("No H.264 encoder for ${outW}x$outH")
+            crumb("decoder started")
+            val encName = EncoderSupport.encoderName(outW, outH, soft) ?: throw IllegalStateException("No H.264 encoder for ${outW}x$outH")
             enc = MediaCodec.createByCodecName(encName)
+            crumb("encoder $encName configuring ${outW}x$outH")
             configureEncoder(enc)
             enc.start()
+            crumb("encoder started")
 
             val bi = MediaCodec.BufferInfo()
             val ebi = MediaCodec.BufferInfo()
@@ -146,9 +154,12 @@ class SegmentRenderer(
                 val pts = bi.presentationTimeUs
                 val eos = bi.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                 if (bi.size > 0 && pts >= startUs && pts < endUs) {
+                    if (frames == 0) crumb("first frame decoded, reading")
                     readLuma(dec, oIdx, decOutFmt ?: dec.outputFormat)
                     dec.releaseOutputBuffer(oIdx, false)
+                    if (frames == 0) crumb("first frame read, colourising")
                     processor.process(yBuf, 0, outW, uBuf, vBuf)
+                    if (frames == 0) crumb("first frame colourised, encoding")
                     // hand the frame to the encoder
                     while (true) {
                         val ei = enc.dequeueInputBuffer(10_000)
@@ -163,6 +174,7 @@ class SegmentRenderer(
                     if (firstPts < 0) firstPts = pts
                     lastPts = pts
                     frames++
+                    if (frames == 1) crumb("first frame queued to encoder")
                     onFrame(pts)
                     drainEncoder(0)
                 } else {
@@ -174,6 +186,7 @@ class SegmentRenderer(
                 sendEncoderEos()
                 while (!encDone) drainEncoder(10_000)
             }
+            crumb("segment done, $frames frames")
             return SegmentResult(frames, firstPts, lastPts, processor.exportState())
         } catch (t: Throwable) {
             runCatching { mux?.stop() }; runCatching { mux?.release() }; mux = null

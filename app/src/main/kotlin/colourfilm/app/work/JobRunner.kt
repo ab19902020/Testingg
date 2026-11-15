@@ -6,6 +6,7 @@ import android.media.MediaFormat
 import android.os.PowerManager
 import android.os.StatFs
 import colourfilm.app.CrashReporter
+import colourfilm.app.SafeMode
 import colourfilm.app.media.Assembler
 import colourfilm.app.media.SegmentFile
 import colourfilm.app.media.SegmentRenderer
@@ -61,6 +62,10 @@ class JobRunner(
     private val power = context.getSystemService(PowerManager::class.java)
 
     fun run(initial: Job) {
+        try { runJob(initial) } finally { SafeMode.idle(context) }
+    }
+
+    private fun runJob(initial: Job) {
         var job = initial.copy(status = JobStatus.RUNNING, error = null)
         store.save(job)
         fun publish(phase: RunState.Phase, msg: String, fraction: Float? = null, processedUs: Long = 0, eta: Long? = null,
@@ -106,6 +111,8 @@ class JobRunner(
         CrashReporter.breadcrumb("model ready: ${loaded.backend} ${"%.0f".format(loaded.msPerRun)} ms ${loaded.note ?: ""}; ${info.videoMime} ${info.width}x${info.height} -> ${info.outWidth}x${info.outHeight}")
 
         val plan = colourfilm.core.JobPlan(job.startUs, job.endUs, job.segmentUs)
+        val soft = SafeMode.softCodecs(context)
+        SafeMode.enter(context, "run:" + (if (loaded.backend.contains("NPU")) "npu" else "cpu") + "+" + (if (soft) "sw" else "hw"))
         val done = job.segments.associateBy { it.index }.toMutableMap()
         var sessionFrames = 0L
         val sessionStart = System.nanoTime()
@@ -146,8 +153,8 @@ class JobRunner(
         } finally {
             parallel.close()
             runCatching { loaded.model.close() }
-            ModelSessions.markIdle(context)
         }
+        SafeMode.enter(context, "assemble")
         CrashReporter.breadcrumb("frames done, assembling")
 
         publish(RunState.Phase.ASSEMBLING, "Adding the soundtrack and finishing the MP4…", 1f, job.durationUs)
@@ -156,6 +163,7 @@ class JobRunner(
         val safeName = job.name.substringBeforeLast('.').replace(Regex("[^A-Za-z0-9 _-]"), "_").take(40)
         val out = File(store.exportsDir(), "${safeName}_colour${if (job.preview) "_preview" else ""}_${job.id.take(6)}.mp4")
         Assembler(context, info).assemble(segs, job.startUs, job.endUs, out, job.includeAudio, { stopRequested()?.let { throw StopException(it) }; false }) {}
+        CrashReporter.breadcrumb("assembled ${out.length() / 1000} kB")
         validateExport(out)
         job = job.copy(status = JobStatus.DONE, output = out.absolutePath); store.save(job)
         store.deleteIntermediates(job.id)
