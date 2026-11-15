@@ -11,16 +11,16 @@ using AI (DDColor). It runs on the phone, and videos are never uploaded.
 ## Install
 The AI model is built into the APK, so nothing is downloaded and the app works offline.
 
-* `ColourFilm-snapdragon-1.2.1.apk` (≈275 MB, arm64): for your Honor Magic 6 Pro and other Snapdragon
+* `ColourFilm-snapdragon-1.3.0.apk` (≈275 MB, arm64): for your Honor Magic 6 Pro and other Snapdragon
   phones. It uses the CPU by default. The Qualcomm AI chip (NPU) is an opt-in setting on the Home
   screen, because it could not be tested on a real phone; when switched on it is first tested in a
   separate process.
-* `ColourFilm-universal-1.2.1.apk` (≈261 MB): CPU only, for any Android 10+ phone.
+* `ColourFilm-universal-1.3.0.apk` (≈261 MB): CPU only, for any Android 10+ phone.
 
 The APKs are too large for git (GitHub's limit is 100 MB per file). They are built by
 `./gradlew :app:assembleSnapdragonRelease` (see `docs/BUILDING.md`) and by the GitHub Actions
 workflow on every push (artifact `colourfilm-apks`). `dist/SHA256SUMS` lists the checksums of the
-1.2.1 builds.
+1.3.0 builds.
 
 The first Colourise unpacks the model once (under a minute, about 230 MB of storage).
 

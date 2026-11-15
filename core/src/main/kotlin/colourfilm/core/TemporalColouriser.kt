@@ -101,6 +101,7 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
             System.arraycopy(modelAb, 0, outAb, 0, 2 * n)
         } else {
             warpAb()
+            if (enableSearch && lowFraction < 0.5f) patchSearch()
             if (runModel) {
                 val alpha = settings.stability.alpha
                 for (i in 0 until n) {
@@ -121,6 +122,7 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
                 }
             }
         }
+        if (enableClean && settings.edgeRefine) cleanChroma(outAb)
         lastModelRun = runModel
         lastCut = cut && hasPrev
 
@@ -172,6 +174,79 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         }
     }
 
+    /**
+     * Second chance for pixels the block tracker could not follow (thin, fast things such as
+     * walking legs or arms): look in a window of the previous frame for pixels whose small
+     * luminance neighbourhood looks the same, and take their colour. It needs no motion model,
+     * so a limb keeps the colour it had instead of being re-guessed (and flipping) every frame,
+     * and background revealed behind it takes the neighbouring background's colour.
+     */
+    private fun patchSearch() {
+        val r = SEARCH_R
+        val inv = 1f / (PATCH_N * SEARCH_H * SEARCH_H)
+        for (y in 1 until size - 1) for (x in 1 until size - 1) {
+            val i = y * size + x
+            if (conf[i] >= SEARCH_BELOW) continue
+            val cx = Math.round(x + flowX[i]).coerceIn(1 + r, size - 2 - r)
+            val cy = Math.round(y + flowY[i]).coerceIn(1 + r, size - 2 - r)
+            val c0 = curNorm[i]; val c1 = curNorm[i - 1]; val c2 = curNorm[i + 1]; val c3 = curNorm[i - size]; val c4 = curNorm[i + size]
+            var wSum = 0f; var a = 0f; var b = 0f; var best = 0f
+            for (dy in -r..r) {
+                val row = (cy + dy) * size
+                for (dx in -r..r) {
+                    val j = row + cx + dx
+                    val d0 = c0 - prevNorm[j]
+                    var ssd = 2f * d0 * d0
+                    if (ssd * inv > 4f) continue
+                    val d1 = c1 - prevNorm[j - 1]; val d2 = c2 - prevNorm[j + 1]
+                    val d3 = c3 - prevNorm[j - size]; val d4 = c4 - prevNorm[j + size]
+                    ssd += d1 * d1 + d2 * d2 + d3 * d3 + d4 * d4
+                    val w = exp(-ssd * inv)
+                    if (w < 0.02f) continue
+                    wSum += w; a += w * prevAb[j]; b += w * prevAb[n + j]
+                    if (w > best) best = w
+                }
+            }
+            if (wSum > 0f && best * SEARCH_TRUST > conf[i]) {
+                warped[i] = a / wSum; warped[n + i] = b / wSum
+                conf[i] = best * SEARCH_TRUST
+            }
+        }
+    }
+
+    private val cleanTmp = FloatArray(2 * n)
+
+    /**
+     * Edge-aware clean-up of the colour estimate: each pixel's colour becomes the average of
+     * nearby pixels of similar brightness. The model's colour for a person spills a few pixels
+     * onto the background around them (a halo); background pixels then mostly average with other
+     * background, so the spill is diluted, while the person keeps their own colour.
+     */
+    private fun cleanChroma(ab: FloatArray) {
+        val r = CLEAN_R
+        val invR = 1f / (2f * CLEAN_RANGE * CLEAN_RANGE)
+        for (y in 0 until size) {
+            val y0 = maxOf(0, y - r); val y1 = minOf(size - 1, y + r)
+            for (x in 0 until size) {
+                val i = y * size + x
+                val l = curNorm[i]
+                val x0 = maxOf(0, x - r); val x1 = minOf(size - 1, x + r)
+                var wSum = 0f; var a = 0f; var b = 0f
+                for (yy in y0..y1) {
+                    val row = yy * size
+                    for (xx in x0..x1) {
+                        val j = row + xx
+                        val d = l - curNorm[j]
+                        val w = cleanLut[minOf(CLEAN_LUT - 1, (d * d * invR * CLEAN_LUT_SCALE).toInt())]
+                        wSum += w; a += w * ab[j]; b += w * ab[n + j]
+                    }
+                }
+                cleanTmp[i] = a / wSum; cleanTmp[n + i] = b / wSum
+            }
+        }
+        System.arraycopy(cleanTmp, 0, ab, 0, 2 * n)
+    }
+
     /** Box mean of radius WIDE_R over one plane of [src] (offset [o]) into [dst] at the same offset. */
     private fun localMean(src: FloatArray, o: Int, dst: FloatArray) {
         val r = WIDE_R
@@ -216,6 +291,21 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         /** Radius (analysis pixels) of the surrounding-colour fallback. */
         const val WIDE_R = 10
         const val HIST_BINS = 32
+        /** Patch search: window radius (analysis pixels), similarity bandwidth, trust given to a match. */
+        const val SEARCH_R = 7
+        const val SEARCH_H = 0.30f
+        const val PATCH_N = 6f
+        const val SEARCH_BELOW = 0.6f
+        const val SEARCH_TRUST = 0.9f
+        /** Chroma clean-up: radius and brightness tolerance (in frame standard deviations). */
+        const val CLEAN_R = 4
+        const val CLEAN_RANGE = 0.30f
+        private const val CLEAN_LUT = 256
+        private const val CLEAN_LUT_SCALE = 32f
+        private val cleanLut = FloatArray(CLEAN_LUT) { exp(-it / CLEAN_LUT_SCALE) }
+        /** Experiment switches (desktop benchmark only). */
+        @JvmField var enableSearch = true
+        @JvmField var enableClean = true
 
         fun normalise(src: FloatArray, dst: FloatArray) {
             var mean = 0.0

@@ -11,10 +11,11 @@ import kotlin.math.abs
  * phone CPU because it works on a small luminance grid, not on full-resolution video.
  */
 class MotionEstimator(private val size: Int) {
-    private val levels = if (size >= 256) 3 else 2
+    private val levels = if (size >= 256) 4 else 3
     private val block = 8
     private val step = 4
-    private val dims = IntArray(levels) { (size / 2) shr it } // 128, 64, 32 for size 256
+    /** Level 0 is the full analysis grid (256, 128, 64, 32 for size 256), so thin moving limbs are tracked. */
+    private val dims = IntArray(levels) { size shr it }
     private val prevPyr = Array(levels) { FloatArray(dims[it] * dims[it]) }
     private val curPyr = Array(levels) { FloatArray(dims[it] * dims[it]) }
     private val nb = IntArray(levels) { (dims[it] - block) / step + 1 }
@@ -28,8 +29,8 @@ class MotionEstimator(private val size: Int) {
     }
 
     fun estimate(prev: FloatArray, cur: FloatArray, flowX: FloatArray, flowY: FloatArray) {
-        Resample.half(prev, size, size, prevPyr[0])
-        Resample.half(cur, size, size, curPyr[0])
+        System.arraycopy(prev, 0, prevPyr[0], 0, size * size)
+        System.arraycopy(cur, 0, curPyr[0], 0, size * size)
         for (l in 1 until levels) {
             Resample.half(prevPyr[l - 1], dims[l - 1], dims[l - 1], prevPyr[l])
             Resample.half(curPyr[l - 1], dims[l - 1], dims[l - 1], curPyr[l])
@@ -114,14 +115,13 @@ class MotionEstimator(private val size: Int) {
 
     private fun densify(flowX: FloatArray, flowY: FloatArray) {
         val n = nb[0]
+        val off = block / 2f - 0.5f
         for (y in 0 until size) {
-            val p = (y + 0.5f) / 2f - 0.5f
-            val v = (p - (block / 2f - 0.5f)) / step
+            val v = (y - off) / step
             for (x in 0 until size) {
-                val q = (x + 0.5f) / 2f - 0.5f
-                val u = (q - (block / 2f - 0.5f)) / step
-                flowX[y * size + x] = 2f * Resample.sample(vx[0], n, n, u, v)
-                flowY[y * size + x] = 2f * Resample.sample(vy[0], n, n, u, v)
+                val u = (x - off) / step
+                flowX[y * size + x] = Resample.sample(vx[0], n, n, u, v)
+                flowY[y * size + x] = Resample.sample(vy[0], n, n, u, v)
             }
         }
     }

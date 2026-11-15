@@ -41,6 +41,8 @@ fun main(args: Array<String>) {
         stability = ColouriseSettings.Stability.valueOf(opt["--stability"] ?: "STANDARD"),
         edgeRefine = "--no-refine" !in flags,
     )
+    colourfilm.core.TemporalColouriser.enableSearch = "--no-search" !in flags
+    colourfilm.core.TemporalColouriser.enableClean = "--no-clean" !in flags
     val probe = Probe.of(input)
     val w = probe.width and 1.inv(); val h = probe.height and 1.inv()
     println("source ${probe.width}x${probe.height} fps=${probe.fps} audio=${probe.hasAudio} -> ${w}x$h settings=${settings.fingerprint()}")
@@ -54,7 +56,7 @@ fun main(args: Array<String>) {
     val model = OrtChromaModel(env, env.createSession(modelPath, so), "ddcolor-tiny-qaihub-0.66.0/fp32")
     println("model load ${(System.nanoTime() - t0) / 1_000_000} ms, input ${model.inputSize}")
 
-    val timed = TimedModel(model)
+    val timed = TimedModel(opt["--cache"]?.let { CachingModel(model, File(it)) } ?: model)
     val parallel = Parallel(opt["--threads"]?.toInt() ?: 4)
     val colour = VideoColour.defaultFor(h)
     val proc = FrameProcessor(w, h, colour, timed, settings, parallel)
@@ -132,3 +134,19 @@ data class Probe(val width: Int, val height: Int, val fps: Double, val fpsRation
 private fun InputStream.drain() = readAllBytes()
 @Suppress("unused")
 private fun exists(p: String) = File(p).exists()
+
+/** Caches model outputs on disk keyed by the input image, so pipeline experiments rerun quickly. */
+class CachingModel(private val m: colourfilm.core.ChromaModel, private val dir: File) : colourfilm.core.ChromaModel by m {
+    init { dir.mkdirs() }
+    override fun predict(grey: FloatArray, outAb: FloatArray) {
+        val crc = java.util.zip.CRC32()
+        val bb = java.nio.ByteBuffer.allocate(grey.size * 4); bb.asFloatBuffer().put(grey); crc.update(bb.array())
+        val f = File(dir, "%08x.bin".format(crc.value))
+        if (f.exists()) {
+            java.nio.ByteBuffer.wrap(f.readBytes()).asFloatBuffer().get(outAb, 0, 2 * grey.size)
+        } else {
+            m.predict(grey, outAb)
+            val ob = java.nio.ByteBuffer.allocate(outAb.size * 4); ob.asFloatBuffer().put(outAb); f.writeBytes(ob.array())
+        }
+    }
+}

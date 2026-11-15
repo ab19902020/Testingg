@@ -180,3 +180,42 @@ Result) passes. Before the fix the same step crashed.
 The earlier guesses (AI chip) were wrong as the cause of this crash. The 1.2.0 safety changes
 stay (AI chip opt-in, stage recovery, diagnostics), since the AI chip is still untested.
 Still untested: a real phone, Android 16, the NPU path.
+
+## 9. Version 1.3.0: quality pass (first real-phone feedback: works; motion "goes funny", halos around people)
+Confirmed working on the Honor Magic 6 Pro by the user with 1.2.1 (CPU path). Reported issues:
+colour instability on moving people and colour halos around them. Both were reproduced on the
+desktop harness (walker's jeans flipping grey/blue/red between frames; bluish halo round the head).
+
+Changes (all in `core/`, same code on phone and desktop):
+* Motion tracking now also runs at the full analysis resolution (was half), so thinner moving
+  things are followed.
+* Patch search: pixels the block tracker cannot follow look for matching luminance patches in
+  a ±7 px window of the previous frame and take that colour, so limbs keep their colour and
+  revealed background takes background colour.
+* Edge-aware chroma clean-up on the analysis grid (joint bilateral, guided by brightness): dilutes
+  the model's colour spill around subjects.
+
+Measured (desktop, colour originals as ground truth; lower is better; `tools/evaluate.py`):
+
+| Clip / mode | Version | Error | Error near edges | Error on moving areas | Change along true motion |
+|---|---|---|---|---|---|
+| Pedestrians, Best | 1.2.1 | 9.46 | 9.26 | 6.62 | 1.16 |
+| | 1.3.0 | 9.33 | 9.05 | 6.32 | 0.98 |
+| Pedestrians, Balanced | 1.2.1 | 9.42 | 9.19 | 6.36 | 1.06 |
+| | 1.3.0 | 9.27 | 8.98 | 6.12 | 0.89 |
+| Pedestrians, Fast | 1.2.1 | 9.40 | 9.12 | 6.17 | 0.81 |
+| | 1.3.0 | 9.25 | 8.95 | 6.02 | 0.76 |
+| Megamind, Best | 1.2.1 | 5.78 | 8.78 | 7.66 | 1.19 |
+| | 1.3.0 | 5.72 | 8.69 | 7.61 | 1.14 |
+| Megamind, Balanced | 1.2.1 | 5.71 | 8.59 | 7.49 | 1.11 |
+| | 1.3.0 | 5.63 | 8.50 | 7.46 | 1.05 |
+
+The numeric gains are modest because the totals are dominated by the model's colour guesses; the
+visible gain is larger. `samples/before_after_1.3.0.jpg` shows the same frames at 1920×1440:
+orange/blue fringes round the walker are gone and the jeans keep one colour. Static-area flicker
+is unchanged (0.38 vs 0.39). Scene cuts: still 4/4 detected on Megamind, 0 false on pedestrians.
+Extra cost: about 13 ms per frame on the desktop (not measured on the phone).
+
+Not re-run for 1.3.0: the emulator device suite (no app-side code changed; core unit tests 7/7
+and both release builds pass). Remaining visible faults: the model itself still tints some flat
+backgrounds unevenly and can pick muted colours for small moving objects.
