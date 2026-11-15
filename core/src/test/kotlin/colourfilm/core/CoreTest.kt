@@ -104,4 +104,41 @@ class CoreTest {
         t2.next(texture(64, 0.5f, 0f), ab)
         assertTrue(!t2.lastCut)
     }
+
+    private class CountingModel : ChromaModel {
+        override val inputSize = 64; override val id = "count"
+        var value = 10f
+        override fun predict(grey: FloatArray, outAb: FloatArray) { outAb.fill(value) }
+    }
+
+    @Test
+    fun establishedColourResistsANewGuess() {
+        val m = CountingModel()
+        val t = TemporalColouriser(m, ColouriseSettings(speed = ColouriseSettings.Speed.BEST))
+        val ab = FloatArray(2 * 64 * 64)
+        val a = texture(64, 0f, 0f)
+        repeat(4) { t.next(a, ab) }
+        m.value = 40f // the model changes its mind about the same, unchanged picture
+        t.next(a, ab)
+        assertTrue(ab[2000] < 14f, "one contrary guess barely moves the colour (was ${ab[2000]})")
+        repeat(40) { t.next(a, ab) }
+        assertTrue(ab[2000] > 30f, "a persistent new guess does take over eventually (was ${ab[2000]})")
+    }
+
+    @Test
+    fun returningShotResumesItsColours() {
+        val m = CountingModel()
+        val t = TemporalColouriser(m, ColouriseSettings(speed = ColouriseSettings.Speed.BEST))
+        val ab = FloatArray(2 * 64 * 64)
+        val shotA = texture(64, 0f, 0f)
+        val shotB = FloatArray(64 * 64) { if ((it / 64 + it % 64) % 7 < 3) 0.05f else 0.95f }
+        repeat(8) { t.next(shotA, ab) }          // shot A coloured with 10
+        m.value = -30f
+        repeat(8) { t.next(shotB, ab) }          // cut to shot B
+        assertTrue(t.cuts >= 1)
+        m.value = 40f                            // model would now guess differently for A
+        t.next(shotA, ab)                        // cut back to A
+        assertEquals(1, t.shotsResumed)
+        assertTrue(ab[2000] < 16f, "shot A keeps its earlier colour (was ${ab[2000]})")
+    }
 }

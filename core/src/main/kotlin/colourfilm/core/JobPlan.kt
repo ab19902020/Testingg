@@ -26,7 +26,7 @@ data class JobPlan(
         const val DEFAULT_SEGMENT_US = 15_000_000L
 
         fun fingerprint(sourceKey: String, modelId: String, settings: ColouriseSettings, plan: JobPlan, outW: Int, outH: Int): String {
-            val text = "v3|$sourceKey|$modelId|${settings.fingerprint()}|${plan.startUs}-${plan.endUs}/${plan.segmentUs}|${outW}x$outH"
+            val text = "v4|$sourceKey|$modelId|${settings.fingerprint()}|${plan.startUs}-${plan.endUs}/${plan.segmentUs}|${outW}x$outH"
             val md = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
             return md.joinToString("") { "%02x".format(it) }.take(24)
         }

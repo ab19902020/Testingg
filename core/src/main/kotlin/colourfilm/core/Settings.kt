@@ -21,10 +21,14 @@ data class ColouriseSettings(
     /** maxStride = longest run of frames between model runs (1 = every frame). */
     enum class Speed(val maxStride: Int) { BEST(1), BALANCED(2), FAST(4) }
 
-    /** alpha = weight given to the motion-compensated previous colour at model frames. */
+    /**
+     * alpha = weight given to the colour an object already has (carried along its motion) against
+     * the model's fresh guess for this frame. 0.9 means a new guess needs roughly ten frames of
+     * agreement to replace an established colour, so outfits keep their colour while people move.
+     */
     enum class Stability(val alpha: Float) {
         /** OFF = independent per-frame estimates; only used as a benchmark baseline. */
-        OFF(0f), LIGHT(0.4f), STANDARD(0.65f), STRONG(0.8f)
+        OFF(0f), LIGHT(0.65f), STANDARD(0.9f), STRONG(0.96f)
     }
 
     val chromaGain: Float get() = intensity.coerceIn(0f, 2f) * look.saturation

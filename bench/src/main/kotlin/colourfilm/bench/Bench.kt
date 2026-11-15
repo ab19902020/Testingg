@@ -43,6 +43,8 @@ fun main(args: Array<String>) {
     )
     colourfilm.core.TemporalColouriser.enableSearch = "--no-search" !in flags
     colourfilm.core.TemporalColouriser.enableClean = "--no-clean" !in flags
+    opt["--alpha"]?.let { colourfilm.core.TemporalColouriser.alphaOverride = it.toFloat() }
+    colourfilm.core.TemporalColouriser.enableShotMemory = "--no-shots" !in flags
     val probe = Probe.of(input)
     val w = probe.width and 1.inv(); val h = probe.height and 1.inv()
     println("source ${probe.width}x${probe.height} fps=${probe.fps} audio=${probe.hasAudio} -> ${w}x$h settings=${settings.fingerprint()}")
@@ -96,7 +98,7 @@ fun main(args: Array<String>) {
     val wall = (System.nanoTime() - start) / 1e9
     val st = proc.stats
     println()
-    println("frames=$frames wall=%.1fs (%.2f fps) modelRuns=${st.modelRuns} cuts=${st.cuts}".format(wall, frames / wall))
+    println("frames=$frames wall=%.1fs (%.2f fps) modelRuns=${st.modelRuns} cuts=${st.cuts} shotsResumed=${st.shotsResumed}".format(wall, frames / wall))
     println("per frame: model %.1f ms/run, analysis(total incl. model) %.1f ms, compose %.1f ms".format(
         timed.nanos / 1e6 / maxOf(1, timed.runs), proc.analysisNanos / 1e6 / maxOf(1, frames), proc.composeNanos / 1e6 / maxOf(1, frames)))
     println("encoder exit=${enc.exitValue()} -> $output")

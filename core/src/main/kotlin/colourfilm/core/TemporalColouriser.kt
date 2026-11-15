@@ -28,6 +28,7 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
     private var prevAb = FloatArray(2 * n)
     private var hasPrev = false
     private var sinceModel = 0
+    private var modelGap = 2
     private var confAvg = 0f
 
     private val flowX = FloatArray(n)
@@ -60,21 +61,9 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
 
         var cut = !hasPrev
         var lowFraction = 1f
+        var resumedShot = false
         if (hasPrev) {
-            motion.estimate(prevNorm, curNorm, flowX, flowY)
-            var sum = 0f; var low = 0
-            for (y in 0 until size) for (x in 0 until size) {
-                val i = y * size + x
-                val px = x + flowX[i]; val py = y + flowY[i]
-                val d = curNorm[i] - Resample.sample(prevNorm, size, size, px, py)
-                // pixels whose motion points outside the frame have no history
-                val outside = px < -0.5f || py < -0.5f || px > size - 0.5f || py > size - 0.5f
-                conf[i] = if (outside) 0f else exp(-(d * d) / (2f * SIGMA * SIGMA))
-            }
-            box3(conf, confTmp)
-            for (i in 0 until n) { sum += conf[i]; if (conf[i] < 0.5f) low++ }
-            lastMeanConfidence = sum / n
-            lowFraction = low.toFloat() / n
+            lowFraction = trackFrom(prevNorm)
             val histDist = histDistance(prevHist, curHist)
             lastHistDistance = histDist
             val c = lastMeanConfidence
@@ -82,15 +71,31 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
             // to the recent norm for this shot (grainy or fast footage has lower typical values).
             val relDrop = confAvg > 0f && c < 0.7f * confAvg && c < 0.65f
             cut = histDist > 0.5f || c < 0.3f || relDrop || (histDist > 0.3f && c < 0.5f)
-            confAvg = if (cut) 0f else if (confAvg == 0f) c else 0.8f * confAvg + 0.2f * c
+            if (cut && enableShotMemory) {
+                // Remember how the shot we are leaving was coloured, then check whether the new
+                // picture is a return to an earlier shot (e.g. cutting back and forth between two
+                // people). If so, carry on from that shot's colours so outfits stay the same.
+                if (shotFrames >= MIN_SHOT_FRAMES) rememberShot()
+                val back = findEarlierShot()
+                if (back != null) {
+                    System.arraycopy(back.norm, 0, prevNorm, 0, n)
+                    System.arraycopy(back.ab, 0, prevAb, 0, 2 * n)
+                    lowFraction = trackFrom(prevNorm)
+                    cut = false; resumedShot = true
+                    shotsResumed++
+                }
+            }
+            confAvg = if (cut) 0f else if (confAvg == 0f || resumedShot) lastMeanConfidence else 0.8f * confAvg + 0.2f * lastMeanConfidence
+            shotFrames = if (cut || resumedShot) 0 else shotFrames + 1
         } else {
             lastMeanConfidence = 0f
         }
 
-        val runModel = cut || sinceModel + 1 >= settings.speed.maxStride || lowFraction > LOW_CONF_LIMIT
+        val runModel = cut || resumedShot || sinceModel + 1 >= settings.speed.maxStride || lowFraction > LOW_CONF_LIMIT
         if (runModel) {
             model.predict(grey, modelAb)
             modelRuns++
+            modelGap = sinceModel + 1
             sinceModel = 0
         } else {
             sinceModel++
@@ -101,9 +106,12 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
             System.arraycopy(modelAb, 0, outAb, 0, 2 * n)
         } else {
             warpAb()
-            if (enableSearch && lowFraction < 0.5f) patchSearch()
+            if (enableSearch && lowFraction < 0.5f && !resumedShot) patchSearch()
             if (runModel) {
-                val alpha = settings.stability.alpha
+                // Stability is defined per two frames, so colour memory lasts equally long whether
+                // the model runs on every frame (Best) or every few frames (Balanced, Fast).
+                val base = if (alphaOverride >= 0f) alphaOverride else settings.stability.alpha
+                val alpha = Math.pow(base.toDouble(), modelGap / 2.0).toFloat()
                 for (i in 0 until n) {
                     val w = alpha * conf[i]
                     outAb[i] = modelAb[i] + w * (warped[i] - modelAb[i])
@@ -133,7 +141,7 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
     }
 
     /** Clears temporal history, e.g. before a seek. */
-    fun reset() { hasPrev = false; sinceModel = 0; confAvg = 0f }
+    fun reset() { hasPrev = false; sinceModel = 0; confAvg = 0f; shotFrames = 0; shots.forEach { it.used = false } }
 
     /** Serialisable temporal state so a resumed job continues without a colour jump. */
     fun exportState(): FloatArray? {
@@ -174,6 +182,49 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         }
     }
 
+    /** Estimates motion from [from] to the current frame and fills [conf]; returns the low-confidence fraction. */
+    private fun trackFrom(from: FloatArray): Float {
+        motion.estimate(from, curNorm, flowX, flowY)
+        var sum = 0f; var low = 0
+        for (y in 0 until size) for (x in 0 until size) {
+            val i = y * size + x
+            val px = x + flowX[i]; val py = y + flowY[i]
+            val d = curNorm[i] - Resample.sample(from, size, size, px, py)
+            // pixels whose motion points outside the frame have no history
+            val outside = px < -0.5f || py < -0.5f || px > size - 0.5f || py > size - 0.5f
+            conf[i] = if (outside) 0f else exp(-(d * d) / (2f * SIGMA * SIGMA))
+        }
+        box3(conf, confTmp)
+        for (i in 0 until n) { sum += conf[i]; if (conf[i] < 0.5f) low++ }
+        lastMeanConfidence = sum / n
+        return low.toFloat() / n
+    }
+
+    private class Shot(n: Int) { val norm = FloatArray(n); val ab = FloatArray(2 * n); val hist = FloatArray(HIST_BINS); var used = false }
+    private val shots = Array(SHOT_MEMORY) { Shot(n) }
+    private var shotNext = 0
+    private var shotFrames = 0
+    var shotsResumed = 0L; private set
+
+    private fun rememberShot() {
+        val s = shots[shotNext]; shotNext = (shotNext + 1) % SHOT_MEMORY
+        System.arraycopy(prevNorm, 0, s.norm, 0, n); System.arraycopy(prevAb, 0, s.ab, 0, 2 * n)
+        System.arraycopy(prevHist, 0, s.hist, 0, HIST_BINS); s.used = true
+    }
+
+    /** The remembered shot that explains the current frame best, if it does so as well as normal motion would. */
+    private fun findEarlierShot(): Shot? {
+        var best: Shot? = null; var bestConf = SHOT_MATCH
+        val justSaved = shots[(shotNext + SHOT_MEMORY - 1) % SHOT_MEMORY]
+        for (s in shots) {
+            if (!s.used || (s === justSaved && shotFrames >= MIN_SHOT_FRAMES)) continue
+            if (histDistance(s.hist, curHist) > 0.3f) continue
+            trackFrom(s.norm)
+            if (lastMeanConfidence > bestConf) { bestConf = lastMeanConfidence; best = s }
+        }
+        return best
+    }
+
     /**
      * Second chance for pixels the block tracker could not follow (thin, fast things such as
      * walking legs or arms): look in a window of the previous frame for pixels whose small
@@ -182,14 +233,19 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
      * and background revealed behind it takes the neighbouring background's colour.
      */
     private fun patchSearch() {
+        // Shape-tolerant descriptors: brightness of the pixel, of its 3x3 and of its 7x7
+        // surroundings. A swinging leg changes shape between frames, but its pixels keep roughly
+        // the same brightness and the same kind of surroundings.
+        boxBlur(curNorm, cur3, 1); boxBlur(curNorm, cur7, 3)
+        boxBlur(prevNorm, prev3, 1); boxBlur(prevNorm, prev7, 3)
         val r = SEARCH_R
-        val inv = 1f / (PATCH_N * SEARCH_H * SEARCH_H)
-        for (y in 1 until size - 1) for (x in 1 until size - 1) {
+        val inv = 1f / (4f * SEARCH_H * SEARCH_H)
+        for (y in 0 until size) for (x in 0 until size) {
             val i = y * size + x
             if (conf[i] >= SEARCH_BELOW) continue
-            val cx = Math.round(x + flowX[i]).coerceIn(1 + r, size - 2 - r)
-            val cy = Math.round(y + flowY[i]).coerceIn(1 + r, size - 2 - r)
-            val c0 = curNorm[i]; val c1 = curNorm[i - 1]; val c2 = curNorm[i + 1]; val c3 = curNorm[i - size]; val c4 = curNorm[i + size]
+            val cx = Math.round(x + flowX[i]).coerceIn(r, size - 1 - r)
+            val cy = Math.round(y + flowY[i]).coerceIn(r, size - 1 - r)
+            val c0 = curNorm[i]; val c3 = cur3[i]; val c7 = cur7[i]
             var wSum = 0f; var a = 0f; var b = 0f; var best = 0f
             for (dy in -r..r) {
                 val row = (cy + dy) * size
@@ -198,9 +254,8 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
                     val d0 = c0 - prevNorm[j]
                     var ssd = 2f * d0 * d0
                     if (ssd * inv > 4f) continue
-                    val d1 = c1 - prevNorm[j - 1]; val d2 = c2 - prevNorm[j + 1]
-                    val d3 = c3 - prevNorm[j - size]; val d4 = c4 - prevNorm[j + size]
-                    ssd += d1 * d1 + d2 * d2 + d3 * d3 + d4 * d4
+                    val d3 = c3 - prev3[j]; val d7 = c7 - prev7[j]
+                    ssd += d3 * d3 + d7 * d7
                     val w = exp(-ssd * inv)
                     if (w < 0.02f) continue
                     wSum += w; a += w * prevAb[j]; b += w * prevAb[n + j]
@@ -210,6 +265,31 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
             if (wSum > 0f && best * SEARCH_TRUST > conf[i]) {
                 warped[i] = a / wSum; warped[n + i] = b / wSum
                 conf[i] = best * SEARCH_TRUST
+            }
+        }
+    }
+
+    private val cur3 = FloatArray(n); private val cur7 = FloatArray(n)
+    private val prev3 = FloatArray(n); private val prev7 = FloatArray(n)
+
+    private fun boxBlur(src: FloatArray, dst: FloatArray, r: Int) {
+        for (y in 0 until size) {
+            val row = y * size
+            var s = 0f; var c = 0
+            for (x in 0..minOf(r, size - 1)) { s += src[row + x]; c++ }
+            for (x in 0 until size) {
+                boxTmp[row + x] = s / c
+                if (x + r + 1 < size) { s += src[row + x + r + 1]; c++ }
+                if (x - r >= 0) { s -= src[row + x - r]; c-- }
+            }
+        }
+        for (x in 0 until size) {
+            var s = 0f; var c = 0
+            for (y in 0..minOf(r, size - 1)) { s += boxTmp[y * size + x]; c++ }
+            for (y in 0 until size) {
+                dst[y * size + x] = s / c
+                if (y + r + 1 < size) { s += boxTmp[(y + r + 1) * size + x]; c++ }
+                if (y - r >= 0) { s -= boxTmp[(y - r) * size + x]; c-- }
             }
         }
     }
@@ -294,7 +374,6 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         /** Patch search: window radius (analysis pixels), similarity bandwidth, trust given to a match. */
         const val SEARCH_R = 7
         const val SEARCH_H = 0.30f
-        const val PATCH_N = 6f
         const val SEARCH_BELOW = 0.6f
         const val SEARCH_TRUST = 0.9f
         /** Chroma clean-up: radius and brightness tolerance (in frame standard deviations). */
@@ -304,6 +383,12 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         private const val CLEAN_LUT_SCALE = 32f
         private val cleanLut = FloatArray(CLEAN_LUT) { exp(-it / CLEAN_LUT_SCALE) }
         /** Experiment switches (desktop benchmark only). */
+        @JvmField var alphaOverride = -1f
+        /** Shot memory: how many past shots are remembered, and how well one must match to be resumed. */
+        const val SHOT_MEMORY = 6
+        const val MIN_SHOT_FRAMES = 5
+        const val SHOT_MATCH = 0.62f
+        @JvmField var enableShotMemory = true
         @JvmField var enableSearch = true
         @JvmField var enableClean = true
 

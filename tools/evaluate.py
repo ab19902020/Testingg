@@ -8,6 +8,8 @@
 #            the first line printed is the colour original's own value for reference)
 #   mwarp    colour change of moving objects along their true motion (optical flow on the original);
 #            this is what the eye sees as colours flipping on a walking person
+#   mlong    how far the colour of things that have moved drifts while tracked for up to 12 frames
+#            (outfits changing colour as people walk); compare with the original's own value
 #   sflick   frame-to-frame chroma change where the true colour is static -> flicker
 import sys, numpy as np, cv2
 gt_path = sys.argv[1]; runs = [a.split('=',1) for a in sys.argv[2:]]
@@ -27,7 +29,7 @@ runs=[['(original)',gt_path]]+runs
 dis=cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
 for name,p in runs:
     g=cv2.VideoCapture(gt_path); c=cv2.VideoCapture(p)
-    pg=pc=pgray=None; err=[]; edge=[]; mot=[]; sf=[]; mf=[]; hl=[]; mw=[]
+    pg=pc=pgray=None; err=[]; edge=[]; mot=[]; sf=[]; mf=[]; hl=[]; mw=[]; ml=[]; fi=0; ref=None
     while True:
         ok1,fg=g.read(); ok2,fc=c.read()
         if not (ok1 and ok2): break
@@ -52,5 +54,21 @@ for name,p in runs:
                 mot.append(d[mm].mean()); mf.append(dt[mm].mean()-dg[mm].mean())
             st=(dg<0.5)&(~mm)
             sf.append(dt[st].mean())
+        # long-range: carry a map from the current frame back to an anchor frame via chained flow
+        hh,ww=gray.shape
+        if ref is None or fi%12==0:
+            ref=b.copy(); xs,ys=np.meshgrid(np.arange(ww,dtype=np.float32),np.arange(hh,dtype=np.float32)); MX,MY=xs.copy(),ys.copy(); valid=np.ones((hh,ww),bool)
+        elif pgray is not None:
+            fl=dis.calc(gray,pgray,None)
+            px=xs+fl[:,:,0]; py=ys+fl[:,:,1]
+            wpg=cv2.remap(pgray,px,py,cv2.INTER_LINEAR)
+            step_ok=(cv2.absdiff(wpg,gray)<10)&(px>=0)&(py>=0)&(px<ww-1)&(py<hh-1)
+            MX=cv2.remap(MX,px,py,cv2.INTER_LINEAR); MY=cv2.remap(MY,px,py,cv2.INTER_LINEAR)
+            valid=step_ok&(cv2.remap(valid.astype(np.float32),px,py,cv2.INTER_LINEAR)>0.99)
+            moved=valid&(np.hypot(MX-xs,MY-ys)>4)
+            if moved.sum()>200:
+                wr=cv2.remap(ref,MX,MY,cv2.INTER_LINEAR)
+                ml.append((np.abs(b-wr).sum(-1)/2)[moved].mean())
+        fi+=1
         pg,pc,pgray=a,b,gray
-    print(f'{name:12s} n={len(err)} err={np.mean(err):.2f} edge={np.mean(edge):.2f} motion={np.mean(mot):.2f} mflick={np.mean(mf):.2f} mwarp={np.mean(mw):.2f} sflick={np.mean(sf):.2f}')
+    print(f'{name:12s} n={len(err)} err={np.mean(err):.2f} edge={np.mean(edge):.2f} motion={np.mean(mot):.2f} mflick={np.mean(mf):.2f} mwarp={np.mean(mw):.2f} mlong={np.mean(ml) if ml else float('nan'):.2f} sflick={np.mean(sf):.2f}')

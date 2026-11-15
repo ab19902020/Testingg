@@ -219,3 +219,44 @@ Extra cost: about 13 ms per frame on the desktop (not measured on the phone).
 Not re-run for 1.3.0: the emulator device suite (no app-side code changed; core unit tests 7/7
 and both release builds pass). Remaining visible faults: the model itself still tints some flat
 backgrounds unevenly and can pick muted colours for small moving objects.
+
+## 10. Version 1.4.0: colour consistency (phone feedback: outfits change colour on fast-moving people)
+New metric in `tools/evaluate.py`: **mlong**, the colour drift of things that have moved, tracked
+with optical flow on the colour original for up to 12 frames. Real colour footage scores about 1.0.
+
+Changes (all in `core/`):
+* Colour memory strength raised: an established colour now outweighs the model's fresh guess
+  9:1 per two frames (was about 2:1), and is normalised so Best, Balanced and Fast hold colour
+  equally long. A wrong first guess therefore also takes longer to correct (about ten frames of
+  consistent disagreement).
+* History search for untracked pixels now matches on brightness and surroundings instead of exact
+  shape, so it survives limbs changing shape.
+* Shot memory: the last 6 shots are remembered; when the picture cuts back to one of them, its
+  colours are resumed instead of re-guessed.
+
+Measured (desktop, Balanced unless stated; lower is better):
+
+| Clip | Version | Error | Near edges | Moving areas | mlong (drift) | Static flicker |
+|---|---|---|---|---|---|---|
+| Pedestrians | per-frame AI only | 9.52 | 9.33 | 6.82 | 3.23 | 0.82 |
+| | 1.2.1 | 9.42 | 9.19 | 6.36 | 1.88 | 0.31 |
+| | 1.3.0 | 9.27 | 8.98 | 6.12 | 1.70 | 0.32 |
+| | 1.4.0 | 9.12 | 8.85 | 5.91 | 0.95 | 0.15 |
+| | 1.4.0 Best / Fast | 9.12 / 9.14 | | 6.02 / 5.89 | 1.09 / 0.91 | 0.14 / 0.18 |
+| | colour original | | | | 1.03 | |
+| Megamind | 1.2.1 | 5.71 | 8.59 | 7.49 | 1.69 | 0.31 |
+| | 1.3.0 | 5.63 | 8.50 | 7.46 | 1.62 | 0.31 |
+| | 1.4.0 | 5.44 | 8.16 | 7.27 | 1.02 | 0.19 |
+| | colour original | | | | 1.02 | |
+
+Shot memory on Megamind (cuts woman→man→woman→man close-up): the cut back to the woman is
+recognised and resumed (match 0.66); the close-up of the man, a different framing, is correctly
+treated as a new shot after the match threshold was raised from 0.5 to 0.62 (it scored 0.59 and
+was wrongly resumed at 0.5). This threshold rests on one clip. See `samples/shot_memory_1.4.0.jpg`.
+
+Known remaining case: a very small, fast walker at 10 frames/s still changes jeans colour once,
+just after entering the frame (his legs' brightness matches the pavement, so the history search
+finds pavement). Mean saturation is about 2% lower than 1.3.0.
+Unit tests: 9/9 (two new: an established colour resists a contrary guess but yields to a
+persistent one; a returning shot resumes its colours). Emulator suite not re-run (no app code changed
+apart from one settings description).

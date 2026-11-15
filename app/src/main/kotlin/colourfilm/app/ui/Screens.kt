@@ -275,7 +275,7 @@ private fun AdvancedOptions(
         Text("Colour stability", fontSize = 15.sp)
         val stab = listOf(ColouriseSettings.Stability.LIGHT, ColouriseSettings.Stability.STANDARD, ColouriseSettings.Stability.STRONG)
         Choice(listOf("Light", "Standard", "Strong"), stab.indexOf(s.stability).coerceAtLeast(0)) { onChange(s.copy(stability = stab[it])) }
-        Text("How firmly colours are held steady along tracked motion. Stronger reduces flicker; lighter reacts faster to genuine changes.",
+        Text("How firmly a person or object keeps the colour it was first given as it moves. Stronger: outfits change colour less. Lighter: reacts faster if the first guess was wrong.",
             color = Muted, fontSize = 13.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
