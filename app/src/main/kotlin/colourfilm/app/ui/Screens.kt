@@ -233,7 +233,21 @@ fun ReviewScreen(vm: AppViewModel, info: VideoInfo, pad: PaddingValues) {
         if (modelState !is ModelManager.State.Ready && !vm.models.bundled) Notice(
             "This build doesn't include the AI model, so first use downloads it (206 MB). Your video stays on this phone.", Muted)
 
-        BigButton("Colourise", Icons.Filled.AutoAwesome, enabled = info.canProcess) { player.pause(); vm.start(info) }
+        Card {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Restore picture", fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                    Text("For old film: steadies flicker, restores faded contrast, reduces grain, removes dust specks and sharpens slightly. " +
+                        "Clean modern video is left almost unchanged.", color = Muted, fontSize = 13.sp, lineHeight = 18.sp)
+                }
+                Switch(settings.restores, { on ->
+                    val d = ColouriseSettings()
+                    vm.settings.value = if (on) settings.copy(deflicker = d.deflicker, autoContrast = d.autoContrast, grain = d.grain, dust = d.dust, sharpen = d.sharpen)
+                    else settings.withoutRestoration()
+                })
+            }
+        }
+        BigButton(if (settings.restores) "Restore & colourise" else "Colourise", Icons.Filled.AutoAwesome, enabled = info.canProcess) { player.pause(); vm.start(info) }
         var posUs by remember { mutableLongStateOf(0L) }
         LaunchedEffect(player) { while (true) { posUs = player.currentPosition * 1000; kotlinx.coroutines.delay(400) } }
         if (info.durationUs > 12_000_000) SecondaryButton("Try a 5-second preview from ${formatTime(posUs)}",
@@ -277,6 +291,17 @@ private fun AdvancedOptions(
         Choice(listOf("Light", "Standard", "Strong"), stab.indexOf(s.stability).coerceAtLeast(0)) { onChange(s.copy(stability = stab[it])) }
         Text("How firmly a person or object keeps the colour it was first given as it moves. Stronger: outfits change colour less. Lighter: reacts faster if the first guess was wrong.",
             color = Muted, fontSize = 13.sp)
+        Text("Restoration", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        ToggleRow("Steady flicker", "Evens out brightness pumping between frames.", s.deflicker) { onChange(s.copy(deflicker = it)) }
+        ToggleRow("Restore contrast", "Only acts when blacks have faded to grey.", s.autoContrast) { onChange(s.copy(autoContrast = it)) }
+        Text("Grain reduction", fontSize = 15.sp)
+        Choice(listOf("Off", "Light", "Strong"), s.grain.ordinal) { onChange(s.copy(grain = ColouriseSettings.Grain.entries[it])) }
+        Text("Averages each point with the same point in the previous frame where nothing moved. Adapts to how grainy the film is.",
+            color = Muted, fontSize = 13.sp)
+        ToggleRow("Remove dust specks", "Small spots that appear for a single frame in an otherwise still area. Scratches that stay in place are not removed.",
+            s.dust) { onChange(s.copy(dust = it)) }
+        ToggleRow("Sharpen", "Light sharpening of clear edges.", s.sharpen) { onChange(s.copy(sharpen = it)) }
+        Text("Colour", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Edge-aware colour", fontSize = 15.sp)
@@ -288,6 +313,17 @@ private fun AdvancedOptions(
             Text("Keep original sound", fontSize = 15.sp, modifier = Modifier.weight(1f))
             Switch(audio, onAudio)
         }
+    }
+}
+
+@Composable
+private fun ToggleRow(title: String, detail: String, value: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp)
+            Text(detail, color = Muted, fontSize = 13.sp, lineHeight = 17.sp)
+        }
+        Switch(value, onChange)
     }
 }
 

@@ -77,6 +77,9 @@ class FrameProcessor(
         composeNanos += System.nanoTime() - t3
     }
 
+    /** Call before feeding a new, separately encoded stretch of frames: drops any frame still buffered. */
+    fun startSegment() { dust.reset() }
+
     /** Clears all history (colour, shots, restoration). */
     fun reset() { temporal.reset(); dust.reset(); enhancer.reset() }
     fun exportState() = temporal.exportState()

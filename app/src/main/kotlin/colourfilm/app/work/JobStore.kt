@@ -43,6 +43,8 @@ data class Job(
         put("startUs", startUs); put("endUs", endUs); put("segmentUs", segmentUs)
         put("intensity", settings.intensity.toDouble()); put("look", settings.look.name); put("speed", settings.speed.name)
         put("stability", settings.stability.name); put("edgeRefine", settings.edgeRefine)
+        put("deflicker", settings.deflicker); put("autoContrast", settings.autoContrast); put("grain", settings.grain.name)
+        put("dust", settings.dust); put("sharpen", settings.sharpen)
         put("preview", preview); put("includeAudio", includeAudio); put("status", status.name)
         put("segments", JSONArray().apply {
             segments.forEach { put(JSONObject().put("i", it.index).put("n", it.frames).put("f", it.firstPtsUs).put("l", it.lastPtsUs)) }
@@ -63,6 +65,10 @@ data class Job(
                 speed = ColouriseSettings.Speed.valueOf(o.getString("speed")),
                 stability = ColouriseSettings.Stability.valueOf(o.getString("stability")),
                 edgeRefine = o.getBoolean("edgeRefine"),
+                // Jobs saved before restoration existed were rendered without it.
+                deflicker = o.optBoolean("deflicker", false), autoContrast = o.optBoolean("autoContrast", false),
+                grain = ColouriseSettings.Grain.valueOf(o.optString("grain", "OFF")),
+                dust = o.optBoolean("dust", false), sharpen = o.optBoolean("sharpen", false),
             ),
             preview = o.getBoolean("preview"), includeAudio = o.optBoolean("includeAudio", true),
             status = JobStatus.valueOf(o.getString("status")),

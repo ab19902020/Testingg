@@ -174,7 +174,8 @@ class LumaEnhancer(
         val sx = width.toFloat() / grid; val sy = height.toFloat() / grid
         val t1 = 1.6f * sigma + 2f      // differences up to here are treated as grain
         val t2 = 3.5f * sigma + 5f      // beyond this the picture really changed
-        val kMax = strength.blend
+        // Heavier grain gets a stronger blend (up to +0.2), since there is more to remove.
+        val kMax = (strength.blend + 0.2f * ((sigma - 3f) / 5f).coerceIn(0f, 1f)).coerceAtMost(0.85f)
         // weight table by |local mean difference| * 4
         val wLut = FloatArray(256 * 4) { i ->
             val d = i / 4f
@@ -227,6 +228,8 @@ class LumaEnhancer(
     private fun sharpen(y: ByteArray, off: Int, stride: Int) {
         for (ry in 0 until height) System.arraycopy(y, off + ry * stride, work, ry * width, width)
         val amount = SHARPEN_AMOUNT
+        // On grainy footage only clear edges are sharpened, so grain is not brought back.
+        val dead = maxOf(SHARPEN_DEADZONE, 1.1f * sigma * (1f - settings.grain.blend))
         parallel.rows(height) { r0, r1 ->
             for (yy in maxOf(1, r0) until minOf(height - 1, r1)) {
                 val o = off + yy * stride
@@ -239,8 +242,8 @@ class LumaEnhancer(
                         (work[w0 + xx + width - 1].toInt() and 0xFF) + (work[w0 + xx + width + 1].toInt() and 0xFF) + c * 4
                     val hp = c - blur / 16f
                     val a = abs(hp)
-                    if (a > SHARPEN_DEADZONE) {
-                        val v = c + amount * (hp - (if (hp > 0) SHARPEN_DEADZONE else -SHARPEN_DEADZONE))
+                    if (a > dead) {
+                        val v = c + amount * (hp - (if (hp > 0) dead else -dead))
                         y[o + xx] = (v + 0.5f).toInt().coerceIn(black, white).toByte()
                     }
                 }
@@ -257,7 +260,7 @@ class LumaEnhancer(
         /** Black point must sit at least this many codes above black before contrast is touched. */
         const val MIN_BLACK_LIFT = 10f
         const val CONTRAST_STRENGTH = 0.85f
-        const val SHARPEN_AMOUNT = 0.6f
+        const val SHARPEN_AMOUNT = 0.4f
         const val SHARPEN_DEADZONE = 1.5f
     }
 }

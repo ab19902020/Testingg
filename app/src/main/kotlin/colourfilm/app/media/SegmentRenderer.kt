@@ -40,8 +40,6 @@ class SegmentRenderer(
     private val processor = FrameProcessor(outW, outH, info.colour, model, settings, parallel)
     private val yBuf = ByteArray(outW * outH)
     private var srcBuf = ByteArray(0)
-    private val uBuf = ByteArray((outW / 2) * (outH / 2))
-    private val vBuf = ByteArray((outW / 2) * (outH / 2))
     val stats get() = processor.stats
     private var segmentsStarted = 0
     private fun crumb(text: String) { if (segmentsStarted <= 1 || text.startsWith("segment")) colourfilm.app.CrashReporter.breadcrumb(text) }
@@ -56,6 +54,7 @@ class SegmentRenderer(
         isCancelled: () -> Boolean, onFrame: (Long) -> Unit,
     ): SegmentResult {
         processor.importState(restoreState)
+        processor.startSegment()
         segmentsStarted++
         val ex = MediaExtractor()
         var dec: MediaCodec? = null
@@ -132,6 +131,28 @@ class SegmentRenderer(
                 }
             }
 
+            val pending = ArrayDeque<Long>()
+            /** Sends the processor's finished frame to the encoder with its original timestamp. */
+            fun emit(pts: Long) {
+                if (frames == 0) crumb("first frame finished, encoding")
+                while (true) {
+                    val ei = enc.dequeueInputBuffer(10_000)
+                    if (ei >= 0) {
+                        val img = enc.getInputImage(ei)
+                        val size = if (img != null) { writeImage(img); outW * outH * 3 / 2 } else writeBuffer(enc.getInputBuffer(ei)!!, enc.inputFormat)
+                        enc.queueInputBuffer(ei, 0, size, pts, 0)
+                        break
+                    }
+                    drainEncoder(0)
+                }
+                if (firstPts < 0) firstPts = pts
+                lastPts = pts
+                frames++
+                if (frames == 1) crumb("first frame queued to encoder")
+                onFrame(pts)
+                drainEncoder(0)
+            }
+
             while (!decodeDone) {
                 if (isCancelled()) throw CancellationException("cancelled")
                 if (!inputDone) {
@@ -157,31 +178,16 @@ class SegmentRenderer(
                     if (frames == 0) crumb("first frame decoded, reading")
                     readLuma(dec, oIdx, decOutFmt ?: dec.outputFormat)
                     dec.releaseOutputBuffer(oIdx, false)
-                    if (frames == 0) crumb("first frame read, colourising")
-                    processor.process(yBuf, 0, outW, uBuf, vBuf)
-                    if (frames == 0) crumb("first frame colourised, encoding")
-                    // hand the frame to the encoder
-                    while (true) {
-                        val ei = enc.dequeueInputBuffer(10_000)
-                        if (ei >= 0) {
-                            val img = enc.getInputImage(ei)
-                            val size = if (img != null) { writeImage(img); outW * outH * 3 / 2 } else writeBuffer(enc.getInputBuffer(ei)!!, enc.inputFormat)
-                            enc.queueInputBuffer(ei, 0, size, pts, 0)
-                            break
-                        }
-                        drainEncoder(0)
-                    }
-                    if (firstPts < 0) firstPts = pts
-                    lastPts = pts
-                    frames++
-                    if (frames == 1) crumb("first frame queued to encoder")
-                    onFrame(pts)
-                    drainEncoder(0)
+                    if (frames == 0 && pending.isEmpty()) crumb("first frame read, restoring/colourising")
+                    pending.addLast(pts)
+                    // With dust removal on, output runs one frame behind (it needs the next frame).
+                    if (processor.push(yBuf, 0, outW)) emit(pending.removeFirst())
                 } else {
                     dec.releaseOutputBuffer(oIdx, false)
                 }
                 if (eos || pts >= endUs) decodeDone = true
             }
+            while (pending.isNotEmpty() && processor.flush()) emit(pending.removeFirst())
             if (frames > 0) {
                 sendEncoderEos()
                 while (!encDone) drainEncoder(10_000)
@@ -317,13 +323,13 @@ class SegmentRenderer(
         }
     }
 
-    // ---- yBuf/uBuf/vBuf -> encoder ----
+    // ---- processor.outY/processor.outU/processor.outV -> encoder ----
 
     private fun writeImage(img: Image) {
         val cw = outW / 2; val ch = outH / 2
-        writePlane(img.planes[0], yBuf, outW, outH)
-        writePlane(img.planes[1], uBuf, cw, ch)
-        writePlane(img.planes[2], vBuf, cw, ch)
+        writePlane(img.planes[0], processor.outY, outW, outH)
+        writePlane(img.planes[1], processor.outU, cw, ch)
+        writePlane(img.planes[2], processor.outV, cw, ch)
     }
 
     private fun writePlane(p: Image.Plane, src: ByteArray, w: Int, h: Int) {
@@ -345,19 +351,19 @@ class SegmentRenderer(
         val stride = if (fmt.containsKey(MediaFormat.KEY_STRIDE)) fmt.getInteger(MediaFormat.KEY_STRIDE) else outW
         val slice = if (fmt.containsKey(MediaFormat.KEY_SLICE_HEIGHT)) fmt.getInteger(MediaFormat.KEY_SLICE_HEIGHT) else outH
         buf.clear()
-        for (y in 0 until outH) { buf.position(y * stride); buf.put(yBuf, y * outW, outW) }
+        for (y in 0 until outH) { buf.position(y * stride); buf.put(processor.outY, y * outW, outW) }
         val cw = outW / 2; val ch = outH / 2
         val cBase = stride * slice
         if (cf == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar) {
             for (y in 0 until ch) for (x in 0 until cw) {
-                buf.put(cBase + y * stride + 2 * x, uBuf[y * cw + x]); buf.put(cBase + y * stride + 2 * x + 1, vBuf[y * cw + x])
+                buf.put(cBase + y * stride + 2 * x, processor.outU[y * cw + x]); buf.put(cBase + y * stride + 2 * x + 1, processor.outV[y * cw + x])
             }
             return cBase + stride * ch
         }
         val cs = stride / 2
-        for (y in 0 until ch) { buf.position(cBase + y * cs); buf.put(uBuf, y * cw, cw) }
+        for (y in 0 until ch) { buf.position(cBase + y * cs); buf.put(processor.outU, y * cw, cw) }
         val vBase = cBase + cs * (slice / 2)
-        for (y in 0 until ch) { buf.position(vBase + y * cs); buf.put(vBuf, y * cw, cw) }
+        for (y in 0 until ch) { buf.position(vBase + y * cs); buf.put(processor.outV, y * cw, cw) }
         return vBase + cs * ch
     }
 
