@@ -56,3 +56,24 @@ odd colours on small objects (an orange stripe on a grey lamp post).
 | Qualcomm QNN runtime libraries | Qualcomm "AI Stack License" | bundled in the Snapdragon APK only. The licence allows use in your own applications but not standalone redistribution of the libraries. Fine for personal use; review before publishing the app. |
 | AndroidX / Compose / Media3 | Apache-2.0 | bundled |
 | Probe image (`assets/probe_grey_256.bin`) | OpenCV sample `building.jpg` (OpenCV samples licence) | used only to compare NPU vs CPU output |
+
+## Frame-rate increase: engine comparison (v1.5.0)
+
+Two candidates were benchmarked on the desktop by dropping every other frame of a clip,
+re-creating it and comparing with the real frame (`tools/interp_bench.py`, `tools/interp_metrics.py`).
+
+| Method | Megamind 720×528 (12→24 fps) | Pedestrians 768×576 (5→10 fps) | Time per new frame (4 vCPU) |
+|---|---|---|---|
+| Plain cross-fade | 33.9–34.5 dB | 27.9–29.1 dB | negligible |
+| RIFE v4.9 ONNX (`yuvraj108c/rife-onnx`, `rife49_ensemble_True_scale_1_sim.onnx`, sha256 `76e4cef9…ac6f`; RIFE is MIT) | 40.2 dB | 30.5 dB | 1,360 ms |
+| RIFE at half resolution, upscaled | 37.9 dB | 27.4 dB | 450 ms |
+| OpenCV DIS optical flow, bidirectional warp (reference for classical methods) | 39.0 dB | 29.9 dB | 75 ms |
+| **ColourFilm `FrameInterpolator` (chosen)** | **38.5 dB** | **30.8 dB** | **67–84 ms** |
+
+(The cross-fade range covers the two scripts' slightly different frame sets; the ColourFilm
+figures include an H.264 encode at CRF 8, the RIFE and DIS figures do not.)
+
+RIFE is the better interpolator on the easier clip, but at roughly 18× the cost at standard
+definition, and several seconds per frame at 1080p on a CPU, it is not practical on a phone
+without the NPU, which remains untested. The built-in motion-compensated method was chosen;
+RIFE is not shipped. This can be revisited if the NPU path is proven on a real device.

@@ -11,22 +11,31 @@ using AI (DDColor). It runs on the phone, and videos are never uploaded.
 ## Install
 The AI model is built into the APK, so nothing is downloaded and the app works offline.
 
-* `ColourFilm-snapdragon-1.4.0.apk` (≈275 MB, arm64): for your Honor Magic 6 Pro and other Snapdragon
+* `ColourFilm-snapdragon-1.5.0.apk` (≈275 MB, arm64): for your Honor Magic 6 Pro and other Snapdragon
   phones. It uses the CPU by default. The Qualcomm AI chip (NPU) is an opt-in setting on the Home
   screen, because it could not be tested on a real phone; when switched on it is first tested in a
   separate process.
-* `ColourFilm-universal-1.4.0.apk` (≈261 MB): CPU only, for any Android 10+ phone.
+* `ColourFilm-universal-1.5.0.apk` (≈261 MB): CPU only, for any Android 10+ phone.
 
 The APKs are too large for git (GitHub's limit is 100 MB per file). They are built by
 `./gradlew :app:assembleSnapdragonRelease` (see `docs/BUILDING.md`) and by the GitHub Actions
 workflow on every push (artifact `colourfilm-apks`). `dist/SHA256SUMS` lists the checksums of the
-1.4.0 builds.
+1.5.0 builds.
 
 The first Colourise unpacks the model once (under a minute, about 230 MB of storage).
 
 If the app ever stops unexpectedly, the next launch shows a report on the Home screen, and
 switches off whatever risky component was in use (first the AI chip, then hardware video codecs).
 Home → Settings always offers "Copy diagnostics". Nothing is sent automatically.
+
+## What it does to a video
+1. **Restores the picture** (optional, on by default): steadies exposure flicker, restores faded
+   contrast, reduces film grain, removes single-frame dust specks, sharpens lightly.
+2. **Colourises** it with AI, keeping each person's and object's colour steady as they move.
+3. **Smooths motion** (Auto: only for film below 20 fps): creates in-between frames, e.g. 16 → 32 fps.
+
+Restoration and frame-rate increase are classical image processing written for this app (no extra
+AI model, nothing to download), so they run on the phone's normal processor.
 
 ## How it works
 1. **Check**: reads the real container/codec/rotation/audio info with Android's media APIs.
