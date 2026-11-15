@@ -34,13 +34,20 @@ fun main(args: Array<String>) {
         }
     }
     val flags = args.toSet()
-    val settings = ColouriseSettings(
+    val greyOut = "--grey" in flags   // write restored black-and-white (for measuring restoration)
+    val base = ColouriseSettings(
         intensity = opt["--intensity"]?.toFloat() ?: 1f,
         look = ColouriseSettings.Look.valueOf(opt["--look"] ?: "NATURAL"),
         speed = ColouriseSettings.Speed.valueOf(opt["--speed"] ?: "BALANCED"),
         stability = ColouriseSettings.Stability.valueOf(opt["--stability"] ?: "STANDARD"),
         edgeRefine = "--no-refine" !in flags,
+        deflicker = "--no-deflicker" !in flags,
+        autoContrast = "--no-contrast" !in flags,
+        grain = ColouriseSettings.Grain.valueOf(opt["--grain"] ?: "LIGHT"),
+        dust = "--no-dust" !in flags,
+        sharpen = "--no-sharpen" !in flags,
     )
+    val settings = if ("--no-restore" in flags) base.withoutRestoration() else base
     colourfilm.core.TemporalColouriser.enableSearch = "--no-search" !in flags
     colourfilm.core.TemporalColouriser.enableClean = "--no-clean" !in flags
     opt["--alpha"]?.let { colourfilm.core.TemporalColouriser.alphaOverride = it.toFloat() }
@@ -62,6 +69,7 @@ fun main(args: Array<String>) {
     val parallel = Parallel(opt["--threads"]?.toInt() ?: 4)
     val colour = VideoColour.defaultFor(h)
     val proc = FrameProcessor(w, h, colour, timed, settings, parallel)
+    val neutral = ByteArray((w / 2) * (h / 2)) { 128.toByte() }
 
     val seek = buildList { opt["--start"]?.let { add("-ss"); add(it) } }
     val dur = buildList { opt["--dur"]?.let { add("-t"); add(it) } }
@@ -72,7 +80,7 @@ fun main(args: Array<String>) {
     else listOf("-map", "0:v")
     val enc = ProcessBuilder(listOf("ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", "${w}x$h",
         "-r", probe.fpsRational, "-i", "-") + audioArgs + dur +
-        listOf("-c:v", "libx264", "-preset", "medium", "-crf", "17", "-pix_fmt", "yuv420p",
+        listOf("-c:v", "libx264", "-preset", "medium", "-crf", opt["--crf"] ?: "17", "-pix_fmt", "yuv420p",
             "-color_primaries", if (h >= 720) "bt709" else "smpte170m", "-colorspace", if (h >= 720) "bt709" else "smpte170m",
             "-color_trc", if (h >= 720) "bt709" else "smpte170m",
             "-movflags", "+faststart", "-shortest", output))
@@ -80,19 +88,21 @@ fun main(args: Array<String>) {
 
     val ySize = w * h; val cSize = (w / 2) * (h / 2)
     val y = ByteArray(ySize); val u = ByteArray(cSize); val v = ByteArray(cSize)
-    val outU = ByteArray(cSize); val outV = ByteArray(cSize)
     val din = DataInputStream(dec.inputStream.buffered(1 shl 20))
     val out = enc.outputStream.buffered(1 shl 20)
     var frames = 0
     val st0 = proc.stats
     val start = System.nanoTime()
-    while (readFully(din, y) && readFully(din, u) && readFully(din, v)) {
-        proc.process(y, 0, w, outU, outV)
-        out.write(y); out.write(outU); out.write(outV)
+    fun emit() {
+        out.write(proc.outY); out.write(if (greyOut) neutral else proc.outU); out.write(if (greyOut) neutral else proc.outV)
         if ("--trace" in flags) println("f=$frames conf=%.3f hist=%.3f model=${st0.lastModelRun} cut=${st0.lastCut}".format(st0.lastMeanConfidence, st0.lastHistDistance))
         frames++
         if (frames % 50 == 0) print("\rframes $frames")
     }
+    while (readFully(din, y) && readFully(din, u) && readFully(din, v)) {
+        if (proc.push(y, 0, w)) emit()
+    }
+    while (proc.flush()) emit()
     out.close()
     dec.waitFor(); enc.waitFor()
     val wall = (System.nanoTime() - start) / 1e9
@@ -101,6 +111,8 @@ fun main(args: Array<String>) {
     println("frames=$frames wall=%.1fs (%.2f fps) modelRuns=${st.modelRuns} cuts=${st.cuts} shotsResumed=${st.shotsResumed}".format(wall, frames / wall))
     println("per frame: model %.1f ms/run, analysis(total incl. model) %.1f ms, compose %.1f ms".format(
         timed.nanos / 1e6 / maxOf(1, timed.runs), proc.analysisNanos / 1e6 / maxOf(1, frames), proc.composeNanos / 1e6 / maxOf(1, frames)))
+    println("restore %.1f ms/frame; dust spots removed=${proc.dustStats.spotsRemoved} (${proc.dustStats.pixelsRepaired} px); noise sigma=%.1f; last gain=%.2f".format(
+        proc.restoreNanos / 1e6 / maxOf(1, frames), proc.enhancerStats.lastNoiseSigma, proc.enhancerStats.lastGain))
     println("encoder exit=${enc.exitValue()} -> $output")
     parallel.close(); model.close()
 }

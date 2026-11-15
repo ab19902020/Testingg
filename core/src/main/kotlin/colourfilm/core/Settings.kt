@@ -15,7 +15,27 @@ data class ColouriseSettings(
     val stability: Stability = Stability.STANDARD,
     /** Edge-aware refinement that snaps colour edges to the full-resolution picture. */
     val edgeRefine: Boolean = true,
+    // ---- picture restoration (applied to the black-and-white image before colouring) ----
+    /** Remove exposure flicker (brightness pumping from frame to frame). */
+    val deflicker: Boolean = true,
+    /** Restore faded contrast (grey blacks, dull whites), within limits. */
+    val autoContrast: Boolean = true,
+    /** Film grain / noise reduction strength. */
+    val grain: Grain = Grain.LIGHT,
+    /** Remove single-frame dust and blotches (delays processing by one frame). */
+    val dust: Boolean = true,
+    /** Light sharpening after grain reduction. */
+    val sharpen: Boolean = true,
 ) {
+    /** blend = how much of the motion-matched previous frame is mixed in where the picture is unchanged. */
+    enum class Grain(val blend: Float) { OFF(0f), LIGHT(0.5f), STRONG(0.72f) }
+
+    /** True when any restoration step is switched on. */
+    val restores: Boolean get() = deflicker || autoContrast || grain != Grain.OFF || dust || sharpen
+
+    /** The same settings with every restoration step switched off. */
+    fun withoutRestoration() = copy(deflicker = false, autoContrast = false, grain = Grain.OFF, dust = false, sharpen = false)
+
     enum class Look(val saturation: Float) { NATURAL(1.0f), VIVID(1.3f) }
 
     /** maxStride = longest run of frames between model runs (1 = every frame). */
@@ -35,5 +55,6 @@ data class ColouriseSettings(
 
     /** Stable textual fingerprint (used for segment reuse decisions). */
     fun fingerprint(): String =
-        "i=${"%.2f".format(java.util.Locale.ROOT, intensity)};l=$look;s=$speed;t=$stability;e=$edgeRefine"
+        "i=${"%.2f".format(java.util.Locale.ROOT, intensity)};l=$look;s=$speed;t=$stability;e=$edgeRefine" +
+            ";r=${if (deflicker) 1 else 0}${if (autoContrast) 1 else 0}${grain.ordinal}${if (dust) 1 else 0}${if (sharpen) 1 else 0}"
 }

@@ -45,6 +45,11 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
     /** Result of the most recent [next] call (for progress statistics and tests). */
     var lastModelRun = false; private set
     var lastCut = false; private set
+    /** False when this frame has no usable motion link to the previous one (first frame, cut, resumed shot). */
+    var lastHistoryValid = false; private set
+    /** Backward motion of the last frame on the analysis grid (valid when [lastHistoryValid]). */
+    val motionX: FloatArray get() = flowX
+    val motionY: FloatArray get() = flowY
     var lastMeanConfidence = 0f; private set
     var lastHistDistance = 0f; private set
     var modelRuns = 0L; private set
@@ -132,6 +137,7 @@ class TemporalColouriser(private val model: ChromaModel, private val settings: C
         }
         if (enableClean && settings.edgeRefine) cleanChroma(outAb)
         lastModelRun = runModel
+        lastHistoryValid = hasPrev && !cut && !resumedShot
         lastCut = cut && hasPrev
 
         System.arraycopy(curNorm, 0, prevNorm, 0, n)
