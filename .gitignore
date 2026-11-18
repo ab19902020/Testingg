@@ -1,0 +1,6 @@
+feat.npz
+build/
+*.mp4
+still_*.jpg
+__pycache__/
+words.json

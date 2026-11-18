@@ -1,0 +1,8 @@
+numpy
+scipy
+opencv-python-headless
+pillow
+# for perfect lyric timing (pick one; stable-ts is best because it aligns the known lyrics):
+# stable-ts
+# faster-whisper
+# openai-whisper

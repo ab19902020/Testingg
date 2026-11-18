@@ -1,0 +1,338 @@
+{
+ "source": "estimate (no Whisper yet) - run align_lyrics.py to replace",
+ "sections": {
+  "chorus1": 0.0,
+  "verse1": 16.233,
+  "chorus2": 48.233,
+  "verse2": 64.233,
+  "chorus3": 96.233,
+  "inst": 112.233,
+  "bridge": 122.233,
+  "build": 128.233,
+  "final": 136.233,
+  "outro": 152.233,
+  "lastchorus": 162.233
+ },
+ "lines": [
+  {
+   "section": "chorus1",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 0.233,
+   "end": 4.233
+  },
+  {
+   "section": "chorus1",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 4.233,
+   "end": 8.233
+  },
+  {
+   "section": "chorus1",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 8.233,
+   "end": 12.233
+  },
+  {
+   "section": "chorus1",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 12.233,
+   "end": 16.233
+  },
+  {
+   "section": "verse1",
+   "text": "Same wet seats in the Stretford End",
+   "kind": "verse",
+   "card": null,
+   "start": 16.233,
+   "end": 20.233
+  },
+  {
+   "section": "verse1",
+   "text": "Same old lines from the same old friends",
+   "kind": "verse",
+   "card": null,
+   "start": 20.233,
+   "end": 24.233
+  },
+  {
+   "section": "verse1",
+   "text": "Another scarf above the door",
+   "kind": "verse",
+   "card": null,
+   "start": 24.233,
+   "end": 28.233
+  },
+  {
+   "section": "verse1",
+   "text": "We've heard it all before",
+   "kind": "verse",
+   "card": null,
+   "start": 28.233,
+   "end": 32.233000000000004
+  },
+  {
+   "section": "verse1",
+   "text": "Now we're pressing from the front",
+   "kind": "verse",
+   "card": null,
+   "start": 32.233000000000004,
+   "end": 36.233000000000004
+  },
+  {
+   "section": "verse1",
+   "text": "Lose the ball, we don't give up",
+   "kind": "verse",
+   "card": null,
+   "start": 36.233000000000004,
+   "end": 40.233000000000004
+  },
+  {
+   "section": "verse1",
+   "text": "One goes in, the others move",
+   "kind": "verse",
+   "card": null,
+   "start": 40.233000000000004,
+   "end": 44.233000000000004
+  },
+  {
+   "section": "verse1",
+   "text": "Red shirts with something to prove",
+   "kind": "verse",
+   "card": null,
+   "start": 44.233000000000004,
+   "end": 48.233000000000004
+  },
+  {
+   "section": "chorus2",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 48.233,
+   "end": 52.233
+  },
+  {
+   "section": "chorus2",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 52.233,
+   "end": 56.233
+  },
+  {
+   "section": "chorus2",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 56.233,
+   "end": 60.233
+  },
+  {
+   "section": "chorus2",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 60.233,
+   "end": 64.233
+  },
+  {
+   "section": "verse2",
+   "text": "Collar up in the Old Trafford rain",
+   "kind": "verse",
+   "card": null,
+   "start": 64.233,
+   "end": 68.233
+  },
+  {
+   "section": "verse2",
+   "text": "Arms out on the touchline again",
+   "kind": "verse",
+   "card": null,
+   "start": 68.233,
+   "end": 72.233
+  },
+  {
+   "section": "verse2",
+   "text": "Tells the kid from Carrington, \"Take your man\"",
+   "kind": "verse",
+   "card": null,
+   "start": 72.233,
+   "end": 76.233
+  },
+  {
+   "section": "verse2",
+   "text": "Loses it, wins it back again",
+   "kind": "verse",
+   "card": null,
+   "start": 76.233,
+   "end": 80.233
+  },
+  {
+   "section": "verse2",
+   "text": "No one coasting on a name",
+   "kind": "verse",
+   "card": null,
+   "start": 80.233,
+   "end": 84.233
+  },
+  {
+   "section": "verse2",
+   "text": "No one bigger than United's name",
+   "kind": "verse",
+   "card": null,
+   "start": 84.233,
+   "end": 88.233
+  },
+  {
+   "section": "verse2",
+   "text": "We don't need another speech",
+   "kind": "verse",
+   "card": null,
+   "start": 88.233,
+   "end": 92.233
+  },
+  {
+   "section": "verse2",
+   "text": "Just a side that earns its keep",
+   "kind": "verse",
+   "card": null,
+   "start": 92.233,
+   "end": 96.233
+  },
+  {
+   "section": "chorus3",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 96.233,
+   "end": 100.233
+  },
+  {
+   "section": "chorus3",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 100.233,
+   "end": 104.233
+  },
+  {
+   "section": "chorus3",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 104.233,
+   "end": 108.233
+  },
+  {
+   "section": "chorus3",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 108.233,
+   "end": 112.233
+  },
+  {
+   "section": "bridge",
+   "text": "Down Sir Matt Busby Way",
+   "kind": "bridge",
+   "card": null,
+   "start": 122.233,
+   "end": 125.233
+  },
+  {
+   "section": "bridge",
+   "text": "Missed the tram, still had to stay",
+   "kind": "bridge",
+   "card": null,
+   "start": 125.233,
+   "end": 128.233
+  },
+  {
+   "section": "bridge",
+   "text": "Said I wouldn't get carried away",
+   "kind": "bridge",
+   "card": null,
+   "start": 128.233,
+   "end": 131.233
+  },
+  {
+   "section": "bridge",
+   "text": "Then I watched us play",
+   "kind": "bridge",
+   "card": null,
+   "start": 131.233,
+   "end": 134.233
+  },
+  {
+   "section": "final",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 136.233,
+   "end": 140.233
+  },
+  {
+   "section": "final",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 140.233,
+   "end": 144.233
+  },
+  {
+   "section": "final",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 144.233,
+   "end": 148.233
+  },
+  {
+   "section": "final",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 148.233,
+   "end": 152.233
+  },
+  {
+   "section": "outro",
+   "text": "Said I wouldn't get carried away",
+   "kind": "outro",
+   "card": null,
+   "start": 152.233,
+   "end": 157.233
+  },
+  {
+   "section": "outro",
+   "text": "Then I watched United play",
+   "kind": "outro",
+   "card": null,
+   "start": 157.233,
+   "end": 162.233
+  },
+  {
+   "section": "outro",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 162.233,
+   "end": 165.833
+  },
+  {
+   "section": "outro",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 165.833,
+   "end": null
+  }
+ ]
+}

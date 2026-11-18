@@ -1,0 +1,59 @@
+# One display line per row. [section] headers must stay in this order:
+# chorus1, verse1, chorus2, verse2, chorus3, bridge, final, outro
+# Lines containing "magic" or "Pochettino" in a chorus light up the seat card display.
+
+[chorus1]
+Oh, he's magic, you know
+Mauricio Pochettino
+Oh, he's magic, you know
+Mauricio Pochettino
+
+[verse1]
+Same wet seats in the Stretford End
+Same old lines from the same old friends
+Another scarf above the door
+We've heard it all before
+Now we're pressing from the front
+Lose the ball, we don't give up
+One goes in, the others move
+Red shirts with something to prove
+
+[chorus2]
+Oh, he's magic, you know
+Mauricio Pochettino
+Oh, he's magic, you know
+Mauricio Pochettino
+
+[verse2]
+Collar up in the Old Trafford rain
+Arms out on the touchline again
+Tells the kid from Carrington, "Take your man"
+Loses it, wins it back again
+No one coasting on a name
+No one bigger than United's name
+We don't need another speech
+Just a side that earns its keep
+
+[chorus3]
+Oh, he's magic, you know
+Mauricio Pochettino
+Oh, he's magic, you know
+Mauricio Pochettino
+
+[bridge]
+Down Sir Matt Busby Way
+Missed the tram, still had to stay
+Said I wouldn't get carried away
+Then I watched us play
+
+[final]
+Oh, he's magic, you know
+Mauricio Pochettino
+Oh, he's magic, you know
+Mauricio Pochettino
+
+[outro]
+Said I wouldn't get carried away
+Then I watched United play
+Oh, he's magic, you know
+Mauricio Pochettino
