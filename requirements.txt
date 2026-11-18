@@ -1,8 +1,12 @@
+# rendering
 numpy
 scipy
 opencv-python-headless
 pillow
-# for perfect lyric timing (pick one; stable-ts is best because it aligns the known lyrics):
-# stable-ts
+librosa            # beat tracking in analyze.py (the tempo drifts, so the lights follow tracked beats)
+
+# lyric timing (align_lyrics.py) - only needed to re-time the lyrics; lyrics_timing.json is already done
+# torch and torchaudio (CPU wheels are fine: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu)
 # faster-whisper
-# openai-whisper
+# demucs             (if pip tries to downgrade torchaudio: pip install --no-deps demucs, then
+#                     pip install dora-search einops julius lameenc openunmix pyyaml tqdm safetensors sphn)

@@ -1,338 +1,1529 @@
 {
- "source": "estimate (no Whisper yet) - run align_lyrics.py to replace",
- "sections": {
-  "chorus1": 0.0,
-  "verse1": 16.233,
-  "chorus2": 48.233,
-  "verse2": 64.233,
-  "chorus3": 96.233,
-  "inst": 112.233,
-  "bridge": 122.233,
-  "build": 128.233,
-  "final": 136.233,
-  "outro": 152.233,
-  "lastchorus": 162.233
- },
+ "source": "faster-whisper large-v3 + wav2vec2 CTC forced alignment on the demucs vocal (align_lyrics.py)",
  "lines": [
   {
    "section": "chorus1",
    "text": "Oh, he's magic, you know",
    "kind": "chorus",
    "card": "MAGIC",
-   "start": 0.233,
-   "end": 4.233
+   "start": 5.273,
+   "end": 9.998,
+   "sung_end": 8.546,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Oh,",
+     5.423,
+     5.543
+    ],
+    [
+     "he's",
+     5.843,
+     6.004
+    ],
+    [
+     "magic,",
+     6.084,
+     6.704
+    ],
+    [
+     "you",
+     7.845,
+     7.985
+    ],
+    [
+     "know",
+     8.106,
+     8.546
+    ]
+   ]
   },
   {
    "section": "chorus1",
    "text": "Mauricio Pochettino",
    "kind": "chorus",
    "card": "POCHETTINO",
-   "start": 4.233,
-   "end": 8.233
+   "start": 9.998,
+   "end": 13.461,
+   "sung_end": 12.35,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Mauricio",
+     10.148,
+     11.229
+    ],
+    [
+     "Pochettino",
+     11.409,
+     12.35
+    ]
+   ]
   },
   {
    "section": "chorus1",
    "text": "Oh, he's magic, you know",
    "kind": "chorus",
    "card": "MAGIC",
-   "start": 8.233,
-   "end": 12.233
+   "start": 13.461,
+   "end": 18.106,
+   "sung_end": 17.054,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Oh,",
+     13.611,
+     13.871
+    ],
+    [
+     "he's",
+     13.951,
+     14.132
+    ],
+    [
+     "magic,",
+     14.232,
+     14.892
+    ],
+    [
+     "you",
+     15.853,
+     16.013
+    ],
+    [
+     "know",
+     16.254,
+     17.054
+    ]
+   ]
   },
   {
    "section": "chorus1",
    "text": "Mauricio Pochettino",
    "kind": "chorus",
    "card": "POCHETTINO",
-   "start": 12.233,
-   "end": 16.233
+   "start": 18.106,
+   "end": 21.938,
+   "sung_end": 20.738,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Mauricio",
+     18.256,
+     19.317
+    ],
+    [
+     "Pochettino",
+     19.497,
+     20.738
+    ]
+   ]
   },
   {
    "section": "verse1",
    "text": "Same wet seats in the Stretford End",
    "kind": "verse",
    "card": null,
-   "start": 16.233,
-   "end": 20.233
+   "start": 24.353,
+   "end": 26.374,
+   "sung_end": 26.324,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Same",
+     24.503,
+     24.763
+    ],
+    [
+     "wet",
+     24.823,
+     24.943
+    ],
+    [
+     "seats",
+     25.003,
+     25.303
+    ],
+    [
+     "in",
+     25.343,
+     25.463
+    ],
+    [
+     "the",
+     25.443,
+     25.563
+    ],
+    [
+     "Stretford",
+     25.544,
+     25.984
+    ],
+    [
+     "End",
+     26.164,
+     26.324
+    ]
+   ]
   },
   {
    "section": "verse1",
    "text": "Same old lines from the same old friends",
    "kind": "verse",
    "card": null,
-   "start": 20.233,
-   "end": 24.233
+   "start": 26.374,
+   "end": 28.376,
+   "sung_end": 28.466,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Same",
+     26.524,
+     26.725
+    ],
+    [
+     "old",
+     26.825,
+     26.945
+    ],
+    [
+     "lines",
+     26.965,
+     27.265
+    ],
+    [
+     "from",
+     27.305,
+     27.425
+    ],
+    [
+     "the",
+     27.445,
+     27.565
+    ],
+    [
+     "same",
+     27.585,
+     27.826
+    ],
+    [
+     "old",
+     27.926,
+     28.046
+    ],
+    [
+     "friends",
+     28.106,
+     28.466
+    ]
+   ]
   },
   {
    "section": "verse1",
    "text": "Another scarf above the door",
    "kind": "verse",
    "card": null,
-   "start": 24.233,
-   "end": 28.233
+   "start": 28.376,
+   "end": 30.238,
+   "sung_end": 30.088,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Another",
+     28.526,
+     28.827
+    ],
+    [
+     "scarf",
+     28.907,
+     29.307
+    ],
+    [
+     "above",
+     29.427,
+     29.708
+    ],
+    [
+     "the",
+     29.748,
+     29.868
+    ],
+    [
+     "door",
+     29.888,
+     30.088
+    ]
+   ]
   },
   {
    "section": "verse1",
    "text": "We've heard it all before",
    "kind": "verse",
    "card": null,
-   "start": 28.233,
-   "end": 32.233000000000004
+   "start": 30.238,
+   "end": 32.52,
+   "sung_end": 31.91,
+   "agreement": 1.0,
+   "words": [
+    [
+     "We've",
+     30.388,
+     30.568
+    ],
+    [
+     "heard",
+     30.648,
+     30.909
+    ],
+    [
+     "it",
+     30.989,
+     31.109
+    ],
+    [
+     "all",
+     31.129,
+     31.249
+    ],
+    [
+     "before",
+     31.289,
+     31.91
+    ]
+   ]
   },
   {
    "section": "verse1",
    "text": "Now we're pressing from the front",
    "kind": "verse",
    "card": null,
-   "start": 32.233000000000004,
-   "end": 36.233000000000004
+   "start": 32.52,
+   "end": 34.542,
+   "sung_end": 34.452,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Now",
+     32.67,
+     32.851
+    ],
+    [
+     "we're",
+     32.931,
+     33.111
+    ],
+    [
+     "pressing",
+     33.151,
+     33.591
+    ],
+    [
+     "from",
+     33.671,
+     33.852
+    ],
+    [
+     "the",
+     33.912,
+     34.032
+    ],
+    [
+     "front",
+     34.092,
+     34.452
+    ]
+   ]
   },
   {
    "section": "verse1",
    "text": "Lose the ball, we don't give up",
    "kind": "verse",
    "card": null,
-   "start": 36.233000000000004,
-   "end": 40.233000000000004
+   "start": 34.542,
+   "end": 36.684,
+   "sung_end": 36.594,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Lose",
+     34.692,
+     34.933
+    ],
+    [
+     "the",
+     34.953,
+     35.073
+    ],
+    [
+     "ball,",
+     35.073,
+     35.453
+    ],
+    [
+     "we",
+     35.473,
+     35.593
+    ],
+    [
+     "don't",
+     35.613,
+     35.813
+    ],
+    [
+     "give",
+     35.873,
+     36.234
+    ],
+    [
+     "up",
+     36.474,
+     36.594
+    ]
+   ]
   },
   {
    "section": "verse1",
    "text": "One goes in, the others move",
    "kind": "verse",
    "card": null,
-   "start": 40.233000000000004,
-   "end": 44.233000000000004
+   "start": 36.684,
+   "end": 38.346,
+   "sung_end": 38.416,
+   "agreement": 1.0,
+   "words": [
+    [
+     "One",
+     36.834,
+     36.954
+    ],
+    [
+     "goes",
+     36.995,
+     37.255
+    ],
+    [
+     "in,",
+     37.435,
+     37.555
+    ],
+    [
+     "the",
+     37.635,
+     37.755
+    ],
+    [
+     "others",
+     37.835,
+     38.036
+    ],
+    [
+     "move",
+     38.116,
+     38.416
+    ]
+   ]
   },
   {
    "section": "verse1",
    "text": "Red shirts with something to prove",
    "kind": "verse",
    "card": null,
-   "start": 44.233000000000004,
-   "end": 48.233000000000004
+   "start": 38.346,
+   "end": 42.571,
+   "sung_end": 41.359,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Red",
+     38.496,
+     38.676
+    ],
+    [
+     "shirts",
+     38.756,
+     39.016
+    ],
+    [
+     "with",
+     39.057,
+     39.177
+    ],
+    [
+     "something",
+     39.257,
+     39.637
+    ],
+    [
+     "to",
+     39.677,
+     39.797
+    ],
+    [
+     "prove",
+     39.837,
+     41.359
+    ]
+   ]
   },
   {
    "section": "chorus2",
    "text": "Oh, he's magic, you know",
    "kind": "chorus",
    "card": "MAGIC",
-   "start": 48.233,
-   "end": 52.233
+   "start": 42.571,
+   "end": 48.497,
+   "sung_end": 46.885,
+   "agreement": 0.8,
+   "words": [
+    [
+     "Oh,",
+     42.721,
+     42.841
+    ],
+    [
+     "he's",
+     44.423,
+     44.543
+    ],
+    [
+     "magic,",
+     44.603,
+     45.123
+    ],
+    [
+     "you",
+     46.325,
+     46.485
+    ],
+    [
+     "know",
+     46.625,
+     46.885
+    ]
+   ]
   },
   {
    "section": "chorus2",
    "text": "Mauricio Pochettino",
    "kind": "chorus",
    "card": "POCHETTINO",
-   "start": 52.233,
-   "end": 56.233
+   "start": 48.497,
+   "end": 51.06,
+   "sung_end": 50.989,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Mauricio",
+     48.647,
+     49.828
+    ],
+    [
+     "Pochettino",
+     49.928,
+     50.989
+    ]
+   ]
   },
   {
    "section": "chorus2",
    "text": "Oh, he's magic, you know",
    "kind": "chorus",
    "card": "MAGIC",
-   "start": 56.233,
-   "end": 60.233
+   "start": 51.06,
+   "end": 56.485,
+   "sung_end": 55.033,
+   "agreement": 0.8,
+   "words": [
+    [
+     "Oh,",
+     51.21,
+     51.59
+    ],
+    [
+     "he's",
+     52.571,
+     52.691
+    ],
+    [
+     "magic,",
+     52.751,
+     53.772
+    ],
+    [
+     "you",
+     54.213,
+     54.693
+    ],
+    [
+     "know",
+     54.773,
+     55.033
+    ]
+   ]
   },
   {
    "section": "chorus2",
    "text": "Mauricio Pochettino",
    "kind": "chorus",
    "card": "POCHETTINO",
-   "start": 60.233,
-   "end": 64.233
+   "start": 56.485,
+   "end": 60.618,
+   "sung_end": 59.418,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Mauricio",
+     56.635,
+     57.956
+    ],
+    [
+     "Pochettino",
+     58.077,
+     59.418
+    ]
+   ]
   },
   {
    "section": "verse2",
    "text": "Collar up in the Old Trafford rain",
    "kind": "verse",
    "card": null,
-   "start": 64.233,
-   "end": 68.233
+   "start": 62.432,
+   "end": 64.875,
+   "sung_end": 64.865,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Collar",
+     62.582,
+     63.123
+    ],
+    [
+     "up",
+     63.183,
+     63.303
+    ],
+    [
+     "in",
+     63.443,
+     63.563
+    ],
+    [
+     "the",
+     63.583,
+     63.703
+    ],
+    [
+     "Old",
+     63.824,
+     63.964
+    ],
+    [
+     "Trafford",
+     64.044,
+     64.484
+    ],
+    [
+     "rain",
+     64.524,
+     64.865
+    ]
+   ]
   },
   {
    "section": "verse2",
    "text": "Arms out on the touchline again",
    "kind": "verse",
    "card": null,
-   "start": 68.233,
-   "end": 72.233
+   "start": 64.875,
+   "end": 66.536,
+   "sung_end": 66.506,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Arms",
+     65.025,
+     65.185
+    ],
+    [
+     "out",
+     65.305,
+     65.425
+    ],
+    [
+     "on",
+     65.465,
+     65.585
+    ],
+    [
+     "the",
+     65.545,
+     65.665
+    ],
+    [
+     "touchline",
+     65.665,
+     66.186
+    ],
+    [
+     "again",
+     66.266,
+     66.506
+    ]
+   ]
   },
   {
    "section": "verse2",
    "text": "Tells the kid from Carrington, \"Take your man\"",
    "kind": "verse",
    "card": null,
-   "start": 72.233,
-   "end": 76.233
+   "start": 66.536,
+   "end": 68.818,
+   "sung_end": 68.768,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Tells",
+     66.686,
+     66.927
+    ],
+    [
+     "the",
+     66.967,
+     67.087
+    ],
+    [
+     "kid",
+     67.087,
+     67.267
+    ],
+    [
+     "from",
+     67.347,
+     67.567
+    ],
+    [
+     "Carrington,",
+     67.667,
+     68.148
+    ],
+    [
+     "\"Take",
+     68.268,
+     68.428
+    ],
+    [
+     "your",
+     68.468,
+     68.588
+    ],
+    [
+     "man\"",
+     68.628,
+     68.768
+    ]
+   ]
   },
   {
    "section": "verse2",
    "text": "Loses it, wins it back again",
    "kind": "verse",
    "card": null,
-   "start": 76.233,
-   "end": 80.233
+   "start": 68.818,
+   "end": 70.64,
+   "sung_end": 70.73,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Loses",
+     68.968,
+     69.269
+    ],
+    [
+     "it,",
+     69.349,
+     69.469
+    ],
+    [
+     "wins",
+     69.469,
+     69.629
+    ],
+    [
+     "it",
+     69.689,
+     69.809
+    ],
+    [
+     "back",
+     69.829,
+     70.009
+    ],
+    [
+     "again",
+     70.15,
+     70.73
+    ]
+   ]
   },
   {
    "section": "verse2",
    "text": "No one coasting on a name",
    "kind": "verse",
    "card": null,
-   "start": 80.233,
-   "end": 84.233
+   "start": 70.64,
+   "end": 72.662,
+   "sung_end": 72.392,
+   "agreement": 1.0,
+   "words": [
+    [
+     "No",
+     70.79,
+     70.91
+    ],
+    [
+     "one",
+     71.01,
+     71.13
+    ],
+    [
+     "coasting",
+     71.231,
+     71.771
+    ],
+    [
+     "on",
+     71.871,
+     71.991
+    ],
+    [
+     "a",
+     72.011,
+     72.131
+    ],
+    [
+     "name",
+     72.111,
+     72.392
+    ]
+   ]
   },
   {
    "section": "verse2",
    "text": "No one bigger than United's name",
    "kind": "verse",
    "card": null,
-   "start": 84.233,
-   "end": 88.233
+   "start": 72.662,
+   "end": 74.724,
+   "sung_end": 74.794,
+   "agreement": 1.0,
+   "words": [
+    [
+     "No",
+     72.812,
+     72.932
+    ],
+    [
+     "one",
+     73.032,
+     73.152
+    ],
+    [
+     "bigger",
+     73.292,
+     73.533
+    ],
+    [
+     "than",
+     73.573,
+     73.693
+    ],
+    [
+     "United's",
+     73.773,
+     74.233
+    ],
+    [
+     "name",
+     74.333,
+     74.794
+    ]
+   ]
   },
   {
    "section": "verse2",
    "text": "We don't need another speech",
    "kind": "verse",
    "card": null,
-   "start": 88.233,
-   "end": 92.233
+   "start": 74.724,
+   "end": 76.706,
+   "sung_end": 76.415,
+   "agreement": 1.0,
+   "words": [
+    [
+     "We",
+     74.874,
+     74.994
+    ],
+    [
+     "don't",
+     75.034,
+     75.294
+    ],
+    [
+     "need",
+     75.354,
+     75.555
+    ],
+    [
+     "another",
+     75.655,
+     75.935
+    ],
+    [
+     "speech",
+     76.015,
+     76.415
+    ]
+   ]
   },
   {
    "section": "verse2",
    "text": "Just a side that earns its keep",
    "kind": "verse",
    "card": null,
-   "start": 92.233,
-   "end": 96.233
+   "start": 76.706,
+   "end": 81.612,
+   "sung_end": 80.699,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Just",
+     76.856,
+     76.996
+    ],
+    [
+     "a",
+     77.096,
+     77.216
+    ],
+    [
+     "side",
+     77.216,
+     77.597
+    ],
+    [
+     "that",
+     77.637,
+     77.757
+    ],
+    [
+     "earns",
+     77.817,
+     78.117
+    ],
+    [
+     "its",
+     78.297,
+     78.417
+    ],
+    [
+     "keep",
+     78.497,
+     80.699
+    ]
+   ]
   },
   {
    "section": "chorus3",
    "text": "Oh, he's magic, you know",
    "kind": "chorus",
    "card": "MAGIC",
-   "start": 96.233,
-   "end": 100.233
+   "start": 81.612,
+   "end": 87.078,
+   "sung_end": 85.486,
+   "agreement": 0.6,
+   "words": [
+    [
+     "Oh,",
+     81.762,
+     82.943
+    ],
+    [
+     "he's",
+     83.023,
+     83.143
+    ],
+    [
+     "magic,",
+     83.224,
+     83.884
+    ],
+    [
+     "you",
+     84.925,
+     85.085
+    ],
+    [
+     "know",
+     85.226,
+     85.486
+    ]
+   ]
   },
   {
    "section": "chorus3",
    "text": "Mauricio Pochettino",
    "kind": "chorus",
    "card": "POCHETTINO",
-   "start": 100.233,
-   "end": 104.233
+   "start": 87.078,
+   "end": 89.62,
+   "sung_end": 89.49,
+   "agreement": 0.5,
+   "words": [
+    [
+     "Mauricio",
+     87.228,
+     88.369
+    ],
+    [
+     "Pochettino",
+     88.489,
+     89.49
+    ]
+   ]
   },
   {
    "section": "chorus3",
    "text": "Oh, he's magic, you know",
    "kind": "chorus",
    "card": "MAGIC",
-   "start": 104.233,
-   "end": 108.233
+   "start": 89.62,
+   "end": 95.206,
+   "sung_end": 94.095,
+   "agreement": 0.8,
+   "words": [
+    [
+     "Oh,",
+     89.77,
+     90.651
+    ],
+    [
+     "he's",
+     91.132,
+     91.272
+    ],
+    [
+     "magic,",
+     91.312,
+     92.373
+    ],
+    [
+     "you",
+     92.773,
+     92.994
+    ],
+    [
+     "know",
+     93.334,
+     94.095
+    ]
+   ]
   },
   {
    "section": "chorus3",
    "text": "Mauricio Pochettino",
    "kind": "chorus",
    "card": "POCHETTINO",
-   "start": 108.233,
-   "end": 112.233
+   "start": 95.206,
+   "end": 99.239,
+   "sung_end": 98.039,
+   "agreement": 0.5,
+   "words": [
+    [
+     "Mauricio",
+     95.356,
+     96.477
+    ],
+    [
+     "Pochettino",
+     96.577,
+     98.039
+    ]
+   ]
   },
   {
    "section": "bridge",
    "text": "Down Sir Matt Busby Way",
    "kind": "bridge",
    "card": null,
-   "start": 122.233,
-   "end": 125.233
+   "start": 101.473,
+   "end": 103.415,
+   "sung_end": 103.485,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Down",
+     101.623,
+     101.983
+    ],
+    [
+     "Sir",
+     102.124,
+     102.344
+    ],
+    [
+     "Matt",
+     102.444,
+     102.644
+    ],
+    [
+     "Busby",
+     102.744,
+     103.065
+    ],
+    [
+     "Way",
+     103.165,
+     103.485
+    ]
+   ]
   },
   {
    "section": "bridge",
    "text": "Missed the tram, still had to stay",
    "kind": "bridge",
    "card": null,
-   "start": 125.233,
-   "end": 128.233
+   "start": 103.415,
+   "end": 106.727,
+   "sung_end": 105.527,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Missed",
+     103.565,
+     103.785
+    ],
+    [
+     "the",
+     103.886,
+     104.006
+    ],
+    [
+     "tram,",
+     104.026,
+     104.266
+    ],
+    [
+     "still",
+     104.406,
+     104.646
+    ],
+    [
+     "had",
+     104.727,
+     104.867
+    ],
+    [
+     "to",
+     104.947,
+     105.067
+    ],
+    [
+     "stay",
+     105.107,
+     105.527
+    ]
+   ]
   },
   {
    "section": "bridge",
    "text": "Said I wouldn't get carried away",
    "kind": "bridge",
    "card": null,
-   "start": 128.233,
-   "end": 131.233
+   "start": 108.942,
+   "end": 112.065,
+   "sung_end": 111.655,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Said",
+     109.092,
+     109.292
+    ],
+    [
+     "I",
+     109.552,
+     109.672
+    ],
+    [
+     "wouldn't",
+     109.712,
+     110.153
+    ],
+    [
+     "get",
+     110.193,
+     110.553
+    ],
+    [
+     "carried",
+     110.673,
+     111.074
+    ],
+    [
+     "away",
+     111.154,
+     111.655
+    ]
+   ]
   },
   {
    "section": "bridge",
    "text": "Then I watched us play",
    "kind": "bridge",
    "card": null,
-   "start": 131.233,
-   "end": 134.233
+   "start": 112.065,
+   "end": 116.979,
+   "sung_end": 115.779,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Then",
+     112.215,
+     112.355
+    ],
+    [
+     "I",
+     112.536,
+     112.656
+    ],
+    [
+     "watched",
+     112.716,
+     113.216
+    ],
+    [
+     "us",
+     113.417,
+     113.537
+    ],
+    [
+     "play",
+     113.677,
+     115.779
+    ]
+   ]
   },
   {
    "section": "final",
    "text": "Oh, he's magic, you know",
    "kind": "chorus",
    "card": "MAGIC",
-   "start": 136.233,
-   "end": 140.233
+   "start": 121.952,
+   "end": 127.336,
+   "sung_end": 126.266,
+   "agreement": 0.6,
+   "words": [
+    [
+     "Oh,",
+     122.102,
+     122.343
+    ],
+    [
+     "he's",
+     123.343,
+     123.483
+    ],
+    [
+     "magic,",
+     123.523,
+     124.384
+    ],
+    [
+     "you",
+     125.245,
+     125.385
+    ],
+    [
+     "know",
+     125.485,
+     126.266
+    ]
+   ]
   },
   {
    "section": "final",
    "text": "Mauricio Pochettino",
    "kind": "chorus",
    "card": "POCHETTINO",
-   "start": 140.233,
-   "end": 144.233
+   "start": 127.336,
+   "end": 130.939,
+   "sung_end": 130.188,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Mauricio",
+     127.486,
+     128.607
+    ],
+    [
+     "Pochettino",
+     128.747,
+     130.188
+    ]
+   ]
   },
   {
    "section": "final",
    "text": "Oh, he's magic, you know",
    "kind": "chorus",
    "card": "MAGIC",
-   "start": 144.233,
-   "end": 148.233
+   "start": 130.939,
+   "end": 135.362,
+   "sung_end": 134.051,
+   "agreement": 0.6,
+   "words": [
+    [
+     "Oh,",
+     131.089,
+     131.269
+    ],
+    [
+     "he's",
+     131.349,
+     131.469
+    ],
+    [
+     "magic,",
+     131.529,
+     132.45
+    ],
+    [
+     "you",
+     132.971,
+     133.171
+    ],
+    [
+     "know",
+     133.511,
+     134.051
+    ]
+   ]
   },
   {
    "section": "final",
    "text": "Mauricio Pochettino",
    "kind": "chorus",
    "card": "POCHETTINO",
-   "start": 148.233,
-   "end": 152.233
+   "start": 135.362,
+   "end": 138.525,
+   "sung_end": 138.074,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Mauricio",
+     135.512,
+     136.633
+    ],
+    [
+     "Pochettino",
+     136.753,
+     138.074
+    ]
+   ]
+  },
+  {
+   "section": "final",
+   "text": "Oh, he's magic, you know",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 138.525,
+   "end": 143.348,
+   "sung_end": 142.157,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Oh,",
+     138.675,
+     138.855
+    ],
+    [
+     "he's",
+     139.335,
+     139.455
+    ],
+    [
+     "magic,",
+     139.515,
+     140.236
+    ],
+    [
+     "you",
+     141.217,
+     141.417
+    ],
+    [
+     "know",
+     141.517,
+     142.157
+    ]
+   ]
+  },
+  {
+   "section": "final",
+   "text": "Mauricio Pochettino",
+   "kind": "chorus",
+   "card": "POCHETTINO",
+   "start": 143.348,
+   "end": 145.971,
+   "sung_end": 145.52,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Mauricio",
+     143.498,
+     144.619
+    ],
+    [
+     "Pochettino",
+     144.739,
+     145.52
+    ]
+   ]
   },
   {
    "section": "outro",
-   "text": "Said I wouldn't get carried away",
-   "kind": "outro",
-   "card": null,
-   "start": 152.233,
-   "end": 157.233
+   "text": "Oh, he's magic, carried away",
+   "kind": "chorus",
+   "card": "MAGIC",
+   "start": 145.971,
+   "end": 151.856,
+   "sung_end": 151.865,
+   "agreement": 0.6,
+   "words": [
+    [
+     "Oh,",
+     146.121,
+     146.341
+    ],
+    [
+     "he's",
+     147.322,
+     147.482
+    ],
+    [
+     "magic,",
+     147.522,
+     148.022
+    ],
+    [
+     "carried",
+     148.683,
+     149.283
+    ],
+    [
+     "away",
+     149.403,
+     151.865
+    ]
+   ]
   },
   {
    "section": "outro",
    "text": "Then I watched United play",
    "kind": "outro",
    "card": null,
-   "start": 157.233,
-   "end": 162.233
+   "start": 151.856,
+   "end": 156.308,
+   "sung_end": 155.108,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Then",
+     152.006,
+     152.166
+    ],
+    [
+     "I",
+     152.326,
+     152.446
+    ],
+    [
+     "watched",
+     152.566,
+     152.986
+    ],
+    [
+     "United",
+     153.247,
+     154.067
+    ],
+    [
+     "play",
+     154.167,
+     155.108
+    ]
+   ]
   },
   {
    "section": "outro",
    "text": "Oh, he's magic, you know",
    "kind": "chorus",
    "card": "MAGIC",
-   "start": 162.233,
-   "end": 165.833
+   "start": 158.281,
+   "end": 163.325,
+   "sung_end": 161.814,
+   "agreement": 0.8,
+   "words": [
+    [
+     "Oh,",
+     158.431,
+     158.651
+    ],
+    [
+     "he's",
+     158.831,
+     159.051
+    ],
+    [
+     "magic,",
+     159.131,
+     159.772
+    ],
+    [
+     "you",
+     160.973,
+     161.153
+    ],
+    [
+     "know",
+     161.253,
+     161.814
+    ]
+   ]
   },
   {
    "section": "outro",
    "text": "Mauricio Pochettino",
    "kind": "chorus",
    "card": "POCHETTINO",
-   "start": 165.833,
-   "end": null
+   "start": 163.325,
+   "end": 168.698,
+   "sung_end": 167.498,
+   "agreement": 1.0,
+   "words": [
+    [
+     "Mauricio",
+     163.475,
+     164.696
+    ],
+    [
+     "Pochettino",
+     164.896,
+     167.498
+    ]
+   ]
   }
  ]
 }

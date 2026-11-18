@@ -1,6 +1,8 @@
 # One display line per row. [section] headers must stay in this order:
 # chorus1, verse1, chorus2, verse2, chorus3, bridge, final, outro
 # Lines containing "magic" or "Pochettino" in a chorus light up the seat card display.
+# Written as actually sung (checked with Whisper): the final chorus repeats three times and the
+# outro opens with "Oh, he's magic, carried away".
 
 [chorus1]
 Oh, he's magic, you know
@@ -51,9 +53,11 @@ Oh, he's magic, you know
 Mauricio Pochettino
 Oh, he's magic, you know
 Mauricio Pochettino
+Oh, he's magic, you know
+Mauricio Pochettino
 
 [outro]
-Said I wouldn't get carried away
+Oh, he's magic, carried away
 Then I watched United play
 Oh, he's magic, you know
 Mauricio Pochettino

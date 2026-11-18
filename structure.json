@@ -1,0 +1,20 @@
+{
+ "_about": "Song structure for the camera cuts and the light show. Times are in seconds, snapped to downbeats from the beat tracker (analyze.py). Each section runs until the next one starts. Kinds: opening, verse, chorus, bridge, hit, inst, build, final, outro, end. 'drops' are the big moments (flash, pyro).",
+ "sections": [
+  {"start": 0.0,     "kind": "opening", "shot": "crane"},
+  {"start": 20.55,   "kind": "verse",   "shot": "pan360"},
+  {"start": 42.86,   "kind": "chorus",  "shot": "swing"},
+  {"start": 61.14,   "kind": "verse",   "shot": "touchline"},
+  {"start": 81.44,   "kind": "chorus",  "shot": "orbit"},
+  {"start": 101.69,  "kind": "bridge",  "shot": "lookup"},
+  {"start": 105.71,  "kind": "hit",     "shot": "lookup"},
+  {"start": 109.73,  "kind": "bridge",  "shot": "lookup"},
+  {"start": 113.73,  "kind": "inst",    "shot": "boards"},
+  {"start": 121.78,  "kind": "build",   "shot": "pushin"},
+  {"start": 135.78,  "kind": "final",   "shot": "bigcrane"},
+  {"start": 151.87,  "kind": "outro",   "shot": "drift"},
+  {"start": 167.72,  "kind": "end",     "shot": "pullout"}
+ ],
+ "drops": [20.55, 42.86, 81.44, 105.71, 113.73, 135.78, 167.72],
+ "pyro": [42.86, 81.44, 105.71, 113.73, 135.78, 143.79, 167.72]
+}

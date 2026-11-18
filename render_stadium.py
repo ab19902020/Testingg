@@ -33,12 +33,16 @@ mid = smooth(F['mid'], 0.5, 0.15).astype(f32)
 energy = smooth(np.convolve(F['rms'], np.ones(45) / 45, 'same'), 0.08, 0.03)
 spec = F['spec'].astype(f32).copy()
 for k in range(1, N): spec[k] = np.maximum(spec[k], spec[k - 1] * 0.8)
-BEAT0, BPF = 7, 15
-def beatpos(i): return (i - BEAT0) / BPF
-def snap(t): return int(BEAT0 + round((t * FPS - BEAT0) / BPF) * BPF)
-KICKOFF = snap(19.6)
-DROPS = [snap(89.2), snap(114.2), snap(136.2), snap(163.5)]
-BREAK = (snap(153.2), snap(158.4))
+# tracked beats (the tempo drifts between about 117 and 121 bpm); every 4th beat from 0 is a downbeat
+BEATS = np.asarray(F['beats'], np.float64) if 'beats' in F.files else np.arange(0.19, DUR, 0.5)
+_BK = np.arange(len(BEATS), dtype=np.float64)
+BPF = float(np.median(np.diff(BEATS))) * FPS          # frames per beat (about 15)
+def beatpos(i):
+    t = i / FPS
+    if t <= BEATS[0]: return (t - BEATS[0]) / (BEATS[1] - BEATS[0])
+    if t >= BEATS[-1]: return len(BEATS) - 1 + (t - BEATS[-1]) / (BEATS[-1] - BEATS[-2])
+    return float(np.interp(t, BEATS, _BK))
+def snap(t): return int(round(t * FPS))
 def since(evts, i):
     d = [i - e for e in evts if i >= e]
     return min(d) if d else 10 ** 9
@@ -224,33 +228,68 @@ ARCHIVO = font_path('ArchivoBlack-Regular.ttf', '/usr/share/fonts/truetype/googl
 BOARD_H = 1.1
 
 # ================================================================== song structure + lyrics
-# Timings come from lyrics_timing.json (written by align_lyrics.py with Whisper, or the bundled estimate).
+# Line and word timings come from lyrics_timing.json (align_lyrics.py: Whisper + CTC forced alignment);
+# the song structure (sections on downbeats, drops, pyro) from structure.json.
 TIMING_FILE = os.environ.get('LYRICS_TIMING', os.path.join(HERE, 'lyrics_timing.json'))
 with open(TIMING_FILE) as fh:
     _TJ = json.load(fh)
-S = _TJ['sections']
-LYR = []   # (t0, t1, TEXT, card word or None, kind)
+with open(os.path.join(HERE, 'structure.json')) as fh:
+    _ST = json.load(fh)
+LYR = []   # (t0, t1, TEXT, card word or None, kind, word start times, word end times)
 for e in _TJ['lines']:
-    LYR.append((float(e['start']), float(e['end']) if e.get('end') is not None else DUR + 1, e['text'].upper(), e.get('card'), e['kind']))
+    ws = e.get('words') or []
+    txt = e['text'].upper()
+    if len(ws) != len(txt.split(' ')):          # no word times: spread the words over the line
+        n_ = len(txt.split(' ')); d_ = (float(e['end'] or e['start'] + 3) - float(e['start'])) * 0.6
+        ws = [[None, float(e['start']) + d_ * k / n_, float(e['start']) + d_ * (k + 1) / n_] for k in range(n_)]
+    LYR.append((float(e['start']), float(e['end']) if e.get('end') is not None else DUR + 1, txt, e.get('card'), e['kind'],
+                np.array([w[1] for w in ws], np.float64), np.array([w[2] for w in ws], np.float64)))
 LYR.sort(key=lambda e: e[0])
-SECT = [(0, S['verse1'], 'chorus'), (S['verse1'], S['chorus2'], 'verse'), (S['chorus2'], S['verse2'], 'chorus'),
-        (S['verse2'], S['chorus3'], 'verse'), (S['chorus3'], S['inst'], 'chorus'), (S['inst'], S['bridge'], 'inst'),
-        (S['bridge'], S['build'], 'bridge'), (S['build'], S['final'], 'build'), (S['final'], S['outro'], 'final'),
-        (S['outro'], S['lastchorus'], 'outro'), (S['lastchorus'], DUR + 1, 'chorus')]
+_SS = _ST['sections']
+SECT = [(s['start'], _SS[k + 1]['start'] if k + 1 < len(_SS) else DUR + 1, s['kind']) for k, s in enumerate(_SS)]
 def section(t):
     for a, b, k in SECT:
         if a <= t < b: return k, a, b
-    return 'chorus', 0, 1
+    return SECT[-1][2], SECT[-1][0], SECT[-1][1]
+def first_of(kind): return next(a for a, b, k in SECT if k == kind)
+KICKOFF_T = first_of('verse'); END_T = first_of('end')
 def lyric_at(t):
     for e in LYR:
         if e[0] <= t < e[1]: return e
     k, a, b = section(t)
-    if k == 'inst': return (a, b, 'UNITED ROAD', 'UNITED ROAD', 'inst')
-    if k == 'build': return (a, b, 'OLD TRAFFORD', None, 'build')
+    if k == 'inst': return (a, b, 'UNITED ROAD', 'UNITED ROAD', 'inst', np.array([a, a + 0.25]), np.array([a + 0.25, b]))
     return None
-DROPS = [snap(S['chorus2']), snap(S['chorus3']), snap(S['final']), snap(S['lastchorus'])]
-KICKOFF = snap(S['verse1'])
-def is_dim(t): return section(t)[0] in ('bridge', 'outro')
+DROPS = [snap(t) for t in _ST['drops']]
+PYRO = [float(t) for t in _ST.get('pyro', [])]
+KICKOFF = snap(KICKOFF_T)
+DIM = ('bridge', 'outro', 'build')
+BRIDGE_T = first_of('bridge')
+def is_dim(t): return section(t)[0] in DIM
+# card display: the upper tier flips to MAGIC / POCHETTINO when that word is sung, and holds it until the next one
+CARD_SECS = ('opening', 'chorus', 'final', 'build', 'outro', 'inst')
+CARD_EV = []
+for e in LYR:
+    if not e[3]: continue
+    wds = e[2].split(' ')
+    j = next((k for k, w in enumerate(wds) if e[3].split(' ')[0] in w), 0)
+    CARD_EV.append((float(e[5][j]) - 0.05, e[3]))
+CARD_EV.sort()
+def card_at(t):
+    """(word, time it appeared) for the seat card display, or None"""
+    sec = section(t)[0]
+    if sec not in CARD_SECS or t < 2.0: return None
+    if sec == 'inst': return ('UNITED ROAD', section(t)[1])
+    cur = None
+    for tt, w in CARD_EV:
+        if tt <= t: cur = (w, tt)
+        else: break
+    if cur is None or t - cur[1] > 9.0: return None
+    return cur
+def torch_level(t):
+    """phone torches in the stands: the quiet parts (build, outro, bridge breakdowns)"""
+    sec, a, b = section(t)
+    if sec not in ('build', 'outro', 'bridge'): return 0.0
+    return float(min(1.0, (t - a) / 1.5) * min(1.0, max(0.0, (b - t) / 0.4)))
 
 # ================================================================== lyric strips (LED boards / ribbons)
 SROWS = 56
@@ -277,10 +316,12 @@ def lyric_strip(txt):
 for e in LYR: lyric_strip(e[2])
 lyric_strip('UNITED ROAD'); lyric_strip('OLD TRAFFORD')
 
+def words_sung(e, t):
+    """how many words of line e have started by time t (from the aligned word times)"""
+    return int(np.searchsorted(e[5], t + 0.02, side='right'))
 def reveal_px(e, t):
     a, ends, tw = lyric_strip(e[2])
-    d = e[1] - e[0]; u = (t - e[0]) / max(0.4, min(d, 4.0) * 0.55)
-    k = int(np.clip(u * len(ends), 0, len(ends)))
+    k = min(words_sung(e, t), len(ends))
     return ends[k - 1] + 3 if k > 0 else 0.0, k
 
 # ================================================================== card display bitmaps (seat lettering)
@@ -321,24 +362,55 @@ def place(grid, g, x0, y0=0):
     h, w = g.shape; xs0, xs1 = max(0, x0), min(COLS, x0 + w)
     if xs1 > xs0: grid[y0:y0 + h, xs0:xs1] = np.maximum(grid[y0:y0 + h, xs0:xs1], g[:, xs0 - x0:xs1 - x0])
 def center(grid, g): place(grid, g, (COLS - g.shape[1]) // 2, (ROWS - g.shape[0]) // 2)
+_wrap = {}
+def wrapped(txt):
+    """the line word-wrapped to fit the dot matrix: [(x, y, glyph grid)] per word, biggest text that fits"""
+    if txt in _wrap: return _wrap[txt]
+    words = txt.split(' ')
+    for rh in range(17, 8, -1):
+        gs = [text_grid(w, rh) for w in words]
+        sp = max(2, rh // 3)
+        rows_, cur, cw = [], [], 0
+        for k, g in enumerate(gs):
+            w = g.shape[1]
+            if cur and cw + sp + w > COLS - 4:
+                rows_.append((cur, cw)); cur, cw = [], 0
+            cw = cw + (sp if cur else 0) + w; cur.append(k)
+        rows_.append((cur, cw))
+        gap = 2; tot = len(rows_) * rh + (len(rows_) - 1) * gap
+        if tot <= ROWS - 2 and all(cw <= COLS - 4 for _, cw in rows_):
+            out = [None] * len(words); y = (ROWS - tot) // 2
+            for ks, cw in rows_:
+                x = (COLS - cw) // 2
+                for k in ks:
+                    out[k] = (x, y, gs[k]); x += gs[k].shape[1] + sp
+                y += rh + gap
+            _wrap[txt] = out; return out
+    _wrap[txt] = None; return None
 def board_state(i):
     t = i / FPS; g = np.zeros((ROWS, COLS), f32)
     if t < 1.2: return g, 0.0
     if t < 2.4:
         r = np.random.default_rng(i).random((ROWS, COLS)); return (r > 0.3 + 0.7 * (t - 1.2) / 1.2).astype(f32), 0.8
-    e = lyric_at(t)
-    if t > DUR - 2.5: center(g, fit('UNITED ROAD')); return g, 1.0
-    if e is None: center(g, fit('UNITED ROAD')); return g, 1.0
-    sec = section(t)[0]
-    if e[3] and sec in ('chorus', 'final', 'inst'):
-        # big word, flashing on the beat, then spectrum underneath
-        center(g, fit(e[3]))
-        bp = beatpos(i); return g * (1 - 0.45 * (bp - math.floor(bp))), 1.0
-    # scroll the current lyric line across the screen within its duration
-    tg = text_grid(e[2], 24); w = tg.shape[1]
-    u = (t - e[0]) / max(0.5, e[1] - e[0])
-    x = int(COLS - u * (w + COLS) * 1.05)
-    place(g, tg, x, (ROWS - 24) // 2)
+    if t > END_T: center(g, fit('UNITED ROAD')); return g, 1.0 + 0.8 * math.exp(-(t - END_T) / 0.3)
+    e = lyric_at(t); sec = section(t)[0]
+    cd = card_at(t)
+    if cd and sec in ('chorus', 'final', 'inst', 'hit'):
+        # the chorus word, big, flashing on the beat
+        center(g, fit(cd[0]))
+        bp = beatpos(i); fresh = math.exp(-(t - cd[1]) / 0.2)
+        return g * (1 - 0.45 * (bp - math.floor(bp))), 1.0 + 0.8 * fresh
+    if e is None or e[4] == 'inst': center(g, fit('UNITED ROAD')); return g, 1.0
+    # the line, word-wrapped; each word lights up as it is sung and the newest one is brightest
+    lay = wrapped(e[2])
+    k = words_sung(e, t)
+    if lay is None:
+        if k: center(g, fit(e[2].split(' ')[k - 1]))
+        return g, 1.0
+    for j in range(k):
+        x, y, gg = lay[j]
+        age = t - e[5][j]
+        place(g, gg * (0.72 if j < k - 1 else 1.0 + 0.6 * math.exp(-age / 0.18)), x, y)
     return g, 1.0
 
 # ================================================================== visualizer bars
@@ -371,7 +443,7 @@ def lamp_levels(i):
         if t < ton: v = 0.0
         elif t < ton + 0.35: v = 1.0 if np.random.default_rng(i * 13 + g).random() > 0.45 else 0.12
         else: v = min(1.0, 0.75 + 0.25 * (t - ton - 0.35))
-        toff = DUR - 2.6 + (7 - g) * 0.22
+        toff = END_T + 0.35 + (7 - g) * 0.16
         if t > toff: v *= 0.0 if t > toff + 0.15 else 0.4
         base[m] = v
     pulse = 0.86 + 0.32 * float(bass[i])
@@ -379,7 +451,20 @@ def lamp_levels(i):
     idx = np.arange(NL)
     sec, a, b = section(t)
     wv = np.ones(NL, f32) * pulse; rv = np.zeros(NL, f32)
-    if sec == 'verse':
+    if sec == 'opening':
+        # soft first chorus: steady white with a slow red wash travelling round the roof
+        p = (t * 0.05 % 1.0) * NL
+        dd = np.abs(((idx - p + NL / 2) % NL) - NL / 2)
+        wv = (0.82 + 0.25 * np.exp(-(dd / 8.0) ** 2)).astype(f32) * pulse
+        rv = (0.55 * np.exp(-(np.abs(((idx - p - NL / 2 + NL / 2) % NL) - NL / 2) / 7.0) ** 2)).astype(f32)
+    elif sec == 'hit':
+        par = (idx + bi) % 2 == 0
+        fl = (1 - bf) ** 1.5
+        wv = np.where(par, 0.4 + 1.3 * fl, 0.5).astype(f32) * pulse
+        rv = np.where(par, 0.0, 1.5 * fl).astype(f32) * pulse
+    elif sec == 'end':
+        wv = np.full(NL, 1.0 + 1.2 * math.exp(-(t - a) / 0.5), f32); rv = np.zeros(NL, f32)
+    elif sec == 'verse':
         p = ((i - snap(a)) / (4 * BPF) % 1.0) * NL
         dd = np.abs(((idx - p + NL / 2) % NL) - NL / 2)
         wv = pulse * (0.85 + 0.9 * np.exp(-(dd / 3.0) ** 2)).astype(f32)
@@ -402,12 +487,18 @@ def lamp_levels(i):
         dd = np.abs(((idx - p + NL / 2) % NL) - NL / 2)
         wv += 1.2 * np.exp(-(dd / 2.0) ** 2)
     elif sec == 'build':
-        u = (t - a) / (b - a)
-        rate = 1 + 3 * u
-        p = (((t - a) * rate * 0.5) % 1.0) * NL
+        # stripped-back final chorus: the bowl goes dark for the phone torches, one spot drifts round,
+        # then the last 4 bars ramp up into the drop with an accelerating chase
+        ramp = float(np.clip((t - (b - 8.0)) / 8.0, 0, 1)) ** 1.5
+        p = (0.25 + (t - a) * 0.035) * NL
         dd = np.abs(((idx - p + NL / 2) % NL) - NL / 2)
-        wv = (0.35 + 0.65 * u) * pulse + 1.0 * np.exp(-(dd / 4.0) ** 2)
-        rv = np.full(NL, 0.5 * u, f32) * ((bi % 2) == 0)
+        wv = (0.16 + 1.1 * np.exp(-(dd / 2.5) ** 2)).astype(f32)
+        if ramp > 0:
+            rate = 1 + 5 * ramp
+            p2 = (((t - (b - 8.0)) * rate * 0.5) % 1.0) * NL
+            d2 = np.abs(((idx - p2 + NL / 2) % NL) - NL / 2)
+            wv = wv + ramp * (0.5 * pulse + 1.0 * np.exp(-(d2 / 4.0) ** 2))
+            rv = np.full(NL, 0.6 * ramp, f32) * ((bi % 2) == 0)
     elif sec == 'outro':
         wv[:] = 0.36 + 0.08 * math.sin(t * 2.0)
     sd = since(DROPS, i)
@@ -416,7 +507,16 @@ def lamp_levels(i):
         wv = wv * st; rv = rv * st
     return (base * wv).astype(f32), (base * rv).astype(f32), base
 
-RAIN_LEVEL = [(0, 0.7), (S['verse1'], 0.75), (S['verse2'], 1.15), (S['chorus3'], 0.9), (S['bridge'], 1.2), (S['final'], 1.0), (S['outro'], 1.25), (DUR + 1, 1.0)]
+def nth_of(kind, n): return [a for a, b, k in SECT if k == kind][n]
+RAIN_LEVEL = [(0, 0.7), (KICKOFF_T, 0.75), (nth_of('verse', 1), 1.15), (nth_of('chorus', 1), 0.9), (first_of('bridge'), 1.2),
+              (first_of('final'), 1.0), (first_of('outro'), 1.25), (DUR + 1, 1.0)]
+def scene_light(t):
+    """overall floodlight level on the stands and pitch for the section"""
+    sec, a, b = section(t)
+    if sec == 'build':
+        return 0.42 + 0.58 * float(np.clip((t - (b - 8.0)) / 8.0, 0, 1)) ** 1.5
+    if sec in ('bridge', 'outro'): return 0.72
+    return 1.0
 def rain_level(t):
     xs = [p[0] for p in RAIN_LEVEL]; ys = [p[1] for p in RAIN_LEVEL]
     return float(np.interp(t, xs, ys))
@@ -427,10 +527,20 @@ def lerp(a, b, u): return np.asarray(a, np.float64) + (np.asarray(b, np.float64)
 def look(pos, tgt, hfov): return np.asarray(pos, np.float64), np.asarray(tgt, np.float64), hfov
 def perim_point(s, d, y):
     x, z, nx, nz = perim(np.array([s % L])); return np.array([x[0] + d * nx[0], y, z[0] + d * nz[0]]), np.array([nx[0], 0, nz[0]])
-CUTS = [0.0, S['verse1'], S['chorus2'], S['verse2'], S['chorus3'], S['inst'], S['bridge'], S['final'], S['outro'], S['lastchorus'], DUR + 1]
+# one shot per run of sections with the same "shot" in structure.json; every cut lands on a downbeat
+SHOTS = []
+for s in _SS:
+    if SHOTS and SHOTS[-1][2] == s['shot']: continue
+    SHOTS.append([s['start'], None, s['shot']])
+for k in range(len(SHOTS)): SHOTS[k][1] = SHOTS[k + 1][0] if k + 1 < len(SHOTS) else DUR + 1
+SHOT_K = {'crane': 0, 'pan360': 1, 'swing': 2, 'touchline': 3, 'orbit': 4, 'boards': 5, 'lookup': 6, 'bigcrane': 7,
+          'drift': 8, 'pullout': 9, 'pushin': 10}
 def cam_at(t):
-    k = max(j for j in range(len(CUTS) - 1) if CUTS[j] <= t)
-    a, b = CUTS[k], min(CUTS[k + 1], DUR); u = (t - a) / (b - a); e = ease(u)
+    a, b, name = next((s for s in SHOTS if s[0] <= t < s[1]), SHOTS[-1])
+    k = SHOT_K[name]
+    b = min(b, DUR); u = (t - a) / (b - a); e = ease(u)
+    if k == 10:  # build: low push in from the centre circle towards the north stand full of phone torches
+        return look(lerp((0, 1.6, -20), (0, 4.5, 6), e), lerp((0, 24, 70), (0, 27, 70), e), 74 - 4 * e)
     if k == 0:   # lights on, low at the centre circle, slow crane up
         return look(lerp((0, 1.7, -6), (0, 10, -16), e), lerp((0, 27, 60), (0, 18, 60), e), 82)
     if k == 1:   # verse 1: slow 360 from the centre spot
@@ -458,10 +568,10 @@ def cam_at(t):
         return look(pos, pa + n * 6 + np.array([0, 9, 0]), 82)
     if k == 6:   # bridge: low, looking up at the north stand in the rain
         return look(lerp((0, 1.5, 2), (0, 2.6, 13), e), (0, 30, 70), 84)
-    if k == 7:   # final chorus: big crane and orbit
+    if k == 7:   # final chorus: big crane and orbit, starting low with the pyro in shot
         az = math.radians(-100 + 110 * e); rad = 10 + 34 * e
         pos = (rad * math.cos(az), 1.8 + 30 * e, rad * math.sin(az))
-        tgt = (-pos[0] * 0.55, 15, -pos[2] * 0.55 + 6)
+        tgt = (-pos[0] * 0.55, 6 + 9 * min(1.0, e * 2.5), -pos[2] * 0.55 + 6)
         return look(pos, tgt, 84 - 6 * e)
     if k == 8:   # outro: low in the rain, slow drift
         return look(lerp((-22, 1.3, 8), (-9, 1.9, 15), e), lerp((8, 21, 70), (14, 19, 70), e), 78)
@@ -597,21 +707,248 @@ def led_text(aa, vv, fw, e, t, i, style):
     # freshly revealed word flashes
     bp = beatpos(i); bf = bp - math.floor(bp)
     sec = section(t)[0]
-    if sec in ('chorus', 'final'):
+    if sec in ('chorus', 'final', 'hit'):
         bg = np.array([0.75, 0.03, 0.04], f32) * (0.75 + 0.5 * (1 - bf) ** 2)
         fg = np.array([1.6, 1.52, 1.45], f32)
-    elif sec in ('bridge', 'outro'):
+    elif sec in ('bridge', 'outro', 'build'):
         bg = np.array([0.06, 0.005, 0.008], f32); fg = np.array([1.35, 0.25, 0.18], f32)
     else:
         bg = np.array([0.5, 0.02, 0.03], f32); fg = np.array([1.45, 1.4, 1.32], f32)
-    age = t - e[0]
-    if age < 0.12: fg = fg * 1.6
-    col = bg[None] * (1 - tx[:, None]) + fg[None] * tx[:, None]
+    # the word being sung flashes as it lands; earlier words settle back a little
+    if k > 0 and len(e) > 5:
+        wi = np.searchsorted(ends, cc - 1.0, side='left')          # word index of each pixel column
+        age = t - float(e[5][k - 1])
+        tx = tx * np.where(wi == (k - 1), 1.0 + 0.7 * math.exp(-age / 0.16), 0.82).astype(f32)
+    col = bg[None] * (1 - np.minimum(tx, 1)[:, None]) + fg[None] * tx[:, None]
     # LED pixel texture when close
     pitch_m = 0.025
     amp = np.clip(1 - fw / pitch_m, 0, 1) * 0.35
     led = 1 - amp * (0.5 - 0.5 * np.cos(aa / pitch_m * 2 * np.pi)) * (0.5 - 0.5 * np.cos(vv * BOARD_H / pitch_m * 2 * np.pi))
     return col * led[:, None]
+
+# ================================================================== pyro (flame jets round the pitch at the drops)
+FLAME_P = np.array([(x, 0.0, z) for z in (-36.8, 36.8) for x in (-45, -30, -15, 0, 15, 30, 45)] +
+                   [(x, 0.0, z) for x in (-55.5, 55.5) for z in (-21, -7, 7, 21)], np.float64)
+NFL = len(FLAME_P)
+def pyro_level(t):
+    """flame intensity: a burst on each of the first four beats after every pyro cue"""
+    lv = 0.0
+    for p in PYRO:
+        if 0 <= t - p < 2.3:
+            bts = BEATS[(BEATS >= p - 0.05) & (BEATS < p + 1.9)]
+            if len(bts) == 0: bts = np.array([p])
+            past = bts[bts <= t + 1e-3]
+            if len(past): lv = max(lv, (0.18 + 0.82 * math.exp(-(t - past[-1]) / 0.42)) * (1.0 if len(past) < 4 else 1.3) * min(1.0, (2.3 - (t - p)) / 0.4))
+    return lv
+FLAME_TEX = tile_noise(256, 2.2)
+def flame_layer(cam, t, i, lvl, dist):
+    """additive flame colour at quarter resolution (H/4, W/4, 3)"""
+    C, f, r, u, fp = cam
+    qh, qw = H // 4, W // 4
+    out = np.zeros((qh, qw, 3), f32)
+    if lvl <= 0.01: return out
+    dq = cv2.resize(dist, (qw, qh), interpolation=cv2.INTER_NEAREST)
+    fq = fp / 4
+    hgt = 4.0 + 9.0 * min(1.0, lvl)
+    for k in range(NFL):
+        P0 = FLAME_P[k]; P1 = P0 + np.array([0, hgt, 0])
+        d0 = P0 - C; d1 = P1 - C; z0 = d0 @ f; z1 = d1 @ f
+        if z0 < 1.0 or z1 < 1.0: continue
+        x0 = qw / 2 + fq * (d0 @ r) / z0; y0 = qh / 2 - fq * (d0 @ u) / z0
+        x1 = qw / 2 + fq * (d1 @ r) / z1; y1 = qh / 2 - fq * (d1 @ u) / z1
+        wpx = fq * 1.25 / z0
+        xa, xb = int(min(x0, x1) - 3 * wpx - 2), int(max(x0, x1) + 3 * wpx + 3)
+        ya, yb = int(min(y0, y1) - 2 * wpx - 2), int(max(y0, y1) + 2)
+        xa, ya = max(xa, 0), max(ya, 0); xb, yb = min(xb, qw), min(yb, qh)
+        if xb <= xa + 1 or yb <= ya + 1: continue
+        yy, xx = np.mgrid[ya:yb, xa:xb].astype(f32) + 0.5
+        vx, vy = x1 - x0, y1 - y0; l2 = vx * vx + vy * vy + 1e-6
+        v = ((xx - x0) * vx + (yy - y0) * vy) / l2                    # 0 at the nozzle, 1 at the tip
+        across = ((xx - x0) * vy - (yy - y0) * vx) / math.sqrt(l2)     # pixels from the axis
+        vv = np.clip(v, 0, 1.2)
+        n1 = samp(FLAME_TEX, xx * 0.0 + across / max(wpx, 0.5) * 9 + k * 37, vv * 50 - t * 95 + k * 11)
+        wid = wpx * (0.45 + 1.5 * vv) * (1 + 0.3 * n1)
+        sh = np.clip(1 - np.abs(across) / np.maximum(wid, 0.4), 0, 1) * np.clip(v * 8, 0, 1) * np.clip((1.05 - v) / 0.45, 0, 1)
+        heat = sh ** 1.4 * (0.75 + 0.45 * n1) * (1 - 0.55 * vv)
+        zf = z0 + (z1 - z0) * np.clip(v, 0, 1)
+        vis = dq[ya:yb, xa:xb] > zf * 0.97
+        heat = heat * vis * lvl
+        col = (np.array([2.2, 1.8, 1.1], f32) * np.clip(heat - 0.45, 0, 1)[..., None] * 3.0 +
+               np.array([2.2, 0.75, 0.12], f32) * np.clip(heat, 0, 1)[..., None] +
+               np.array([0.8, 0.10, 0.03], f32) * np.clip(heat * 2.5, 0, 1)[..., None])
+        out[ya:yb, xa:xb] += col
+    return out
+
+# ================================================================== ticker tape for the final chorus
+NCF = 14000
+_cr = np.random.default_rng(5)
+CF = _cr.random((NCF, 7))
+CF_COL = np.where((CF[:, 5] < 0.55)[:, None], np.array([1.0, 0.07, 0.06]), np.array([0.95, 0.94, 0.92])).astype(f32)
+_SPLAT = [(0, 0, 1.0), (1, 0, 0.9), (0, 1, 0.8), (1, 1, 0.7), (-1, 0, 0.5), (0, -1, 0.5), (2, 0, 0.4), (2, 1, 0.35), (-1, 1, 0.35)]
+def confetti_layer(cam, t, dist, Lk):
+    """(H, W, 3) red and white ticker tape fluttering down through the bowl in the final chorus"""
+    t0 = first_of('final'); t1 = first_of('outro') + 3.0
+    if not (t0 - 0.1 <= t < t1): return None
+    C, f, r, u, fp = cam
+    age = t - t0
+    x = (CF[:, 0] * 2 - 1) * (A - 2) + 1.2 * np.sin(age * (0.5 + 0.6 * CF[:, 3]) + CF[:, 3] * 6.28)
+    z = (CF[:, 1] * 2 - 1) * (B - 2) + 1.2 * np.cos(age * (0.4 + 0.5 * CF[:, 4]) + CF[:, 4] * 6.28)
+    pop = 9.0 * (1 - math.exp(-age / 0.35))                                    # fired up out of the cannons
+    y = np.mod(14 + 36 * CF[:, 2] + pop - (0.9 + 0.8 * CF[:, 3]) * age, 52.0)
+    P = np.stack([x, y, z], 1)
+    d = P - C; zc = d @ f
+    ok = (zc > 0.6) & (y > 0.1)
+    if not ok.any(): return None
+    sx = W / 2 + fp * (d[ok] @ r) / zc[ok]; sy = H / 2 - fp * (d[ok] @ u) / zc[ok]; zz = zc[ok]
+    flt = np.abs(np.sin(age * (3 + 7 * CF[ok, 4]) + CF[ok, 6] * 20))          # tumbling: catches the light now and then
+    ix = sx.astype(np.int32); iy = sy.astype(np.int32)
+    inb = (ix >= 2) & (ix < W - 3) & (iy >= 2) & (iy < H - 3)
+    ix, iy, zz, flt, col = ix[inb], iy[inb], zz[inb], flt[inb], CF_COL[ok][inb]
+    vis = dist[iy, ix] > zz
+    ix, iy, zz, flt, col = ix[vis], iy[vis], zz[vis], flt[vis], col[vis]
+    fade = min(1.0, (t1 - t) / 3.0) * min(1.0, age / 0.2 + 0.05)
+    wgt = ((0.45 + 2.2 * flt ** 4) * (0.5 + 0.5 * Lk) * fade * np.clip(40.0 / (zz + 10), 0.35, 1.6))[:, None] * col
+    size = fp * 0.07 / zz                                                     # about 7 cm of paper
+    out = np.zeros((H, W, 3), f32)
+    for k, (ox, oy, wk) in enumerate(_SPLAT):
+        m = size > (0.0 if k == 0 else (0.6 + 0.35 * k))
+        if m.any(): np.add.at(out, (iy[m] + oy, ix[m] + ox), wgt[m] * wk)
+    return out
+
+# ================================================================== on-screen lyrics (karaoke captions) and the title
+CAPTIONS = os.environ.get('CAPTIONS', '1') != '0'
+CAP_FONT = {}
+def cap_font(size, path=None):
+    key = (size, path or ANTON)
+    if key not in CAP_FONT: CAP_FONT[key] = ImageFont.truetype(path or ANTON, size)
+    return CAP_FONT[key]
+_lay = {}
+def caption_layout(txt, big):
+    """word masks and positions for a caption line: [(mask (h, w) float, x, y)]; wraps to two rows if needed"""
+    key = (txt, big)
+    if key in _lay: return _lay[key]
+    size = 104 if big else 84
+    fnt = cap_font(size)
+    dr = ImageDraw.Draw(Image.new('L', (1, 1)))
+    words = txt.split(' ')
+    space = dr.textlength(' ', font=fnt) * 1.05
+    wl = [dr.textlength(w, font=fnt) for w in words]
+    total = sum(wl) + space * (len(words) - 1)
+    rows = [list(range(len(words)))]
+    if total > W * 0.84 and len(words) > 1:      # balance into two rows
+        best = None
+        for cut in range(1, len(words)):
+            a = sum(wl[:cut]) + space * (cut - 1); b = sum(wl[cut:]) + space * (len(words) - cut - 1)
+            if best is None or max(a, b) < best[0]: best = (max(a, b), cut)
+        rows = [list(range(best[1])), list(range(best[1], len(words)))]
+    asc, desc = fnt.getmetrics()
+    lh = int(size * 1.12)
+    y0 = H - 118 - lh * len(rows)
+    out = [None] * len(words)
+    for ri, ks in enumerate(rows):
+        rw = sum(wl[k] for k in ks) + space * (len(ks) - 1)
+        x = (W - rw) / 2
+        for k in ks:
+            im = Image.new('L', (int(wl[k]) + 24, asc + desc + 24), 0)
+            ImageDraw.Draw(im).text((12, 12), words[k], font=fnt, fill=255)
+            out[k] = (np.asarray(im).astype(f32) / 255, int(round(x)) - 12, y0 + ri * lh - 12)
+            x += wl[k] + space
+    _lay[key] = out
+    return out
+def paste(dst, src, x, y, k=1.0):
+    h, w = src.shape[:2]
+    xa, ya = max(x, 0), max(y, 0); xb, yb = min(x + w, dst.shape[1]), min(y + h, dst.shape[0])
+    if xb > xa and yb > ya:
+        dst[ya:yb, xa:xb] += src[ya - y:yb - y, xa - x:xb - x] * k
+def caption_masks(t):
+    """(white text alpha, red glow alpha) for the lyric on screen at time t, or None"""
+    shown = []
+    for e in LYR:
+        if e[0] - 0.02 <= t < e[1] + 0.14 and e[4] != 'inst':
+            shown.append(e)
+    if not shown: return None
+    A = np.zeros((H, W), f32); G = np.zeros((H, W), f32)
+    for e in shown[-1:]:          # a new line replaces the old one at once; a line only fades out into a gap
+        out_k = float(np.clip((e[1] + 0.14 - t) / 0.14, 0, 1)) if t >= e[1] else 1.0
+        in_k = float(np.clip((t - e[0] + 0.02) / 0.14, 0, 1))
+        lk = out_k * in_k
+        if lk <= 0: continue
+        rise = int(round((1 - in_k) * 14 - (1 - out_k) * 18))
+        lay = caption_layout(e[2], bool(e[3]) and e[4] == 'chorus')
+        k = words_sung(e, t)
+        for j, (mk, x, y) in enumerate(lay):
+            if j < k:
+                age = t - float(e[5][j])
+                cur = j == k - 1 and (t < float(e[6][j]) + 0.25)
+                pop = 1.0 + 0.12 * math.exp(-age / 0.09) if j == k - 1 else 1.0
+                m2 = mk
+                if pop > 1.003:
+                    hh_, ww_ = mk.shape
+                    m2 = cv2.resize(mk, (int(ww_ * pop), int(hh_ * pop)), interpolation=cv2.INTER_LINEAR)
+                    x2 = x - (m2.shape[1] - ww_) // 2; y2 = y - (m2.shape[0] - hh_) // 2
+                else:
+                    x2, y2 = x, y
+                paste(A, m2, x2, y2 + rise, lk)
+                if j == k - 1:
+                    paste(G, m2, x2, y2 + rise, lk * (0.5 + 0.9 * math.exp(-age / 0.3)) * (1.0 if cur else 0.5))
+            else:
+                paste(A, mk, x, y + rise, 0.30 * lk)
+    return np.minimum(A, 1), G
+def title_masks(t):
+    """the opening title: UNITED ROAD / MAGIC, before the first line is sung"""
+    t_in, t_out = 0.7, LYR[0][0] - 0.35
+    if not (t_in <= t < t_out): return None
+    k = min(1.0, (t - t_in) / 0.9) * min(1.0, (t_out - t) / 0.6)
+    k = sstep(k)
+    A = np.zeros((H, W), f32); R = np.zeros((H, W), f32)
+    track = 1.0 + 0.6 * (1 - sstep(min(1.0, (t - t_in) / 3.5)))
+    def spaced(txt, fnt, cy, tr, dst, kk):
+        dr = ImageDraw.Draw(Image.new('L', (1, 1)))
+        ws = [dr.textlength(c, font=fnt) for c in txt]
+        gap = fnt.size * 0.08 * tr
+        tw = sum(ws) + gap * (len(txt) - 1)
+        asc, desc = fnt.getmetrics()
+        im = Image.new('L', (int(tw) + 40, asc + desc + 20), 0); d = ImageDraw.Draw(im); x = 20
+        for c, w_ in zip(txt, ws):
+            d.text((x, 10), c, font=fnt, fill=255); x += w_ + gap
+        a = np.asarray(im).astype(f32) / 255
+        paste(dst, a, int(W / 2 - a.shape[1] / 2), int(cy - a.shape[0] / 2), kk)
+    spaced('UNITED ROAD', cap_font(40, ARCHIVO), H * 0.36, track * 4, R, k)
+    spaced('MAGIC', cap_font(250), H * 0.52, track, A, k)
+    spaced('MAURICIO POCHETTINO', cap_font(38, ARCHIVO), H * 0.69, track * 2.5, A, k * 0.85)
+    return np.minimum(A, 1), np.minimum(R, 1)
+def overlay_text(out, t):
+    """composite the title and the karaoke captions onto the finished frame (display values 0..1)"""
+    layers = []
+    tm = title_masks(t)
+    if tm is not None: layers.append((tm[0], tm[1], True))
+    if CAPTIONS:
+        cm = caption_masks(t)
+        if cm is not None: layers.append((cm[0], cm[1], False))
+    for A_, G_, is_title in layers:
+        ys, xs = np.nonzero((A_ + G_) > 0.002)
+        if len(ys) == 0: continue
+        ya, yb = max(0, ys.min() - 60), min(H, ys.max() + 60); xa, xb = max(0, xs.min() - 60), min(W, xs.max() + 60)
+        a = A_[ya:yb, xa:xb]; g = G_[ya:yb, xa:xb]; o = out[ya:yb, xa:xb]
+        sh = cv2.GaussianBlur(np.maximum(a, g), (0, 0), 9)
+        o *= (1 - 0.62 * np.clip(sh * 1.6, 0, 1))[..., None]
+        if is_title:
+            red = np.array([0.95, 0.12, 0.10], f32)
+            o += cv2.GaussianBlur(g, (0, 0), 14)[..., None] * red * 0.9
+            o[:] = o * (1 - g[..., None]) + g[..., None] * red
+        else:
+            glow = cv2.GaussianBlur(g, (0, 0), 7) * 0.9 + cv2.GaussianBlur(g, (0, 0), 22) * 0.8
+            o += glow[..., None] * np.array([0.95, 0.10, 0.07], f32)
+        o[:] = o * (1 - a[..., None]) + a[..., None] * np.array([1.0, 0.975, 0.95], f32)
+    return out
+
+def card_prev(cd):
+    """the card word showing before cd took over (if it was recent)"""
+    prev = None
+    for tt, w in CARD_EV:
+        if tt < cd[1] - 1e-6: prev = (w, tt)
+    if prev is None or cd[1] - prev[1] > 9.0: return None
+    return prev[0]
 
 def frame(i):
     t = i / FPS
@@ -621,8 +958,11 @@ def frame(i):
     lw, lr, lbase = lamp_levels(i)
     lv = lw + lr
     redfrac = float(lr.sum() / max(lv.sum(), 1e-3))
-    Lk = float(np.clip(lbase.mean() * (0.92 + 0.12 * float(bass[i])) * (0.72 if is_dim(t) else 1.0), 0, 1.2))
+    Lk = float(np.clip(lbase.mean() * (0.92 + 0.12 * float(bass[i])) * scene_light(t), 0, 1.2))
+    pyro_k = pyro_level(t)
+    Lk_pyro = 0.3 * pyro_k * float(lbase.mean() > 0.05 or t > 5)
     Lcol = (np.array([1, 1, 1], f32) * (1 - 0.45 * redfrac) + np.array([1.0, 0.25, 0.2], f32) * 0.45 * redfrac).astype(f32)
+    LC = (Lk * Lcol + Lk_pyro * np.array([1.0, 0.5, 0.2], f32)).astype(f32)      # light on the stands and pitch
     sec, sa, sb = section(t)
     ly = lyric_at(t)
     ids = raster_ids(cam)
@@ -656,7 +996,7 @@ def frame(i):
         out_ = sd > 0
         g[out_] = np.array([0.018, 0.02, 0.022], f32)
         E = E * (0.75 + 0.25 * np.clip(-sd / 6, 0, 1))
-        flat[gnd] = g * (E * Lk)[:, None] * Lcol[None]
+        flat[gnd] = g * E[:, None] * LC[None]
         cosv = np.abs(dg[:, 1])
         fres = 0.03 + 0.97 * (1 - cosv) ** 5
         wet[gnd] = np.where(out_, 0.3 + 0.7 * fres, (0.17 + 0.83 * fres) * (0.6 + 0.25 * nb.clip(-1, 1))) * 1.15
@@ -687,11 +1027,14 @@ def frame(i):
         gain = 0.0
         if t > 2.5:
             gain = 1.0
-            if t < S['verse1']: gain = min(1.0, (t - 2.5) / 3) * 0.9
-            if t > DUR - 4.0: gain *= max(0.0, (DUR - 1.2 - t) / 2.8)
+            if t < KICKOFF_T: gain = min(1.0, (t - 2.5) / 3) * 0.75
+            if t > END_T: gain *= max(0.0, (END_T + 1.3 - t) / 1.3)
             if sec in ('bridge', 'outro'): gain *= 0.3
+            if sec == 'build': gain *= 0.12 + 0.88 * float(np.clip((t - (sb - 8.0)) / 8.0, 0, 1)) ** 2
         PK = np.max(np.stack([bar_heights(j) - 0.02 * (i - j) for j in range(max(0, i - 22), i + 1)]), 0) * gain
-        card = ly[3] if (ly is not None and ly[3] and sec in ('chorus', 'final', 'inst') and t > 2.0) else None
+        cd = card_at(t)
+        card = cd[0] if cd else None
+        tl = torch_level(t)
         bp = beatpos(i); bi = int(math.floor(bp)); bf = bp - bi
         for mm in (M_SEAT0, M_SEAT1, M_SEAT2):
             m = ms == mm
@@ -727,22 +1070,46 @@ def frame(i):
             c = (red + glint) * shp[:, None] + conc * (1 - shp[:, None]) * (1 - aisle[:, None]) + stp * aisle[:, None] * (1 - vom[:, None])
             c = c * (1 - vom[:, None]) + np.array([0.006, 0.006, 0.008], f32)[None] * vom[:, None]
             cs[m] = c * Es[:, None]
-            if gain <= 0: continue
+            # phone torches: a scatter of seats holding up a light, each twinkling at its own rate
+            tor_e = 0.0
+            if tl > 0:
+                h3 = hash2(cidx * 1.37 + 5.1, row * 2.11 + tier * 57.0)
+                held = h3 < 0.075 * tl * (1.25 if mm == M_SEAT2 else 1.0)
+                if held.any():
+                    h4 = hash2(cidx + 17.0, row + 3.0)
+                    tw = 0.55 + 0.45 * np.sin(t * (2.0 + 5.0 * h4) + h4 * 40.0)
+                    dot = band(uf, 0.25, 0.75, wu) * band(vf, 0.35, 0.85, wv)
+                    dot = dot * (1 - mix_) + 0.25 * mix_
+                    tor_e = (held * tw * dot * (2.6 + 1.5 * h3 / 0.075))[:, None] * np.array([1.0, 0.95, 0.86], f32)[None] * tl
+            if gain <= 0:
+                es[m] = tor_e; continue
             lvl = ((CUMR[mm] + row + 0.5) / TOTROWS).astype(f32)
             bar = np.clip(np.floor(sg / 3.0) + 64, 0, NB - 1).astype(np.int32)
             if card is not None and mm == M_SEAT2:
-                # card display: the whole upper tier spells the chorus word round the bowl
+                # card display: the whole upper tier spells the chorus word round the bowl. When the word is
+                # sung the cards flip over in a wave that runs out from the middle of the north stand.
                 bm = card_bitmap(card); wc = bm.shape[1]; period = wc + 40
                 crel = (cidx.astype(np.int64) + wc // 2) % period
                 inw = crel < wc
                 rr_ = (32 - row).astype(np.int64).clip(0, 32)
                 letter = np.zeros(m.sum(), bool)
                 letter[inw] = bm[rr_[inw], crel[inw]]
-                fresh = np.clip(1 - (t - ly[0]) / 0.25, 0, 1)
+                prev = card_prev(cd)
+                letter0 = np.zeros(m.sum(), bool)
+                if prev is not None:
+                    bm0 = card_bitmap(prev); wc0 = bm0.shape[1]; per0 = wc0 + 40
+                    cr0 = (cidx.astype(np.int64) + wc0 // 2) % per0; in0 = cr0 < wc0
+                    letter0[in0] = bm0[rr_[in0], cr0[in0]]
+                ph = (t - cd[1] - 0.55 * np.abs(sg) / HALF - 0.012 * (32 - row)) / 0.16
                 bgc = np.array([0.95, 0.035, 0.04], f32) * (0.55 + 0.55 * (1 - bf) ** 2)
-                fgc = np.array([1.7, 1.6, 1.5], f32) * (1.0 + 0.6 * fresh)
-                e_ = np.where(letter[:, None], fgc[None], bgc[None]) * shp[:, None]
-                es[m] = e_
+                if sec == 'build' or sec == 'outro': bgc = bgc * 0.45
+                fgc = np.array([1.7, 1.6, 1.5], f32) * (1.0 + 0.6 * np.clip(1 - (ph - 1) / 2.0, 0, 1))[:, None]
+                cur = np.where(letter[:, None], fgc, bgc[None])
+                old = np.where(letter0[:, None], np.array([1.7, 1.6, 1.5], f32)[None], bgc[None])
+                flip = np.clip(ph, 0, 1)[:, None]
+                flash = (np.sin(np.pi * np.clip(ph, 0, 1)) * 1.4)[:, None] * np.array([1.0, 0.9, 0.85], f32)[None]
+                e_ = (old * (1 - flip) + cur * flip + flash) * shp[:, None]
+                es[m] = e_ + tor_e
                 continue
             hb = H_[bar] * gain
             if card is not None: hb = hb * (51.0 / 84.0)   # bars stay in the lower two tiers under the card display
@@ -755,12 +1122,12 @@ def frame(i):
             pk = PK[bar] * ((51.0 / 84.0) if card is not None else 1.0)
             near = (np.abs(lvl - pk) < 0.6 / 84) & (pk > 0.05)
             e_ += np.array([1.6, 1.45, 1.3], f32) * (near * shp)[:, None]
-            if sec == 'bridge' or (sec == 'build' and t - sa < 4):
-                pos = (38 + (t - S['bridge']) * 10.0) % NB
+            if sec == 'bridge':
+                pos = (38 + (t - BRIDGE_T) * 10.0) % NB
                 dbar = np.abs(((bar - pos + NB / 2) % NB) - NB / 2)
                 w_ = np.exp(-(dbar / 2.2) ** 2) * (lvl < 0.97) * shp
                 e_ += np.array([1.4, 0.9, 0.6], f32) * w_[:, None]
-            es[m] = e_
+            es[m] = e_ + tor_e
         m = ms == M_WALL; cs[m] = np.array([0.04, 0.04, 0.044], f32)
         m = ms == M_BACK; cs[m] = np.array([0.02, 0.02, 0.024], f32)
         m = ms == M_BOX
@@ -787,19 +1154,19 @@ def frame(i):
             cs[m] = (np.array([0.40, 0.41, 0.44], f32)[None] * (1 - seam)[:, None] + 0.12 * seam[:, None]) * (0.55 + 0.45 * (1 - tt[m]))[:, None]
         # --- LED ribbons: lower ring = the lyric, upper ring = light patterns
         on_k = min(1.0, max(0.0, (t - 0.25) * 4))
-        if t > DUR - 2.0: on_k *= max(0.0, (DUR - 0.8 - t) / 1.2)
+        if t > END_T + 0.4: on_k *= max(0.0, (END_T + 1.4 - t) / 1.0)
         m = ms == M_RIB0
         if m.any():
             es[m] = led_text(aa[m] + 0.0, tt[m], fw[m], ly, t, i, 'rib') * on_k * (0.85 + 0.25 * float(bass[i])); cs[m] = 0
         m = ms == M_RIB1
         if m.any():
             a2 = aa[m]
-            if sec in ('verse', 'inst', 'build'):
+            if sec in ('verse', 'inst'):
                 fill = float(np.clip(energy[i] * 1.1 + 0.25 * bass[i], 0, 1.2)) * 125
                 onv = np.abs(a2) < fill
                 edge = np.clip(1 - (fill - np.abs(a2)) / 25, 0, 1)[:, None]
                 cx_ = np.where(onv[:, None], np.array([1.2, 0.06, 0.05], f32) * (1 - edge) + np.array([1.6, 1.3, 1.1], f32) * edge, np.array([0.08, 0.005, 0.008], f32))
-            elif sec in ('chorus', 'final'):
+            elif sec in ('chorus', 'final', 'hit', 'end'):
                 sgi = np.floor(np.abs(a2) / 4.0).astype(np.int32)
                 hit = ((sgi - bi) % 4) == 0
                 cx_ = np.where(hit[:, None], np.array([1.6, 1.5, 1.4], f32) * (1.2 - 0.5 * bf), np.array([0.7, 0.03, 0.04], f32))
@@ -837,7 +1204,7 @@ def frame(i):
         val = tex[(np.clip(vv, 0, 0.999) * th).astype(int), (np.clip(uu, 0, 0.999) * tw).astype(int)]
         emi[sm] = val[:, None] * AMBER[None]
     col[mat == M_FRAME] = np.array([0.02, 0.02, 0.022], f32)
-    flat[tri] = col * Lk * Lcol[None] + emi
+    flat[tri] = col * LC[None] + emi
     # ------------------------------------------------ sky
     if len(sky):
         ds = D[sky]; e = ds[:, 1]
@@ -930,6 +1297,14 @@ def frame(i):
     air_w = cv2.resize(air2[..., 0], (W, H), interpolation=cv2.INTER_LINEAR)
     air_r = cv2.resize(air2[..., 1], (W, H), interpolation=cv2.INTER_LINEAR)
     img += air_w[..., None] * HAZE_W + air_r[..., None] * HAZE_R
+    if pyro_k > 0.01:
+        # the flames light up the rain and haze around them
+        Vf = (FLAME_P + np.array([0, 3.5, 0])).astype(f32) - Cf[None]
+        tcf = Dh @ Vf.T; vvf = (Vf * Vf).sum(1)[None]
+        hf = np.sqrt(np.maximum(vvf - tcf * tcf, 1.0))
+        If = (np.arctan((tmax - tcf) / hf) - np.arctan(-tcf / hf)) / hf
+        hzf = cv2.resize((If.sum(1) * (0.022 * pyro_k)).reshape(hh, hw).astype(f32), (W, H), interpolation=cv2.INTER_LINEAR)
+        img += hzf[..., None] * np.array([1.0, 0.38, 0.1], f32) * (1 + 0.4 * rl)
     # ------------------------------------------------ rain streaks (world space, lit by the floodlights)
     rmask = rain_layer(cam, t, dist, rl)
     rlight = 0.08 * Lk + (air_w + air_r * 0.6) * 8.0
@@ -947,6 +1322,12 @@ def frame(i):
     isg = ids[py_, px_] < 0
     px_, py_ = px_[isg], py_[isg]
     img[py_, px_] += 0.35 * Lk; img[py_, px_ + 1] += 0.2 * Lk; img[py_ - 1, px_] += 0.12 * Lk
+    # ------------------------------------------------ pyro and ticker tape
+    if pyro_k > 0.01:
+        fl4 = flame_layer(cam, t, i, pyro_k, dist)
+        img += cv2.resize(cv2.GaussianBlur(fl4, (0, 0), 0.7), (W, H), interpolation=cv2.INTER_LINEAR)
+    cf = confetti_layer(cam, t, dist, Lk)
+    if cf is not None: img += cf
     # ------------------------------------------------ post
     out = img
     q4 = cv2.resize(out, (W // 4, H // 4), interpolation=cv2.INTER_AREA)
@@ -965,6 +1346,7 @@ def frame(i):
     out = out * SCAN * VIG + GRAIN[i % 5]
     sd = since(DROPS, i)
     if sd < 6: out += 0.25 * (1 - sd / 6)
+    out = overlay_text(np.clip(out, 0, 1.2), t)
     if t < 0.6: out *= t / 0.6
     if t > DUR - 0.6: out *= max(0.0, (DUR - t) / 0.6)
     return (np.clip(out, 0, 1) * 255).astype(np.uint8)

@@ -27,6 +27,15 @@ ac=np.correlate(fl,fl,'full')[len(fl)-1:]
 lags=np.arange(len(ac)); bpms=60*fps/np.maximum(lags,1)
 m=(bpms>80)&(bpms<170); lag=lags[m][np.argmax(ac[m])]
 print('bpm~',60*fps/lag,'frames',n)
-np.savez('feat.npz',audio=x,bass=norm(bass),mid=norm(mid),high=norm(high),rms=rms/np.percentile(rms,99),spec=np.clip(spec,0,1.3),flux=fl/np.percentile(fl,99))
+# beat times: the tempo of this track drifts (about 117-121 bpm), so the lights follow tracked beats, not a fixed grid
+try:
+    import librosa
+    y=librosa.resample(x,orig_sr=sr,target_sr=22050) if sr!=22050 else x
+    oenv=librosa.onset.onset_strength(y=y,sr=22050,hop_length=256,aggregate=np.median)
+    _,beats=librosa.beat.beat_track(onset_envelope=oenv,sr=22050,hop_length=256,start_bpm=120,tightness=400,units='time')
+    print('tracked beats:',len(beats))
+except ImportError:
+    beats=np.arange(0.19,len(x)/sr,60/(60*fps/lag)); print('librosa not installed: fixed tempo beat grid')
+np.savez('feat.npz',audio=x,bass=norm(bass),mid=norm(mid),high=norm(high),rms=rms/np.percentile(rms,99),spec=np.clip(spec,0,1.3),flux=fl/np.percentile(fl,99),beats=np.asarray(beats,np.float64))
 e=np.convolve(rms,np.ones(fps*2)/(fps*2),'same')
 for t in range(0,n,fps*5): print(t//fps, round(float(e[t]/np.percentile(rms,99)),2))
